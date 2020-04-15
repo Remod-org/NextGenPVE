@@ -17,18 +17,20 @@ using Oxide.Game.Rust.Cui;
 
 namespace Oxide.Plugins
 {
-    [Info("Pure PVE", "RFC1920", "1.0.0")]
+    [Info("Pure PVE", "RFC1920", "1.0.1")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     class PurePVE : RustPlugin
     {
         #region vars
         Dictionary<string, PurePVERuleSet> pverulesets = new Dictionary<string, PurePVERuleSet>();
         Dictionary<string, PurePVERule> pverules = new Dictionary<string, PurePVERule>();
+        Dictionary<string, PurePVERule> custom = new Dictionary<string, PurePVERule>();
 
+        private const string permPurePVEAdmin = "purepve.admin";
         private ConfigData configData;
 
         [PluginReference]
-        Plugin ZoneManager;
+        Plugin ZoneManager, LiteZones;
         #endregion
 
         #region Message
@@ -51,10 +53,6 @@ namespace Oxide.Plugins
             }, this);
         }
 
-        void Unload()
-        {
-        }
-
         void LoadData()
         {
             pverules = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERule>>(this.Name + "_rules");
@@ -62,6 +60,17 @@ namespace Oxide.Plugins
             {
                 LoadDefaultRules();
             }
+
+            // Merge and overwrite from this file if it exists.
+            custom = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERule>>(this.Name + "_custom");
+            if(custom.Count > 0)
+            {
+                foreach(KeyValuePair<string, PurePVERule> rule in custom)
+                {
+                    pverules[rule.Key] = rule.Value;
+                }
+            }
+            custom.Clear();// = new Dictionary<string, PurePVERule>();
 
             pverulesets = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERuleSet>>(this.Name + "_rulesets");
             if(pverulesets.Count == 0)
@@ -84,6 +93,17 @@ namespace Oxide.Plugins
             if(entity == null || hitInfo == null) return null;
             if(hitInfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
 
+            if(hitInfo.Initiator is BasePlayer)
+            {
+                if((hitInfo.Initiator as BasePlayer).IPlayer.HasPermission(permPurePVEAdmin))
+                {
+#if DEBUG
+                    Puts("Admin god!");
+#endif
+                    return null;
+                }
+            }
+
             bool canhurt = EvaluateRulesets(hitInfo.Initiator, entity as BaseEntity);
 
             if(canhurt)
@@ -92,6 +112,12 @@ namespace Oxide.Plugins
                 Puts("Damage allowed!");
 #endif
                 return null;
+            }
+            else
+            {
+#if DEBUG
+                Puts($"Damage blocked for {hitInfo.Initiator.GetType().Name} and {entity.GetType().Name}");
+#endif
             }
             // Damage NOT allowed...
             return true;
@@ -122,6 +148,19 @@ namespace Oxide.Plugins
             }
             else if(configData.Options.UseLiteZones)
             {
+                List<string> sz = (List<string>) LiteZones?.Call("GetEntityZones", new object[] { source });
+                List<string> tz = (List<string>) LiteZones?.Call("GetEntityZones", new object[] { target });
+                if(sz != null && sz.Count > 0 && tz != null && tz.Count > 0)
+                {
+                    foreach(string z in sz)
+                    {
+                        if(tz.Contains(z))
+                        {
+                            zone = z;
+                            break;
+                        }
+                    }
+                }
             }
 
             // zone
@@ -135,10 +174,10 @@ namespace Oxide.Plugins
 
                 foreach(string rule in pveruleset.Value.except)
                 {
-#if DEBUG
-                    string exclusions = string.Join(",", pveruleset.Value.exclude);
-                    Puts($"  Evaluating rule {rule} with exclusions: {exclusions}");
-#endif
+//#if DEBUG
+//                    string exclusions = string.Join(",", pveruleset.Value.exclude);
+//                    Puts($"  Evaluating rule {rule} with exclusions: {exclusions}");
+//#endif
                     rulematch = EvaluateRule(rule, stype, ttype, pveruleset.Value.exclude);
                     if(rulematch)
                     {
@@ -153,61 +192,74 @@ namespace Oxide.Plugins
                     //}
                 }
             }
-#if DEBUG
-            Puts($"NO RULESET MATCH!");
-#endif
-            return pverulesets["default"].damage;
+//#if DEBUG
+//            Puts($"NO RULESET MATCH!");
+//#endif
+            return false;//pverulesets["default"].damage;
         }
 
+        // Compare rulename to source and target looking for match unless also excluded
         private bool EvaluateRule(string rulename, string stype, string ttype, List<string> exclude)
         {
             bool srcmatch = false;
             bool tgtmatch = false;
+            string smatch = null;
+            string tmatch = null;
 
             foreach(string src in pverules[rulename].source)
             {
-#if DEBUG
-                Puts($"    Checking for source match, {stype} == {src}?");
-#endif
+//#if DEBUG
+//                Puts($"    Checking for source match, {stype} == {src}?");
+//#endif
                 if(stype == src)
                 {
-#if DEBUG
-                    Puts($"       Matched {stype} to {src}");
-#endif
-                    if(exclude.Contains(stype))
-                    {
-#if DEBUG
-                        Puts($"         Exclusion match!");
-                        break;
-#endif
-                    }
+//#if DEBUG
+//                    Puts($"       Matched {stype} to {src} in {rulename} and target {ttype}");
+//#endif
+//                    if(exclude.Contains(stype))
+//                    {
+//                        srcmatch = false; // ???
+//#if DEBUG
+//                        Puts($"         Exclusion match for source {stype}");
+//#endif
+//                        break;
+//                    }
+                    smatch = stype;
                     srcmatch = true;
                     break;
                 }
             }
             foreach(string tgt in pverules[rulename].target)
             {
-#if DEBUG
-                Puts($"    Checking for target match, {ttype} == {tgt}?");
-#endif
+//#if DEBUG
+//                Puts($"    Checking for target match, {ttype} == {tgt}?");
+//#endif
                 if(ttype == tgt)
                 {
-#if DEBUG
-                    Puts($"       Matched {ttype} to {tgt}");
-#endif
+//#if DEBUG
+//                    Puts($"       Matched {ttype} to {tgt} in {rulename} and source {stype}");
+//#endif
                     if(exclude.Contains(ttype))
                     {
+                        tgtmatch = false; // ???
 #if DEBUG
-                        Puts($"         Exclusion match!");
-                        break;
+                        Puts($"         Exclusion match for target {ttype}");
 #endif
+                        break;
                     }
+                    tmatch = ttype;
                     tgtmatch = true;
                     break;
                 }
             }
 
-            if(srcmatch && tgtmatch) return true;
+            if(srcmatch && tgtmatch)
+            {
+#if DEBUG
+                Puts($"Matching rule {rulename} for {smatch} attacking {tmatch}");
+#endif
+                return true;
+            }
 
             return false;
         }
@@ -298,79 +350,79 @@ namespace Oxide.Plugins
         {
             pverules.Add("npc_player", new PurePVERule()
             {
-                description = "NPCs can damage players", damage = true,
-                source = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer" },
+                description = "npc can damage player", damage = true,
+                source = new List<string>() { "NPCPlayerApex", "Murderer", "Scientist", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer" },
                 target = new List<string>() { "BasePlayer" }
             });
             pverules.Add("player_npc", new PurePVERule()
             {
-                description = "Players can damage NPCs", damage = true,
+                description = "Player can damage npc", damage = true,
                 source = new List<string>() { "BasePlayer" },
-                target = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer" }
+                target = new List<string>() { "NPCPlayerApex", "Murderer", "Scientist", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer" }
             });
             pverules.Add("player_player", new PurePVERule()
             {
-                description = "Players can damage players", damage = true,
+                description = "Player can damage player", damage = true,
                 source = new List<string>() { "BasePlayer" },
                 target = new List<string>() { "BasePlayer" }
             });
             pverules.Add("player_resources", new PurePVERule()
             {
-                description = "Players can damage resources", damage = true,
+                description = "Player can damage resource", damage = true,
                 source = new List<string>() { "BasePlayer" },
-                target = new List<string>() { "ResourceEntity" }//, "TreeEntity", "OreResourceEntity" }
+                target = new List<string>() { "ResourceEntity", "LootContainer" }
             });
             pverules.Add("players_traps", new PurePVERule()
             {
-                description = "Traps can damage players", damage = true,
+                description = "Player can damage trap", damage = true,
                 source = new List<string>() { "BasePlayer" },
                 target = new List<string>() { "TeslaCoil", "BearTrap", "FlameTurret", "Landmine", "GunTrap", "ReactiveTarget", "spikes.floor" }
             });
             pverules.Add("traps_players", new PurePVERule()
             {
-                description = "Traps can damage players", damage = true,
+                description = "Trap can damage player", damage = true,
                 source = new List<string>() { "TeslaCoil", "BearTrap", "FlameTurret", "Landmine", "GunTrap", "ReactiveTarget", "spikes.floor" },
                 target = new List<string>() { "BasePlayer" }
             });
             pverules.Add("player_animal", new PurePVERule()
             {
-                description = "Players can damage Animals", damage = true,
+                description = "Player can damage animal", damage = true,
                 source = new List<string>() { "BasePlayer" },
                 target = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" }
             });
             pverules.Add("animal_player", new PurePVERule()
             {
-                description = "Animals can damage players ", damage = true,
+                description = "Animal can damage player", damage = true,
                 source = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" },
                 target = new List<string>() { "BasePlayer" }
             });
             pverules.Add("animal_animal", new PurePVERule()
             {
-                description = "Animals can damage players ", damage = true,
+                description = "Animal can damage animal", damage = true,
                 source = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" },
                 target = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" }
             });
             pverules.Add("helicopter_player", new PurePVERule()
             {
-                description = "Helicopter can damage players", damage = true,
+                description = "Helicopter can damage player", damage = true,
                 source = new List<string>() { "BaseHeli" },
                 target = new List<string>() { "BasePlayer" }
             });
             pverules.Add("player_minicopter", new PurePVERule()
             {
-                description = "Players can damage Minicopter", damage = true,
+                description = "Player can damage minicopter", damage = true,
                 source = new List<string>() { "BasePlayer" },
                 target = new List<string>() { "Minicopter" }
             });
             pverules.Add("minicopter_player", new PurePVERule()
             {
-                description = "Minicopter can damage players", damage = true,
+                description = "Minicopter can damage player", damage = true,
                 source = new List<string>() { "Minicopter" },
                 target = new List<string>() { "BasePlayer" }
             });
             pverules.Add("highwalls_player", new PurePVERule()
             {
-                description = "Highwalls can damage players", damage = true,
+                description = "Highwall can damage player", damage = true,
                 source = new List<string>() { "wall.external.high.stone", "wall.external.high.wood", "gates.external.high.wood", "gates.external.high.stone" },
                 target = new List<string>() { "BasePlayer" }
             });
@@ -382,15 +434,15 @@ namespace Oxide.Plugins
             });
             pverules.Add("npcturret_animal", new PurePVERule()
             {
-                description = "NPCAutoTurret can damage player", damage = true,
+                description = "NPCAutoTurret can damage animal", damage = true,
                 source = new List<string>() { "NPCAutoTurret" },
-                target = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf" }
+                target = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" }
             });
             pverules.Add("npcturret_npc", new PurePVERule()
             {
-                description = "NPCAutoTurret can damage npcs", damage = true,
+                description = "NPCAutoTurret can damage npc", damage = true,
                 source = new List<string>() { "NPCAutoTurret" },
-                target = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer" }
+                target = new List<string>() { "NPCPlayerApex", "Murderer", "Scientist", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer" }
             });
         }
         #endregion
