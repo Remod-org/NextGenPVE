@@ -24,6 +24,7 @@ namespace Oxide.Plugins
         #region vars
         Dictionary<string, PurePVERuleSet> pverulesets = new Dictionary<string, PurePVERuleSet>();
         Dictionary<string, PurePVERule> pverules = new Dictionary<string, PurePVERule>();
+        Dictionary<string, PurePVEEntities> pveentities = new Dictionary<string, PurePVEEntities>();
         Dictionary<string, PurePVERule> custom = new Dictionary<string, PurePVERule>();
 
         private const string permPurePVEAdmin = "purepve.admin";
@@ -55,14 +56,19 @@ namespace Oxide.Plugins
 
         void LoadData()
         {
-            pverules = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERule>>(this.Name + "_rules");
+            pveentities = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVEEntities>>(this.Name + "/" + this.Name + "_entities");
+            if(pveentities.Count == 0)
+            {
+                LoadDefaultEntities();
+            }
+            pverules = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERule>>(this.Name + "/" + this.Name + "_rules");
             if(pverules.Count == 0)
             {
                 LoadDefaultRules();
             }
 
             // Merge and overwrite from this file if it exists.
-            custom = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERule>>(this.Name + "_custom");
+            custom = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERule>>(this.Name + "/" + this.Name + "_custom");
             if(custom.Count > 0)
             {
                 foreach(KeyValuePair<string, PurePVERule> rule in custom)
@@ -72,7 +78,7 @@ namespace Oxide.Plugins
             }
             custom.Clear();// = new Dictionary<string, PurePVERule>();
 
-            pverulesets = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERuleSet>>(this.Name + "_rulesets");
+            pverulesets = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERuleSet>>(this.Name + "/" + this.Name + "_rulesets");
             if(pverulesets.Count == 0)
             {
                 LoadDefaultRuleset();
@@ -82,8 +88,9 @@ namespace Oxide.Plugins
 
         void SaveData()
         {
-            Interface.Oxide.DataFileSystem.WriteObject(Name + "_rules", pverules);
-            Interface.Oxide.DataFileSystem.WriteObject(Name + "_rulesets", pverulesets);
+            Interface.Oxide.DataFileSystem.WriteObject(Name + "/" + Name + "_entities", pveentities);
+            Interface.Oxide.DataFileSystem.WriteObject(Name + "/" + Name  + "_rules", pverules);
+            Interface.Oxide.DataFileSystem.WriteObject(Name + "/" + Name  + "_rulesets", pverulesets);
         }
         #endregion
 
@@ -109,7 +116,7 @@ namespace Oxide.Plugins
             if(canhurt)
             {
 #if DEBUG
-                Puts("Damage allowed!");
+                Puts($"Damage allowed for {hitInfo.Initiator.GetType().Name} and {entity.GetType().Name}");
 #endif
                 return null;
             }
@@ -119,7 +126,6 @@ namespace Oxide.Plugins
                 Puts($"Damage blocked for {hitInfo.Initiator.GetType().Name} and {entity.GetType().Name}");
 #endif
             }
-            // Damage NOT allowed...
             return true;
         }
 
@@ -332,10 +338,15 @@ namespace Oxide.Plugins
             public List<string> source;
             public List<string> target;
         }
+
+        public class PurePVEEntities
+        {
+            public List<string> types;
+        }
         #endregion
 
         #region load_defaults
-        void LoadDefaultRuleset()
+        private void LoadDefaultRuleset()
         {
             pverulesets.Add("default", new PurePVERuleSet()
             {
@@ -345,105 +356,39 @@ namespace Oxide.Plugins
             });
         }
 
-        // Default rules
-        void LoadDefaultRules()
+        // Default entity categories and types to consider
+        private void LoadDefaultEntities()
         {
-            pverules.Add("npc_player", new PurePVERule()
-            {
-                description = "npc can damage player", damage = true,
-                source = new List<string>() { "NPCPlayerApex", "Murderer", "Scientist", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer" },
-                target = new List<string>() { "BasePlayer" }
-            });
-            pverules.Add("player_npc", new PurePVERule()
-            {
-                description = "Player can damage npc", damage = true,
-                source = new List<string>() { "BasePlayer" },
-                target = new List<string>() { "NPCPlayerApex", "Murderer", "Scientist", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer" }
-            });
-            pverules.Add("player_player", new PurePVERule()
-            {
-                description = "Player can damage player", damage = true,
-                source = new List<string>() { "BasePlayer" },
-                target = new List<string>() { "BasePlayer" }
-            });
-            pverules.Add("player_resources", new PurePVERule()
-            {
-                description = "Player can damage resource", damage = true,
-                source = new List<string>() { "BasePlayer" },
-                target = new List<string>() { "ResourceEntity", "LootContainer" }
-            });
-            pverules.Add("players_traps", new PurePVERule()
-            {
-                description = "Player can damage trap", damage = true,
-                source = new List<string>() { "BasePlayer" },
-                target = new List<string>() { "TeslaCoil", "BearTrap", "FlameTurret", "Landmine", "GunTrap", "ReactiveTarget", "spikes.floor" }
-            });
-            pverules.Add("traps_players", new PurePVERule()
-            {
-                description = "Trap can damage player", damage = true,
-                source = new List<string>() { "TeslaCoil", "BearTrap", "FlameTurret", "Landmine", "GunTrap", "ReactiveTarget", "spikes.floor" },
-                target = new List<string>() { "BasePlayer" }
-            });
-            pverules.Add("player_animal", new PurePVERule()
-            {
-                description = "Player can damage animal", damage = true,
-                source = new List<string>() { "BasePlayer" },
-                target = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" }
-            });
-            pverules.Add("animal_player", new PurePVERule()
-            {
-                description = "Animal can damage player", damage = true,
-                source = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" },
-                target = new List<string>() { "BasePlayer" }
-            });
-            pverules.Add("animal_animal", new PurePVERule()
-            {
-                description = "Animal can damage animal", damage = true,
-                source = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" },
-                target = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" }
-            });
-            pverules.Add("helicopter_player", new PurePVERule()
-            {
-                description = "Helicopter can damage player", damage = true,
-                source = new List<string>() { "BaseHeli" },
-                target = new List<string>() { "BasePlayer" }
-            });
-            pverules.Add("player_minicopter", new PurePVERule()
-            {
-                description = "Player can damage minicopter", damage = true,
-                source = new List<string>() { "BasePlayer" },
-                target = new List<string>() { "Minicopter" }
-            });
-            pverules.Add("minicopter_player", new PurePVERule()
-            {
-                description = "Minicopter can damage player", damage = true,
-                source = new List<string>() { "Minicopter" },
-                target = new List<string>() { "BasePlayer" }
-            });
-            pverules.Add("highwalls_player", new PurePVERule()
-            {
-                description = "Highwall can damage player", damage = true,
-                source = new List<string>() { "wall.external.high.stone", "wall.external.high.wood", "gates.external.high.wood", "gates.external.high.stone" },
-                target = new List<string>() { "BasePlayer" }
-            });
-            pverules.Add("npcturret_player", new PurePVERule()
-            {
-                description = "NPCAutoTurret can damage player", damage = true,
-                source = new List<string>() { "NPCAutoTurret" },
-                target = new List<string>() { "BasePlayer" }
-            });
-            pverules.Add("npcturret_animal", new PurePVERule()
-            {
-                description = "NPCAutoTurret can damage animal", damage = true,
-                source = new List<string>() { "NPCAutoTurret" },
-                target = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" }
-            });
-            pverules.Add("npcturret_npc", new PurePVERule()
-            {
-                description = "NPCAutoTurret can damage npc", damage = true,
-                source = new List<string>() { "NPCAutoTurret" },
-                target = new List<string>() { "NPCPlayerApex", "Murderer", "Scientist", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer" }
-            });
+            pveentities.Add("npc", new PurePVEEntities() { types = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer", "Murderer", "Scientist" } });
+            pveentities.Add("player", new PurePVEEntities() { types = new List<string>() { "BasePlayer" } });
+            pveentities.Add("resource", new PurePVEEntities() { types = new List<string>() { "ResourceEntity", "LootContainer" } });
+            pveentities.Add("trap", new PurePVEEntities() { types = new List<string>() { "TeslaCoil", "BearTrap", "FlameTurret", "Landmine", "GunTrap", "ReactiveTarget", "spikes.floor" } });
+            pveentities.Add("animal", new PurePVEEntities() { types = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" } });
+            pveentities.Add("helicopter", new PurePVEEntities() { types = new List<string>() { "BaseHeli" } });
+            pveentities.Add("minicopter", new PurePVEEntities() { types = new List<string>() { "Minicopter" } });
+            pveentities.Add("highwall", new PurePVEEntities() { types = new List<string>() { "wall.external.high.stone", "wall.external.high.wood", "gates.external.high.wood", "gates.external.high.stone" } });
+            pveentities.Add("npcturret", new PurePVEEntities() { types = new List<string>() { "NPCAutoTurret" } });
+        }
+
+        // Default rules which can be applied
+        private void LoadDefaultRules()
+        {
+            pverules.Add("npc_player", new PurePVERule() { description = "npc can damage player", damage = true, source = pveentities["npc"].types, target = pveentities["player"].types });
+            pverules.Add("player_npc", new PurePVERule() { description = "Player can damage npc", damage = true, source = pveentities["player"].types, target = pveentities["npc"].types });
+            pverules.Add("player_player", new PurePVERule() { description = "Player can damage player", damage = true, source = pveentities["player"].types, target = pveentities["player"].types });
+            pverules.Add("player_resources", new PurePVERule() { description = "Player can damage resource", damage = true, source = pveentities["player"].types, target = pveentities["resource"].types });
+            pverules.Add("players_traps", new PurePVERule() { description = "Player can damage trap", damage = true, source = pveentities["player"].types, target = pveentities["trap"].types });
+            pverules.Add("traps_players", new PurePVERule() { description = "Trap can damage player", damage = true, source = pveentities["trap"].types, target = pveentities["player"].types });
+            pverules.Add("player_animal", new PurePVERule() { description = "Player can damage animal", damage = true, source = pveentities["player"].types, target = pveentities["animal"].types });
+            pverules.Add("animal_player", new PurePVERule() { description = "Animal can damage player", damage = true, source = pveentities["animal"].types, target = pveentities["player"].types });
+            pverules.Add("animal_animal", new PurePVERule() { description = "Animal can damage animal", damage = true, source = pveentities["animal"].types, target = pveentities["animal"].types });
+            pverules.Add("helicopter_player", new PurePVERule() { description = "Helicopter can damage player", damage = true, source = pveentities["helicopter"].types, target = pveentities["player"].types });
+            pverules.Add("player_minicopter", new PurePVERule() { description = "Player can damage minicopter", damage = true, source = pveentities["player"].types, target = pveentities["minicopter"].types });
+            pverules.Add("minicopter_player", new PurePVERule() { description = "Minicopter can damage player", damage = true, source = pveentities["minicopter"].types, target = pveentities["player"].types });
+            pverules.Add("highwalls_player", new PurePVERule() { description = "Highwall can damage player", damage = true, source = pveentities["highwall"].types, target = pveentities["player"].types });
+            pverules.Add("npcturret_player", new PurePVERule() { description = "NPCAutoTurret can damage player", damage = true, source = pveentities["npcturret"].types, target = pveentities["player"].types });
+            pverules.Add("npcturret_animal", new PurePVERule() { description = "NPCAutoTurret can damage animal", damage = true, source = pveentities["npcturret"].types, target = pveentities["animal"].types });
+            pverules.Add("npcturret_npc", new PurePVERule() { description = "NPCAutoTurret can damage npc", damage = true, source = pveentities["npcturret"].types, target = pveentities["npc"].types });
         }
         #endregion
     }
