@@ -1,4 +1,4 @@
-#define DEBUG
+//#define DEBUG
 using System;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -17,21 +17,25 @@ using Oxide.Game.Rust.Cui;
 
 namespace Oxide.Plugins
 {
-    [Info("Pure PVE", "RFC1920", "1.0.1")]
+    [Info("Pure PVE", "RFC1920", "1.0.2")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     class PurePVE : RustPlugin
     {
         #region vars
-        Dictionary<string, PurePVERuleSet> pverulesets = new Dictionary<string, PurePVERuleSet>();
-        Dictionary<string, PurePVERule> pverules = new Dictionary<string, PurePVERule>();
         Dictionary<string, PurePVEEntities> pveentities = new Dictionary<string, PurePVEEntities>();
+        Dictionary<string, PurePVERule> pverules = new Dictionary<string, PurePVERule>();
         Dictionary<string, PurePVERule> custom = new Dictionary<string, PurePVERule>();
+        Dictionary<string, PurePVERuleSet> pverulesets = new Dictionary<string, PurePVERuleSet>();
 
+        private const string permPurePVEUse = "purepve.use";
         private const string permPurePVEAdmin = "purepve.admin";
         private ConfigData configData;
 
         [PluginReference]
-        Plugin ZoneManager, LiteZones;
+        Plugin ZoneManager, LiteZones, HumanNPC;
+
+        private string logfilename = "log";
+        private bool dolog = false;
         #endregion
 
         #region Message
@@ -43,6 +47,9 @@ namespace Oxide.Plugins
         void Init()
         {
             LoadConfigVariables();
+            AddCovalenceCommand("pvelog", "cmdPurePVElog");
+            permission.RegisterPermission(permPurePVEUse, this);
+            permission.RegisterPermission(permPurePVEAdmin, this);
         }
 
         void OnServerInitialized()
@@ -50,7 +57,8 @@ namespace Oxide.Plugins
             LoadData();
             lang.RegisterMessages(new Dictionary<string, string>
             {
-                ["helptext1"] = "Can I play, daddy?"
+                ["notauthorized"] = "You don't have permission to use this command.",
+                ["logging"] = "Logging set to {0}"
             }, this);
         }
 
@@ -76,7 +84,7 @@ namespace Oxide.Plugins
                     pverules[rule.Key] = rule.Value;
                 }
             }
-            custom.Clear();// = new Dictionary<string, PurePVERule>();
+            custom.Clear();
 
             pverulesets = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERuleSet>>(this.Name + "/" + this.Name + "_rulesets");
             if(pverulesets.Count == 0)
@@ -94,46 +102,119 @@ namespace Oxide.Plugins
         }
         #endregion
 
-        #region Main
+        #region Oxide_hooks
+        object OnTrapTrigger(BaseTrap trap, GameObject go)
+        {
+            var player = go.GetComponent<BasePlayer>();
+            if(trap == null || player == null) return null;
+
+            var cantraptrigger = Interface.CallHook("CanEntityTrapTrigger", new object[] { trap, player });
+            if(cantraptrigger != null && cantraptrigger is bool && (bool)cantraptrigger) return null;
+
+            if(configData.Options.TrapsIgnorePlayers) return null;
+
+            string stype;
+            string ttype;
+            if(EvaluateRulesets(trap, player, out stype, out ttype)) return true;
+
+            return null;
+        }
+
+        private object CanBeTargeted(BasePlayer target, MonoBehaviour turret)
+        {
+            if(target == null || turret == null) return null;
+//            Puts($"Checking whether {turret.name} can target {target.displayName}");
+
+            object canbetargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
+            if(canbetargeted != null && canbetargeted is bool && (bool)canbetargeted) return null;
+
+            var npcturret = turret as NPCAutoTurret;
+
+            // Check global config options
+            if(npcturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
+            {
+                if(!configData.Options.NPCAutoTurretTargetsNPCs) return false;
+            }
+            else if(npcturret != null && !configData.Options.NPCAutoTurretTargetsPlayers)
+            {
+                return false;
+            }
+            else if(npcturret == null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
+            {
+                if(!configData.Options.AutoTurretTargetsNPCs) return false;
+            }
+            else if(npcturret == null && !configData.Options.AutoTurretTargetsPlayers)
+            {
+                return false;
+            }
+
+            // Check rulesets
+            string stype;
+            string ttype;
+            if(npcturret != null)
+            {
+                if(!EvaluateRulesets(npcturret as BaseEntity, target, out stype, out ttype)) return false;
+            }
+            else
+            {
+                if(!EvaluateRulesets(turret as BaseEntity, target, out stype, out ttype)) return false;
+            }
+
+            // CanBeTargeted == yes
+            return null;
+        }
+
         object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitInfo)
         {
             if(entity == null || hitInfo == null) return null;
             if(hitInfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
 
-            if(hitInfo.Initiator is BasePlayer)
+            AttackEntity realturret;
+            if(IsAutoTurret(hitInfo, out realturret))
+            {
+                hitInfo.Initiator = realturret as BaseEntity;
+            }
+
+//            Puts($"attacker: {hitInfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}"); return true;
+            string stype;
+            string ttype;
+            bool canhurt = EvaluateRulesets(hitInfo.Initiator, entity as BaseEntity, out stype, out ttype);
+
+            if(stype == "BasePlayer")
             {
                 if((hitInfo.Initiator as BasePlayer).IPlayer.HasPermission(permPurePVEAdmin))
                 {
-#if DEBUG
                     Puts("Admin god!");
-#endif
                     return null;
                 }
             }
 
-            bool canhurt = EvaluateRulesets(hitInfo.Initiator, entity as BaseEntity);
-
             if(canhurt)
             {
-#if DEBUG
-                Puts($"Damage allowed for {hitInfo.Initiator.GetType().Name} and {entity.GetType().Name}");
-#endif
+                DoLog($"DAMAGE ALLOWED for {stype} attacking {ttype}");
                 return null;
             }
             else
             {
-#if DEBUG
-                Puts($"Damage blocked for {hitInfo.Initiator.GetType().Name} and {entity.GetType().Name}");
-#endif
+                DoLog($"dAMAGE BLOCKED for {stype} attacking {ttype}");
             }
             return true;
         }
+        #endregion
 
-        private bool EvaluateRulesets(BaseEntity source, BaseEntity target)
+        #region Main
+        private bool EvaluateRulesets(BaseEntity source, BaseEntity target, out string stype, out string ttype)
         {
-            string stype = source.GetType().Name;
-            string ttype = target.GetType().Name;
+            stype = source.GetType().Name;
+            ttype = target.GetType().Name;
             string zone  = null;
+
+            // Special case since HumanNPC contains a BasePlayer object
+            if(stype == "BasePlayer" && HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
+            if(ttype == "BasePlayer" && HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
+
+
+            //var turret = source.Weapon?.GetComponentInParent<AutoTurret>();
 
             if(configData.Options.UseZoneManager)
             {
@@ -172,24 +253,18 @@ namespace Oxide.Plugins
             // zone
             foreach(KeyValuePair<string,PurePVERuleSet> pveruleset in pverulesets)
             {
-#if DEBUG
-                Puts($"Checking for match in ruleset {pveruleset.Key} for {stype} attacking {ttype}, default: {pveruleset.Value.damage.ToString()}");
-#endif
+                DoLog($"Checking for match in ruleset {pveruleset.Key} for {stype} attacking {ttype}, default: {pveruleset.Value.damage.ToString()}");
 
                 bool rulematch = false;
 
                 foreach(string rule in pveruleset.Value.except)
                 {
-//#if DEBUG
 //                    string exclusions = string.Join(",", pveruleset.Value.exclude);
 //                    Puts($"  Evaluating rule {rule} with exclusions: {exclusions}");
-//#endif
                     rulematch = EvaluateRule(rule, stype, ttype, pveruleset.Value.exclude);
                     if(rulematch)
                     {
-#if DEBUG
-                        Puts($"  Matched rule {pveruleset.Key}");
-#endif
+                        DoLog($"Matched rule {pveruleset.Key}", 1);
                         return true;
                     }
                     //else
@@ -198,9 +273,7 @@ namespace Oxide.Plugins
                     //}
                 }
             }
-//#if DEBUG
-//            Puts($"NO RULESET MATCH!");
-//#endif
+            DoLog($"NO RULESET MATCH!");
             return false;//pverulesets["default"].damage;
         }
 
@@ -214,20 +287,14 @@ namespace Oxide.Plugins
 
             foreach(string src in pverules[rulename].source)
             {
-//#if DEBUG
-//                Puts($"    Checking for source match, {stype} == {src}?");
-//#endif
+                DoLog($"Checking for source match, {stype} == {src}?", 2);
                 if(stype == src)
                 {
-//#if DEBUG
-//                    Puts($"       Matched {stype} to {src} in {rulename} and target {ttype}");
-//#endif
+                    DoLog($"Matched {stype} to {src} in {rulename} and target {ttype}", 3);
 //                    if(exclude.Contains(stype))
 //                    {
 //                        srcmatch = false; // ???
-//#if DEBUG
-//                        Puts($"         Exclusion match for source {stype}");
-//#endif
+//                        DoLog($"Exclusion match for source {stype}", 4);
 //                        break;
 //                    }
                     smatch = stype;
@@ -237,20 +304,14 @@ namespace Oxide.Plugins
             }
             foreach(string tgt in pverules[rulename].target)
             {
-//#if DEBUG
-//                Puts($"    Checking for target match, {ttype} == {tgt}?");
-//#endif
+                DoLog($"Checking for target match, {ttype} == {tgt}?", 2);
                 if(ttype == tgt)
                 {
-//#if DEBUG
-//                    Puts($"       Matched {ttype} to {tgt} in {rulename} and source {stype}");
-//#endif
+                    DoLog($"       Matched {ttype} to {tgt} in {rulename} and source {stype}", 3);
                     if(exclude.Contains(ttype))
                     {
                         tgtmatch = false; // ???
-#if DEBUG
-                        Puts($"         Exclusion match for target {ttype}");
-#endif
+                        DoLog($"Exclusion match for target {ttype}", 4);
                         break;
                     }
                     tmatch = ttype;
@@ -261,23 +322,29 @@ namespace Oxide.Plugins
 
             if(srcmatch && tgtmatch)
             {
-#if DEBUG
-                Puts($"Matching rule {rulename} for {smatch} attacking {tmatch}");
-#endif
+                DoLog($"Matching rule {rulename} for {smatch} attacking {tmatch}");
                 return true;
             }
 
             return false;
         }
 
-//        object OnTrapTrigger(BaseTrap trap, GameObject go) maybe...
+        private void DoLog(string message, int indent = 0)
+        {
+            if(dolog) LogToFile(logfilename, "".PadLeft(indent, ' ') + message, this);
+        }
 
-//        object OnPlayerAttack(BasePlayer attacker, HitInfo hitinfo) ????????
+        [Command("pvelog")]
+        void cmdPurePVElog(IPlayer player, string command, string[] args)
+        {
+            if(!player.HasPermission(permPurePVEUse)) { Message(player, "notauthorized"); return; }
 
-//        object CanBeTargeted(BasePlayer target, MonoBehaviour turret) OH YEAH!!!!
-//            configData.Options.NPCAutoTurretTargetsPlayers
-//            configData.Options.NPCAutoTurretTargetsNPCs
+            dolog = !dolog;
+            Message(player, "logging", dolog.ToString());
+        }
+        #endregion
 
+        #region Specialized_checks
         private string[] GetEntityZones(BaseEntity entity)
         {
             if(entity is BasePlayer)
@@ -289,6 +356,52 @@ namespace Oxide.Plugins
                  return (string[]) ZoneManager.Call("GetEntityZoneIDs", new object[] { entity });
             }
             return null;
+        }
+
+        //private bool IsHumanNPC(BaseEntity player) => (bool)HumanNPC?.Call("IsHumanNPC", player as BasePlayer);
+        private bool IsHumanNPC(BaseEntity player)
+        {
+            if(HumanNPC)
+            {
+                return (bool)HumanNPC?.Call("IsHumanNPC", player as BasePlayer);
+            }
+            else
+            {
+                var pl = player as BasePlayer;
+                return pl.userID < 76560000000000000L && pl.userID > 0L && !pl.IsDestroyed;
+            }
+        }
+
+        private bool IsBaseHeli(HitInfo hitInfo)
+        {
+            if(hitInfo.Initiator is BaseHelicopter
+               || (hitInfo.Initiator != null && (hitInfo.Initiator.ShortPrefabName.Equals("oilfireballsmall") || hitInfo.Initiator.ShortPrefabName.Equals("napalm"))))
+            {
+                return true;
+            }
+
+            else if(hitInfo.WeaponPrefab != null)
+            {
+                if(hitInfo.WeaponPrefab.ShortPrefabName.Equals("rocket_heli") || hitInfo.WeaponPrefab.ShortPrefabName.Equals("rocket_heli_napalm"))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool IsAutoTurret(HitInfo hitInfo, out AttackEntity weapon)
+        {
+            // Check for turret initiator
+            var turret = hitInfo.Weapon?.GetComponentInParent<AutoTurret>();
+            if(turret != null)
+            {
+                weapon = hitInfo.Weapon;
+                return true;
+            }
+
+            weapon = null;
+            return false;
         }
         #endregion
 
@@ -318,6 +431,9 @@ namespace Oxide.Plugins
             public bool UseLiteZones = false;
             public bool NPCAutoTurretTargetsPlayers = true;
             public bool NPCAutoTurretTargetsNPCs = true;
+            public bool AutoTurretTargetsPlayers = false;
+            public bool AutoTurretTargetsNPCs = false;
+            public bool TrapsIgnorePlayers = false;
         }
         #endregion
 
