@@ -38,10 +38,11 @@ namespace Oxide.Plugins
         private string logfilename = "log";
         private bool dolog = false;
 
-        const string PPVEL = "realpve.rulelist";
-        const string PPVERS = "realpve.ruleseteditor";
-        const string PPVER = "realpve.ruleeditor";
-        const string PPVES = "realpve.string";
+        const string RPVEL = "realpve.rulelist";
+        const string RPVERS = "realpve.ruleseteditor";
+        const string RPVER = "realpve.ruleeditor";
+        const string RPVEV = "realpve.value";
+        const string RPVES = "realpve.schedule";
         #endregion
 
         #region Message
@@ -70,11 +71,15 @@ namespace Oxide.Plugins
                 ["realpveruleset"] = "RealPVE Ruleset",
                 ["realpverule"] = "RealPVE Rule",
                 ["realpvevalue"] = "RealPVE Ruleset Value",
+                ["realpveschedule"] = "RealPVE Ruleset Schedule",
+                ["scheduling"] = "Schedules should be in the format of 'day(s);starttime;endtime'.  Use * for all days.",
+                ["currentschedule"] = "Currently scheduled for day: {0} from {1} until {2}",
                 ["close"] = "Close",
                 ["save"] = "Save",
                 ["edit"] = "Edit",
                 ["editname"] = "Edit Name",
                 ["add"] = "Add",
+                ["all"] = "All",
                 ["true"] = "True",
                 ["false"] = "False",
                 ["editing"] = "Editing",
@@ -96,10 +101,11 @@ namespace Oxide.Plugins
         {
             foreach(BasePlayer player in BasePlayer.activePlayerList)
             {
-                CuiHelper.DestroyUi(player, PPVEL);
-                CuiHelper.DestroyUi(player, PPVER);
-                CuiHelper.DestroyUi(player, PPVES);
-                CuiHelper.DestroyUi(player, PPVERS);
+                CuiHelper.DestroyUi(player, RPVEL);
+                CuiHelper.DestroyUi(player, RPVER);
+                CuiHelper.DestroyUi(player, RPVEV);
+                CuiHelper.DestroyUi(player, RPVES);
+                CuiHelper.DestroyUi(player, RPVERS);
             }
         }
 
@@ -439,18 +445,25 @@ namespace Oxide.Plugins
                 {
                     case "editruleset":
                         //e.g.: pverule editruleset {rulesetname} damage 0
+                        //      pverule editruleset {rulesetname} name {newname}
+                        //      pverule editruleset {rulesetname} zone {zonename}
+                        // This is where we actually make the edit.
                         if(args.Length > 3)
                         {
                             string rs = args[1];
                             string setting = args[2];
                             string newval  = args[3];
-                            CuiHelper.DestroyUi(player, PPVES);
+                            CuiHelper.DestroyUi(player, RPVEV);
                             switch(setting)
                             {
                                 case "damage":
                                     pverulesets[rs].damage = GetBoolValue(newval);
                                     break;
                                 case "name":
+                                    string newrs = args[3];
+                                    pverulesets.Add(newrs, pverulesets[rs]);
+                                    pverulesets.Remove(rs);
+                                    rs = newrs;
                                     break;
                                 case "zone":
                                     pverulesets[rs].zone = newval;
@@ -460,10 +473,13 @@ namespace Oxide.Plugins
                                     break;
                             }
                             SaveData();
+                            LoadData();
+                            GUIRuleSets(player);
                             GUIRulesetEditor(player, rs);
                         }
                         //pverule editruleset {rulesetname} delete
                         //pverule editruleset {rulesetname} zone
+                        // This is where we either delete or load the dialog to edit values.
                         else if(args.Length > 2)
                         {
                             switch(args[2])
@@ -471,13 +487,15 @@ namespace Oxide.Plugins
                                 case "delete":
                                     pverulesets.Remove(args[1]);
                                     SaveData();
-                                    CuiHelper.DestroyUi(player, PPVERS);
+                                    CuiHelper.DestroyUi(player, RPVERS);
                                     GUIRuleSets(player);
                                     break;
                                 case "name":
                                 case "zone":
+                                    GUIEditValue(player, args[1], args[2]);
+                                    break;
                                 case "schedule":
-                                    GUIEditString(player, args[1], args[2]);
+                                    GUIEditSchedule(player, args[1]);
                                     break;
                             }
                         }
@@ -503,6 +521,7 @@ namespace Oxide.Plugins
                                 });
                                 SaveData();
                             }
+                            GUIRuleSets(player);
                             GUIRulesetEditor(player, newname);
                         }
                         break;
@@ -511,19 +530,23 @@ namespace Oxide.Plugins
 //                        GUIRulesetEditor(player, args[1]);
 //                        break;
                     case "close":
-                        CuiHelper.DestroyUi(player, PPVEL);
-                        CuiHelper.DestroyUi(player, PPVER);
-                        CuiHelper.DestroyUi(player, PPVES);
-                        CuiHelper.DestroyUi(player, PPVERS);
+                        CuiHelper.DestroyUi(player, RPVEL);
+                        CuiHelper.DestroyUi(player, RPVER);
+                        CuiHelper.DestroyUi(player, RPVEV);
+                        CuiHelper.DestroyUi(player, RPVES);
+                        CuiHelper.DestroyUi(player, RPVERS);
                         break;
                     case "closeruleset":
-                        CuiHelper.DestroyUi(player, PPVERS);
+                        CuiHelper.DestroyUi(player, RPVERS);
                         break;
                     case "closerule":
-                        CuiHelper.DestroyUi(player, PPVER);
+                        CuiHelper.DestroyUi(player, RPVER);
                         break;
-                    case "closerulestring":
-                        CuiHelper.DestroyUi(player, PPVES);
+                    case "closerulevalue":
+                        CuiHelper.DestroyUi(player, RPVEV);
+                        break;
+                    case "closeruleschedule":
+                        CuiHelper.DestroyUi(player, RPVES);
                         break;
                     default:
                         GUIRuleSets(player);
@@ -540,11 +563,11 @@ namespace Oxide.Plugins
         #region GUI
         void GUIRuleSets(BasePlayer player)
         {
-            CuiHelper.DestroyUi(player, PPVEL);
+            CuiHelper.DestroyUi(player, RPVEL);
 
-            CuiElementContainer container = UI.Container(PPVEL, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Button(ref container, PPVEL, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule close");
-            UI.Label(ref container, PPVEL, UI.Color("#ffffff", 1f), Lang("realpverulesets") + ": ", 24, "0.2 0.92", "0.7 1");
+            CuiElementContainer container = UI.Container(RPVEL, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Button(ref container, RPVEL, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule close");
+            UI.Label(ref container, RPVEL, UI.Color("#ffffff", 1f), Lang("realpverulesets") + ": ", 24, "0.2 0.92", "0.7 1");
 
             int col = 0;
             int row = 0;
@@ -558,75 +581,79 @@ namespace Oxide.Plugins
                 }
                 pb = GetButtonPositionP(row, col);
 
-                UI.Button(ref container, PPVEL, UI.Color("#d85540", 1f), ruleset.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {ruleset.Key}");
+                UI.Button(ref container, RPVEL, UI.Color("#d85540", 1f), ruleset.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {ruleset.Key}");
                 row++;
             }
             pb = GetButtonPositionP(row, col);
-            UI.Button(ref container, PPVEL, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset add");
+            UI.Button(ref container, RPVEL, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset add");
 
             CuiHelper.AddUi(player, container);
         }
 
         void GUIRulesetEditor(BasePlayer player, string rulesetname)
         {
-            CuiHelper.DestroyUi(player, PPVERS);
+            CuiHelper.DestroyUi(player, RPVERS);
 
-            CuiElementContainer container = UI.Container(PPVERS, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("realpveruleset") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
-            UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleset");
+            CuiElementContainer container = UI.Container(RPVERS, UI.Color("3b3b3b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Label(ref container, RPVERS, UI.Color("#ffffff", 1f), Lang("realpveruleset") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
+            UI.Button(ref container, RPVERS, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleset");
 
             if(rulesetname != "default")
             {
-                UI.Button(ref container, PPVERS, UI.Color("#2222ff", 1f), Lang("editname"), 12, "0.77 0.95", "0.85 0.98", $"pverule editruleset {rulesetname} name");
-                UI.Button(ref container, PPVERS, UI.Color("#ff2222", 1f), Lang("delete"), 12, "0.86 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} delete");
+                UI.Button(ref container, RPVERS, UI.Color("#2222ff", 1f), Lang("editname"), 12, "0.77 0.95", "0.85 0.98", $"pverule editruleset {rulesetname} name");
+                UI.Button(ref container, RPVERS, UI.Color("#ff2222", 1f), Lang("delete"), 12, "0.86 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} delete");
             }
 
-            string dicolor = "#cccccc";
-            string encolor = "#ffcccc";
+            string dicolor = "#333333";
+            string encolor = "#ff3333";
             int col = 0;
             int row = 0;
 
             float[] pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("defaultdamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, RPVERS, UI.Color("#ffffff", 1f), Lang("defaultdamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             col++;
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("damageexceptions"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, RPVERS, UI.Color("#ffffff", 1f), Lang("damageexceptions"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             col++;
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("exclude"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, RPVERS, UI.Color("#ffffff", 1f), Lang("exclude"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             col++;
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("zone"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, RPVERS, UI.Color("#ffffff", 1f), Lang("zone"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             col++;
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("schedule"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, RPVERS, UI.Color("#ffffff", 1f), Lang("schedule"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             row++;
             col = 0;
 
             pb = GetButtonPositionP(row, col);
-            if(pverulesets[rulesetname].damage)
+			if(rulesetname == "default")
+			{
+                UI.Label(ref container, RPVERS, UI.Color(encolor, 1f), Lang("false"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+			}
+            else if(pverulesets[rulesetname].damage)
             {
-                UI.Button(ref container, PPVERS, UI.Color(encolor, 1f), Lang("true"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 0");
+                UI.Button(ref container, RPVERS, UI.Color(encolor, 1f), Lang("true"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 0");
             }
             else
             {
-                UI.Button(ref container, PPVERS, UI.Color(dicolor, 1f), Lang("false"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 1");
+                UI.Button(ref container, RPVERS, UI.Color(dicolor, 1f), Lang("false"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 1");
             }
 
             col++;
             foreach(string except in pverulesets[rulesetname].except)
             {
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
+                UI.Button(ref container, RPVERS, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
                 row++;
             }
             pb = GetButtonPositionP(row, col);
-            UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
+            UI.Button(ref container, RPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
 
             col++; row = 1;
             foreach(string exclude in pverulesets[rulesetname].exclude)
@@ -637,32 +664,32 @@ namespace Oxide.Plugins
                     col++;
                 }
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
+                UI.Button(ref container, RPVERS, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
                 row++;
             }
             pb = GetButtonPositionP(row, col);
-            UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
+            UI.Button(ref container, RPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
 
             col++; row = 1;
             pb = GetButtonPositionP(row, col);
             if(pverulesets[rulesetname].zone != null)
             {
-                UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), pverulesets[rulesetname].zone, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
+                UI.Button(ref container, RPVERS, UI.Color("#d85540", 1f), pverulesets[rulesetname].zone, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
             else
             {
-                UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
+                UI.Button(ref container, RPVERS, UI.Color("#55d840", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
 
             col++; row = 1;
             pb = GetButtonPositionP(row, col);
             if(pverulesets[rulesetname].zone != null)
             {
-                UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), pverulesets[rulesetname].schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+                UI.Button(ref container, RPVERS, UI.Color("#d85540", 1f), pverulesets[rulesetname].schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
             }
             else
             {
-                UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+                UI.Button(ref container, RPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
             }
 
             CuiHelper.AddUi(player, container);
@@ -670,23 +697,22 @@ namespace Oxide.Plugins
 
         void GUIRuleEditor(BasePlayer player, string rulename)
         {
-            CuiHelper.DestroyUi(player, PPVER);
+            CuiHelper.DestroyUi(player, RPVER);
 
-            CuiElementContainer container = UI.Container(PPVER, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Button(ref container, PPVER, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
-            UI.Label(ref container, PPVER, UI.Color("#ffffff", 1f), Lang("realpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
+            CuiElementContainer container = UI.Container(RPVER, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Button(ref container, RPVER, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
+            UI.Label(ref container, RPVER, UI.Color("#ffffff", 1f), Lang("realpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
 
             CuiHelper.AddUi(player, container);
         }
 
-        // FIXME
-        void GUIEditString(BasePlayer player, string rulesetname, string key = null)
+        void GUIEditValue(BasePlayer player, string rulesetname, string key = null)
         {
-            CuiHelper.DestroyUi(player, PPVES);
+            CuiHelper.DestroyUi(player, RPVEV);
 
-            CuiElementContainer container = UI.Container(PPVES, UI.Color("2b2b2b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
-            UI.Button(ref container, PPVES, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerulestring");
-            UI.Label(ref container, PPVES, UI.Color("#ffffff", 1f), Lang("realpvevalue") + ": " + rulesetname + " " + key, 24, "0.2 0.92", "0.7 1");
+            CuiElementContainer container = UI.Container(RPVEV, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
+            UI.Button(ref container, RPVEV, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerulevalue");
+            UI.Label(ref container, RPVEV, UI.Color("#ffffff", 1f), Lang("realpvevalue") + ": " + rulesetname + " " + key, 24, "0.2 0.92", "0.7 1");
 
             int col = 0;
             int row = 0;
@@ -696,11 +722,11 @@ namespace Oxide.Plugins
             {
                 case "name":
                     pb = GetButtonPositionP(row, col);
-                    UI.Label(ref container, PPVES, UI.Color("#ffffff", 1f), Lang("editname") + ":", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    UI.Label(ref container, RPVEV, UI.Color("#ffffff", 1f), Lang("editname") + ":", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                     col++;
                     pb = GetButtonPositionP(row, col);
-                    UI.Label(ref container, PPVES, UI.Color("#535353", 1f), rulesetname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-                    UI.Input(ref container, PPVES, UI.Color("#ffffff", 1f), rulesetname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} name ");
+                    UI.Label(ref container, RPVEV, UI.Color("#535353", 1f), rulesetname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    UI.Input(ref container, RPVEV, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} name ");
                     break;
                 case "zone":
                     string[] zoneIDs = (string[])ZoneManager?.Call("GetZoneIDs");
@@ -712,18 +738,71 @@ namespace Oxide.Plugins
                         if(zName == pverulesets[rulesetname].zone) zColor = "#22ff22";
 
                         pb = GetButtonPositionP(row, col);
-                        UI.Button(ref container, PPVES, UI.Color(zColor, 1f), zName, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zName}");
+                        UI.Button(ref container, RPVEV, UI.Color(zColor, 1f), zName, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zName}");
                         row++;
                     }
                     break;
-                case "schedule":
-                    // schedule thing
-                    break;
                 default:
-                    CuiHelper.DestroyUi(player, PPVES);
+                    CuiHelper.DestroyUi(player, RPVEV);
                     return;
                     break;
             }
+
+            CuiHelper.AddUi(player, container);
+        }
+
+        // FIXME schedule
+        void GUIEditSchedule(BasePlayer player, string rulesetname)
+        {
+            CuiHelper.DestroyUi(player, RPVES);
+
+            string schedule = pverulesets[rulesetname].schedule;
+
+            CuiElementContainer container = UI.Container(RPVES, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
+            UI.Button(ref container, RPVES, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleschedule");
+            UI.Label(ref container, RPVES, UI.Color("#ffffff", 1f), Lang("realpveschedule") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
+
+            string fmtschedule = null;
+            if(schedule != null)
+            {
+                try
+                {
+                    string[] realschedule = schedule.Split(';');//.ToArray();
+                    Puts($"Schedule: {realschedule[0]} {realschedule[1]} {realschedule[2]}");
+                    // WTF?
+                    int day = 0;
+                    string dayName = Lang("all") + "(*)";
+                    if(int.TryParse(realschedule[0], out day))
+                    {
+                        dayName = Enum.GetName(typeof(DayOfWeek), day) + "(" + realschedule[0] + ")";
+                    }
+                    fmtschedule = Lang("currentschedule", null, dayName, realschedule[1], realschedule[2]);
+                }
+                catch
+                {
+                    fmtschedule = "none";
+                    schedule = "none";
+                }
+            }
+            else
+            {
+                fmtschedule = "none";
+                schedule = "none";
+            }
+            int col = 0;
+            int row = 0;
+
+            float[] pb = GetButtonPositionP(row, col, 4f);
+            UI.Label(ref container, RPVES, UI.Color("#ffffff", 1f), Lang("scheduling"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+            row++;
+            pb = GetButtonPositionP(row, col, 3f);
+            UI.Label(ref container, RPVES, UI.Color("#ffffff", 1f), fmtschedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+            col++;
+            pb = GetButtonPositionP(row, 4);
+            UI.Label(ref container, RPVES, UI.Color("#535353", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Input(ref container, RPVES, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule ");
 
             CuiHelper.AddUi(player, container);
         }
@@ -736,12 +815,12 @@ namespace Oxide.Plugins
 
             return new float[] { offsetX, offsetY, offsetX + 0.196f, offsetY + 0.03f };
         }
-        private float[] GetButtonPositionP(int rowNumber, int columnNumber)
+        private float[] GetButtonPositionP(int rowNumber, int columnNumber, float colspan = 1f)
         {
             float offsetX = 0.05f + (0.126f * columnNumber);
             float offsetY = (0.87f - (rowNumber * 0.064f));
 
-            return new float[] { offsetX, offsetY, offsetX + 0.226f, offsetY + 0.03f };
+            return new float[] { offsetX, offsetY, offsetX + (0.226f * colspan), offsetY + 0.03f };
         }
         #endregion
 
