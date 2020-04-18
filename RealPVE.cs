@@ -276,7 +276,7 @@ namespace Oxide.Plugins
         {
             stype = source.GetType().Name;
             ttype = target.GetType().Name;
-            string zone  = null;
+            string zone = "default";
 
             // Special case since HumanNPC contains a BasePlayer object
             if(stype == "BasePlayer" && HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
@@ -295,7 +295,9 @@ namespace Oxide.Plugins
                     {
                         if(targetzone.Contains(z))
                         {
-                            zone = z;
+                            string zName = (string)ZoneManager?.Call("GetZoneName", z);
+                            zone = zName;
+                            Puts($"Found zone {zone}");
                             break;
                         }
                     }
@@ -318,10 +320,20 @@ namespace Oxide.Plugins
                 }
             }
 
-            // zone
             foreach(KeyValuePair<string,RealPVERuleSet> pveruleset in pverulesets)
             {
                 DoLog($"Checking for match in ruleset {pveruleset.Key} for {stype} attacking {ttype}, default: {pveruleset.Value.damage.ToString()}");
+                bool zmatch = false;
+
+                if(pveruleset.Value.zone == zone)
+                {
+                    zmatch = true;
+                }
+                else
+                {
+                    DoLog($"Skipping check due to zone mismatch");
+                    continue;
+                }
 
                 bool rulematch = false;
 
@@ -340,9 +352,11 @@ namespace Oxide.Plugins
                     //    return false;
                     //}
                 }
+                if(zmatch) return pveruleset.Value.damage;
             }
+
             DoLog($"NO RULESET MATCH!");
-            return false;//pverulesets["default"].damage;
+            return false;
         }
 
         // Compare rulename to source and target looking for match unless also excluded
@@ -419,7 +433,7 @@ namespace Oxide.Plugins
 
             if(args.Length > 0)
             {
-				string debug = string.Join(",", args); Puts($"{debug}");
+                string debug = string.Join(",", args); Puts($"{debug}");
 
                 switch(args[0])
                 {
@@ -435,6 +449,8 @@ namespace Oxide.Plugins
                             {
                                 case "damage":
                                     pverulesets[rs].damage = GetBoolValue(newval);
+                                    break;
+                                case "name":
                                     break;
                                 case "zone":
                                     pverulesets[rs].zone = newval;
@@ -497,6 +513,7 @@ namespace Oxide.Plugins
                     case "close":
                         CuiHelper.DestroyUi(player, PPVEL);
                         CuiHelper.DestroyUi(player, PPVER);
+                        CuiHelper.DestroyUi(player, PPVES);
                         CuiHelper.DestroyUi(player, PPVERS);
                         break;
                     case "closeruleset":
@@ -518,7 +535,9 @@ namespace Oxide.Plugins
                 GUIRuleSets(player);
             }
         }
+        #endregion
 
+        #region GUI
         void GUIRuleSets(BasePlayer player)
         {
             CuiHelper.DestroyUi(player, PPVEL);
@@ -558,6 +577,7 @@ namespace Oxide.Plugins
 
             if(rulesetname != "default")
             {
+                UI.Button(ref container, PPVERS, UI.Color("#2222ff", 1f), Lang("editname"), 12, "0.77 0.95", "0.85 0.98", $"pverule editruleset {rulesetname} name");
                 UI.Button(ref container, PPVERS, UI.Color("#ff2222", 1f), Lang("delete"), 12, "0.86 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} delete");
             }
 
@@ -659,7 +679,7 @@ namespace Oxide.Plugins
             CuiHelper.AddUi(player, container);
         }
 
-		// FIXME
+        // FIXME
         void GUIEditString(BasePlayer player, string rulesetname, string key = null)
         {
             CuiHelper.DestroyUi(player, PPVES);
@@ -668,13 +688,33 @@ namespace Oxide.Plugins
             UI.Button(ref container, PPVES, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerulestring");
             UI.Label(ref container, PPVES, UI.Color("#ffffff", 1f), Lang("realpvevalue") + ": " + rulesetname + " " + key, 24, "0.2 0.92", "0.7 1");
 
+            int col = 0;
+            int row = 0;
+            float[] pb = GetButtonPositionP(row, col);
+
             switch(key)
             {
                 case "name":
-                    // Input box
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, PPVES, UI.Color("#ffffff", 1f), Lang("editname") + ":", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    col++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, PPVES, UI.Color("#535353", 1f), rulesetname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    UI.Input(ref container, PPVES, UI.Color("#ffffff", 1f), rulesetname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} name ");
                     break;
                 case "zone":
-                    // zone list
+                    string[] zoneIDs = (string[])ZoneManager?.Call("GetZoneIDs");
+                    foreach(string zoneID in zoneIDs)
+                    {
+                        string zName = (string)ZoneManager?.Call("GetZoneName", zoneID);
+                        Puts($"Found zone {zName} ({zoneID})");
+                        string zColor = "#222222";
+                        if(zName == pverulesets[rulesetname].zone) zColor = "#22ff22";
+
+                        pb = GetButtonPositionP(row, col);
+                        UI.Button(ref container, PPVES, UI.Color(zColor, 1f), zName, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zName}");
+                        row++;
+                    }
                     break;
                 case "schedule":
                     // schedule thing
@@ -708,13 +748,23 @@ namespace Oxide.Plugins
         #region Specialized_checks
         private string[] GetEntityZones(BaseEntity entity)
         {
-            if(entity is BasePlayer)
+            if(configData.Options.UseZoneManager)
             {
-                 return (string[]) ZoneManager.Call("GetPlayerZoneIDs", new object[] { entity as BasePlayer });
+                if(entity is BasePlayer)
+                {
+                     return (string[]) ZoneManager?.Call("GetPlayerZoneIDs", new object[] { entity as BasePlayer });
+                }
+                else if(entity.IsValid())
+                {
+                     return (string[]) ZoneManager?.Call("GetEntityZoneIDs", new object[] { entity });
+                }
             }
-            else if(entity.IsValid())
+            else if(configData.Options.UseLiteZones)
             {
-                 return (string[]) ZoneManager.Call("GetEntityZoneIDs", new object[] { entity });
+                if(entity.IsValid())
+                {
+                     return (string[]) LiteZones?.Call("GetEntityZoneIDs", new object[] { entity });
+                }
             }
             return null;
         }
@@ -928,7 +978,7 @@ namespace Oxide.Plugins
                         new CuiRectTransformComponent
                         {
                             AnchorMin = min,
-                            AnchorMax = max 
+                            AnchorMax = max
                         }
                     }
                 });
