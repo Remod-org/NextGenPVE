@@ -17,19 +17,19 @@ using Oxide.Game.Rust.Cui;
 
 namespace Oxide.Plugins
 {
-    [Info("Pure PVE", "RFC1920", "1.0.3")]
+    [Info("Real PVE", "RFC1920", "1.0.3")]
     [Description("Prevent damage to players and objects in a PVE environment")]
-    class PurePVE : RustPlugin
+    class RealPVE : RustPlugin
     {
         #region vars
-        Dictionary<string, PurePVEEntities> pveentities = new Dictionary<string, PurePVEEntities>();
-        Dictionary<string, PurePVERule> pverules = new Dictionary<string, PurePVERule>();
-        Dictionary<string, PurePVERule> custom = new Dictionary<string, PurePVERule>();
-        Dictionary<string, PurePVERuleSet> pverulesets = new Dictionary<string, PurePVERuleSet>();
+        Dictionary<string, RealPVEEntities> pveentities = new Dictionary<string, RealPVEEntities>();
+        Dictionary<string, RealPVERule> pverules = new Dictionary<string, RealPVERule>();
+        Dictionary<string, RealPVERule> custom = new Dictionary<string, RealPVERule>();
+        Dictionary<string, RealPVERuleSet> pverulesets = new Dictionary<string, RealPVERuleSet>();
 
-        private const string permPurePVEUse = "purepve.use";
-        private const string permPurePVEAdmin = "purepve.admin";
-        private const string permPurePVEGod = "purepve.god";
+        private const string permRealPVEUse = "realpve.use";
+        private const string permRealPVEAdmin = "realpve.admin";
+        private const string permRealPVEGod = "realpve.god";
         private ConfigData configData;
 
         [PluginReference]
@@ -38,9 +38,10 @@ namespace Oxide.Plugins
         private string logfilename = "log";
         private bool dolog = false;
 
-        const string PPVEL = "purepve.rulelist";
-        const string PPVERS = "purepve.ruleseteditor";
-        const string PPVER = "purepve.ruleeditor";
+        const string PPVEL = "realpve.rulelist";
+        const string PPVERS = "realpve.ruleseteditor";
+        const string PPVER = "realpve.ruleeditor";
+        const string PPVES = "realpve.string";
         #endregion
 
         #region Message
@@ -52,11 +53,11 @@ namespace Oxide.Plugins
         void Init()
         {
             LoadConfigVariables();
-            AddCovalenceCommand("pvelog", "cmdPurePVElog");
-            AddCovalenceCommand("pverule", "cmdPurePVEGUI");
-            permission.RegisterPermission(permPurePVEUse, this);
-            permission.RegisterPermission(permPurePVEAdmin, this);
-            permission.RegisterPermission(permPurePVEGod, this);
+            AddCovalenceCommand("pvelog", "cmdRealPVElog");
+            AddCovalenceCommand("pverule", "cmdRealPVEGUI");
+            permission.RegisterPermission(permRealPVEUse, this);
+            permission.RegisterPermission(permRealPVEAdmin, this);
+            permission.RegisterPermission(permRealPVEGod, this);
         }
 
         void OnServerInitialized()
@@ -65,12 +66,14 @@ namespace Oxide.Plugins
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 ["notauthorized"] = "You don't have permission to use this command.",
-                ["purepverulesets"] = "PurePVE Rulesets",
-                ["purepveruleset"] = "PurePVE Ruleset",
-                ["purepverule"] = "PurePVE Rule",
+                ["realpverulesets"] = "RealPVE Rulesets",
+                ["realpveruleset"] = "RealPVE Ruleset",
+                ["realpverule"] = "RealPVE Rule",
+                ["realpvevalue"] = "RealPVE Ruleset Value",
                 ["close"] = "Close",
                 ["save"] = "Save",
                 ["edit"] = "Edit",
+                ["editname"] = "Edit Name",
                 ["add"] = "Add",
                 ["true"] = "True",
                 ["false"] = "False",
@@ -89,41 +92,42 @@ namespace Oxide.Plugins
             }, this);
         }
 
-		void Unload()
-		{
+        void Unload()
+        {
             foreach(BasePlayer player in BasePlayer.activePlayerList)
             {
                 CuiHelper.DestroyUi(player, PPVEL);
                 CuiHelper.DestroyUi(player, PPVER);
+                CuiHelper.DestroyUi(player, PPVES);
                 CuiHelper.DestroyUi(player, PPVERS);
-			}
-		}
+            }
+        }
 
         void LoadData()
         {
-            pveentities = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVEEntities>>(this.Name + "/" + this.Name + "_entities");
+            pveentities = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVEEntities>>(this.Name + "/" + this.Name + "_entities");
             if(pveentities.Count == 0)
             {
                 LoadDefaultEntities();
             }
-            pverules = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERule>>(this.Name + "/" + this.Name + "_rules");
+            pverules = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVERule>>(this.Name + "/" + this.Name + "_rules");
             if(pverules.Count == 0)
             {
                 LoadDefaultRules();
             }
 
             // Merge and overwrite from this file if it exists.
-            custom = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERule>>(this.Name + "/" + this.Name + "_custom");
+            custom = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVERule>>(this.Name + "/" + this.Name + "_custom");
             if(custom.Count > 0)
             {
-                foreach(KeyValuePair<string, PurePVERule> rule in custom)
+                foreach(KeyValuePair<string, RealPVERule> rule in custom)
                 {
                     pverules[rule.Key] = rule.Value;
                 }
             }
             custom.Clear();
 
-            pverulesets = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, PurePVERuleSet>>(this.Name + "/" + this.Name + "_rulesets");
+            pverulesets = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVERuleSet>>(this.Name + "/" + this.Name + "_rulesets");
             if(pverulesets.Count == 0)
             {
                 LoadDefaultRuleset();
@@ -219,7 +223,7 @@ namespace Oxide.Plugins
 
             if(stype == "BasePlayer")
             {
-                if((hitInfo.Initiator as BasePlayer).IPlayer.HasPermission(permPurePVEGod))
+                if((hitInfo.Initiator as BasePlayer).IPlayer.HasPermission(permRealPVEGod))
                 {
                     Puts("Admin god!");
                     return null;
@@ -236,6 +240,34 @@ namespace Oxide.Plugins
                 DoLog($"dAMAGE BLOCKED for {stype} attacking {ttype}");
             }
             return true;
+        }
+        #endregion
+
+        //private bool CreateMapping(string zoneID, string mapping) => (bool)TruePVE?.Call("AddOrUpdateMapping", zoneID, mapping);
+        //private bool RemoveMapping(string zoneID) => (bool)TruePVE?.Call("RemoveMapping", zoneID);
+        #region inbound_hooks
+        bool AddOrUpdateMapping(string key, string rulesetname)
+        {
+            if(string.IsNullOrEmpty(key)) return false;
+            if(rulesetname == null) return false;
+
+            pverulesets[rulesetname].zone = key;
+            SaveData();
+
+            return true;
+        }
+
+        // remove a mapping
+        bool RemoveMapping(string key)
+        {
+            if(string.IsNullOrEmpty(key)) return false;
+
+            foreach(KeyValuePair<string, RealPVERuleSet> pveruleset in pverulesets)
+            {
+                if(pveruleset.Value.zone == key) pverulesets[pveruleset.Key].zone = null;
+            }
+
+            return false;
         }
         #endregion
 
@@ -287,7 +319,7 @@ namespace Oxide.Plugins
             }
 
             // zone
-            foreach(KeyValuePair<string,PurePVERuleSet> pveruleset in pverulesets)
+            foreach(KeyValuePair<string,RealPVERuleSet> pveruleset in pverulesets)
             {
                 DoLog($"Checking for match in ruleset {pveruleset.Key} for {stype} attacking {ttype}, default: {pveruleset.Value.damage.ToString()}");
 
@@ -371,51 +403,120 @@ namespace Oxide.Plugins
         }
 
         [Command("pvelog")]
-        void cmdPurePVElog(IPlayer player, string command, string[] args)
+        void cmdRealPVElog(IPlayer player, string command, string[] args)
         {
-            if(!player.HasPermission(permPurePVEAdmin)) { Message(player, "notauthorized"); return; }
+            if(!player.HasPermission(permRealPVEAdmin)) { Message(player, "notauthorized"); return; }
 
             dolog = !dolog;
             Message(player, "logging", dolog.ToString());
         }
 
         [Command("pverule")]
-        void cmdPurePVEGUI(IPlayer iplayer, string command, string[] args)
+        void cmdRealPVEGUI(IPlayer iplayer, string command, string[] args)
         {
-            if(!iplayer.HasPermission(permPurePVEAdmin)) { Message(iplayer, "notauthorized"); return; }
+            if(!iplayer.HasPermission(permRealPVEAdmin)) { Message(iplayer, "notauthorized"); return; }
             var player = iplayer.Object as BasePlayer;
 
             if(args.Length > 0)
             {
+				string debug = string.Join(",", args); Puts($"{debug}");
+
                 switch(args[0])
                 {
-					case "editrule":
-						Puts($"editrule {args[1]}");
-						GUIRulesetEditor(player, args[1]);
-						break;
+                    case "editruleset":
+                        //e.g.: pverule editruleset {rulesetname} damage 0
+                        if(args.Length > 3)
+                        {
+                            string rs = args[1];
+                            string setting = args[2];
+                            string newval  = args[3];
+                            CuiHelper.DestroyUi(player, PPVES);
+                            switch(setting)
+                            {
+                                case "damage":
+                                    pverulesets[rs].damage = GetBoolValue(newval);
+                                    break;
+                                case "zone":
+                                    pverulesets[rs].zone = newval;
+                                    break;
+                                case "schedule":
+                                    pverulesets[rs].schedule = newval;
+                                    break;
+                            }
+                            SaveData();
+                            GUIRulesetEditor(player, rs);
+                        }
+                        //pverule editruleset {rulesetname} delete
+                        //pverule editruleset {rulesetname} zone
+                        else if(args.Length > 2)
+                        {
+                            switch(args[2])
+                            {
+                                case "delete":
+                                    pverulesets.Remove(args[1]);
+                                    SaveData();
+                                    CuiHelper.DestroyUi(player, PPVERS);
+                                    GUIRuleSets(player);
+                                    break;
+                                case "name":
+                                case "zone":
+                                case "schedule":
+                                    GUIEditString(player, args[1], args[2]);
+                                    break;
+                            }
+                        }
+                        //pverule editruleset {rulesetname}
+                        else if(args.Length > 1)
+                        {
+                            string newname = args[1];
+                            if(newname == "add")
+                            {
+                                int id = 0;
+                                newname = "new1";
+                                while(pverulesets.ContainsKey(newname))
+                                {
+                                    id++;
+                                    if(id > 4) break;
+                                    newname = "new" + id.ToString();
+                                }
+                                pverulesets.Add(newname, new RealPVERuleSet()
+                                {
+                                    damage = false, zone = null, schedule = null,
+                                    except = new List<string>() {},
+                                    exclude = new List<string>() {}
+                                });
+                                SaveData();
+                            }
+                            GUIRulesetEditor(player, newname);
+                        }
+                        break;
+//                    case "editrule":
+//                        Puts($"editrule {args[1]}");
+//                        GUIRulesetEditor(player, args[1]);
+//                        break;
                     case "close":
-						Puts("close");
                         CuiHelper.DestroyUi(player, PPVEL);
                         CuiHelper.DestroyUi(player, PPVER);
                         CuiHelper.DestroyUi(player, PPVERS);
                         break;
                     case "closeruleset":
-						Puts("closeruleset");
                         CuiHelper.DestroyUi(player, PPVERS);
                         break;
                     case "closerule":
-						Puts("closerule");
                         CuiHelper.DestroyUi(player, PPVER);
+                        break;
+                    case "closerulestring":
+                        CuiHelper.DestroyUi(player, PPVES);
                         break;
                     default:
                         GUIRuleSets(player);
                         break;
                 }
             }
-			else
-			{
-	            GUIRuleSets(player);
-			}
+            else
+            {
+                GUIRuleSets(player);
+            }
         }
 
         void GUIRuleSets(BasePlayer player)
@@ -424,13 +525,13 @@ namespace Oxide.Plugins
 
             CuiElementContainer container = UI.Container(PPVEL, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
             UI.Button(ref container, PPVEL, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule close");
-            UI.Label(ref container, PPVEL, UI.Color("#ffffff", 1f), Lang("purepverulesets") + ": ", 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, PPVEL, UI.Color("#ffffff", 1f), Lang("realpverulesets") + ": ", 24, "0.2 0.92", "0.7 1");
 
             int col = 0;
             int row = 0;
-			float[] pb;
-            foreach(KeyValuePair<string, PurePVERuleSet> ruleset in pverulesets)
-			{
+            float[] pb;
+            foreach(KeyValuePair<string, RealPVERuleSet> ruleset in pverulesets)
+            {
                 if(row > 10)
                 {
                     row = 0;
@@ -438,11 +539,11 @@ namespace Oxide.Plugins
                 }
                 pb = GetButtonPositionP(row, col);
 
-                UI.Button(ref container, PPVEL, UI.Color("#d85540", 1f), ruleset.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {ruleset.Key}");
-			}
-			row++;
-			pb = GetButtonPositionP(row, col);
-			UI.Button(ref container, PPVEL, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule add");
+                UI.Button(ref container, PPVEL, UI.Color("#d85540", 1f), ruleset.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {ruleset.Key}");
+                row++;
+            }
+            pb = GetButtonPositionP(row, col);
+            UI.Button(ref container, PPVEL, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset add");
 
             CuiHelper.AddUi(player, container);
         }
@@ -452,92 +553,97 @@ namespace Oxide.Plugins
             CuiHelper.DestroyUi(player, PPVERS);
 
             CuiElementContainer container = UI.Container(PPVERS, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("realpveruleset") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
             UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleset");
-            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("purepveruleset") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
 
-			string dicolor = "#cccccc";
-			string encolor = "#ffcccc";
+            if(rulesetname != "default")
+            {
+                UI.Button(ref container, PPVERS, UI.Color("#ff2222", 1f), Lang("delete"), 12, "0.86 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} delete");
+            }
+
+            string dicolor = "#cccccc";
+            string encolor = "#ffcccc";
             int col = 0;
             int row = 0;
 
             float[] pb = GetButtonPositionP(row, col);
             UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("defaultdamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
-			col++;
-			pb = GetButtonPositionP(row, col);
-			UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("damageexceptions"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            col++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("damageexceptions"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
-			col++;
-			pb = GetButtonPositionP(row, col);
-			UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("exclude"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            col++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("exclude"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
-			col++;
-			pb = GetButtonPositionP(row, col);
-			UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("zone"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            col++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("zone"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
-			col++;
-			pb = GetButtonPositionP(row, col);
-			UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("schedule"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            col++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, PPVERS, UI.Color("#ffffff", 1f), Lang("schedule"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
-			row++;
-			col = 0;
+            row++;
+            col = 0;
 
-			pb = GetButtonPositionP(row, col);
-			if(pverulesets[rulesetname].damage)
-			{
-				UI.Button(ref container, PPVERS, UI.Color(encolor, 1f), Lang("true"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 0");
-			}
-			else
-			{
-				UI.Button(ref container, PPVERS, UI.Color(dicolor, 1f), Lang("false"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 1");
-			}
+            pb = GetButtonPositionP(row, col);
+            if(pverulesets[rulesetname].damage)
+            {
+                UI.Button(ref container, PPVERS, UI.Color(encolor, 1f), Lang("true"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 0");
+            }
+            else
+            {
+                UI.Button(ref container, PPVERS, UI.Color(dicolor, 1f), Lang("false"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 1");
+            }
 
-			col++;
-			foreach(string except in pverulesets[rulesetname].except)
-			{
+            col++;
+            foreach(string except in pverulesets[rulesetname].except)
+            {
                 pb = GetButtonPositionP(row, col);
-				UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule except {except}");
-				row++;
-			}
-			pb = GetButtonPositionP(row, col);
-			UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule except add");
+                UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
+                row++;
+            }
+            pb = GetButtonPositionP(row, col);
+            UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
 
-			col++; row = 1;
-			foreach(string exclude in pverulesets[rulesetname].exclude)
-			{
+            col++; row = 1;
+            foreach(string exclude in pverulesets[rulesetname].exclude)
+            {
                 if(row > 10)
                 {
                     row = 0;
                     col++;
                 }
-				pb = GetButtonPositionP(row, col);
-				UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule exclude {exclude}");
-				row++;
-			}
-			pb = GetButtonPositionP(row, col);
-			UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule exclude add");
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
+                row++;
+            }
+            pb = GetButtonPositionP(row, col);
+            UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
 
-			col++; row = 1;
-			pb = GetButtonPositionP(row, col);
-			if(pverulesets[rulesetname].zone != null)
-			{
-				UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), pverulesets[rulesetname].zone, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule zone {pverulesets[rulesetname].zone}");
-			}
-			else
-			{
-				UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule zone add}");
-			}
+            col++; row = 1;
+            pb = GetButtonPositionP(row, col);
+            if(pverulesets[rulesetname].zone != null)
+            {
+                UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), pverulesets[rulesetname].zone, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
+            }
+            else
+            {
+                UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
+            }
 
-			col++; row = 1;
-			pb = GetButtonPositionP(row, col);
-			if(pverulesets[rulesetname].zone != null)
-			{
-				UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), pverulesets[rulesetname].schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule schedule {pverulesets[rulesetname].schedule}");
-			}
-			else
-			{
-				UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule schedule add}");
-			}
+            col++; row = 1;
+            pb = GetButtonPositionP(row, col);
+            if(pverulesets[rulesetname].zone != null)
+            {
+                UI.Button(ref container, PPVERS, UI.Color("#d85540", 1f), pverulesets[rulesetname].schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+            }
+            else
+            {
+                UI.Button(ref container, PPVERS, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+            }
 
             CuiHelper.AddUi(player, container);
         }
@@ -548,7 +654,36 @@ namespace Oxide.Plugins
 
             CuiElementContainer container = UI.Container(PPVER, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
             UI.Button(ref container, PPVER, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
-            UI.Label(ref container, PPVER, UI.Color("#ffffff", 1f), Lang("purepverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, PPVER, UI.Color("#ffffff", 1f), Lang("realpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
+
+            CuiHelper.AddUi(player, container);
+        }
+
+		// FIXME
+        void GUIEditString(BasePlayer player, string rulesetname, string key = null)
+        {
+            CuiHelper.DestroyUi(player, PPVES);
+
+            CuiElementContainer container = UI.Container(PPVES, UI.Color("2b2b2b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
+            UI.Button(ref container, PPVES, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerulestring");
+            UI.Label(ref container, PPVES, UI.Color("#ffffff", 1f), Lang("realpvevalue") + ": " + rulesetname + " " + key, 24, "0.2 0.92", "0.7 1");
+
+            switch(key)
+            {
+                case "name":
+                    // Input box
+                    break;
+                case "zone":
+                    // zone list
+                    break;
+                case "schedule":
+                    // schedule thing
+                    break;
+                default:
+                    CuiHelper.DestroyUi(player, PPVES);
+                    return;
+                    break;
+            }
 
             CuiHelper.AddUi(player, container);
         }
@@ -629,6 +764,24 @@ namespace Oxide.Plugins
             weapon = null;
             return false;
         }
+
+        private static bool GetBoolValue(string value)
+        {
+            if(value == null) return false;
+            value = value.Trim().ToLower();
+            switch(value)
+            {
+                case "t":
+                case "true":
+                case "1":
+                case "yes":
+                case "y":
+                case "on":
+                    return true;
+                default:
+                    return false;
+            }
+        }
         #endregion
 
         #region config
@@ -664,7 +817,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region classes
-        public class PurePVERuleSet
+        public class RealPVERuleSet
         {
             public bool damage;
             public List<string> except;
@@ -673,7 +826,7 @@ namespace Oxide.Plugins
             public string schedule;
         }
 
-        public class PurePVERule
+        public class RealPVERule
         {
             public string description;
             public bool damage;
@@ -681,7 +834,7 @@ namespace Oxide.Plugins
             public List<string> target;
         }
 
-        public class PurePVEEntities
+        public class RealPVEEntities
         {
             public List<string> types;
         }
@@ -797,7 +950,7 @@ namespace Oxide.Plugins
         #region load_defaults
         private void LoadDefaultRuleset()
         {
-            pverulesets.Add("default", new PurePVERuleSet()
+            pverulesets.Add("default", new RealPVERuleSet()
             {
                 damage = false, zone = null, schedule = null,
                 except = new List<string>() { "animal_player", "player_animal", "animal_animal", "player_minicopter", "player_npc", "npc_player", "player_resources", "npcturret_player", "npcturret_animal", "npcturret_npc" },
@@ -808,36 +961,36 @@ namespace Oxide.Plugins
         // Default entity categories and types to consider
         private void LoadDefaultEntities()
         {
-            pveentities.Add("npc", new PurePVEEntities() { types = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer", "Murderer", "Scientist" } });
-            pveentities.Add("player", new PurePVEEntities() { types = new List<string>() { "BasePlayer" } });
-            pveentities.Add("resource", new PurePVEEntities() { types = new List<string>() { "ResourceEntity", "LootContainer" } });
-            pveentities.Add("trap", new PurePVEEntities() { types = new List<string>() { "TeslaCoil", "BearTrap", "FlameTurret", "Landmine", "GunTrap", "ReactiveTarget", "spikes.floor" } });
-            pveentities.Add("animal", new PurePVEEntities() { types = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" } });
-            pveentities.Add("helicopter", new PurePVEEntities() { types = new List<string>() { "BaseHeli" } });
-            pveentities.Add("minicopter", new PurePVEEntities() { types = new List<string>() { "Minicopter" } });
-            pveentities.Add("highwall", new PurePVEEntities() { types = new List<string>() { "wall.external.high.stone", "wall.external.high.wood", "gates.external.high.wood", "gates.external.high.stone" } });
-            pveentities.Add("npcturret", new PurePVEEntities() { types = new List<string>() { "NPCAutoTurret" } });
+            pveentities.Add("npc", new RealPVEEntities() { types = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer", "Murderer", "Scientist" } });
+            pveentities.Add("player", new RealPVEEntities() { types = new List<string>() { "BasePlayer" } });
+            pveentities.Add("resource", new RealPVEEntities() { types = new List<string>() { "ResourceEntity", "LootContainer" } });
+            pveentities.Add("trap", new RealPVEEntities() { types = new List<string>() { "TeslaCoil", "BearTrap", "FlameTurret", "Landmine", "GunTrap", "ReactiveTarget", "spikes.floor" } });
+            pveentities.Add("animal", new RealPVEEntities() { types = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" } });
+            pveentities.Add("helicopter", new RealPVEEntities() { types = new List<string>() { "BaseHeli" } });
+            pveentities.Add("minicopter", new RealPVEEntities() { types = new List<string>() { "Minicopter" } });
+            pveentities.Add("highwall", new RealPVEEntities() { types = new List<string>() { "wall.external.high.stone", "wall.external.high.wood", "gates.external.high.wood", "gates.external.high.stone" } });
+            pveentities.Add("npcturret", new RealPVEEntities() { types = new List<string>() { "NPCAutoTurret" } });
         }
 
         // Default rules which can be applied
         private void LoadDefaultRules()
         {
-            pverules.Add("npc_player", new PurePVERule() { description = "npc can damage player", damage = true, source = pveentities["npc"].types, target = pveentities["player"].types });
-            pverules.Add("player_npc", new PurePVERule() { description = "Player can damage npc", damage = true, source = pveentities["player"].types, target = pveentities["npc"].types });
-            pverules.Add("player_player", new PurePVERule() { description = "Player can damage player", damage = true, source = pveentities["player"].types, target = pveentities["player"].types });
-            pverules.Add("player_resources", new PurePVERule() { description = "Player can damage resource", damage = true, source = pveentities["player"].types, target = pveentities["resource"].types });
-            pverules.Add("players_traps", new PurePVERule() { description = "Player can damage trap", damage = true, source = pveentities["player"].types, target = pveentities["trap"].types });
-            pverules.Add("traps_players", new PurePVERule() { description = "Trap can damage player", damage = true, source = pveentities["trap"].types, target = pveentities["player"].types });
-            pverules.Add("player_animal", new PurePVERule() { description = "Player can damage animal", damage = true, source = pveentities["player"].types, target = pveentities["animal"].types });
-            pverules.Add("animal_player", new PurePVERule() { description = "Animal can damage player", damage = true, source = pveentities["animal"].types, target = pveentities["player"].types });
-            pverules.Add("animal_animal", new PurePVERule() { description = "Animal can damage animal", damage = true, source = pveentities["animal"].types, target = pveentities["animal"].types });
-            pverules.Add("helicopter_player", new PurePVERule() { description = "Helicopter can damage player", damage = true, source = pveentities["helicopter"].types, target = pveentities["player"].types });
-            pverules.Add("player_minicopter", new PurePVERule() { description = "Player can damage minicopter", damage = true, source = pveentities["player"].types, target = pveentities["minicopter"].types });
-            pverules.Add("minicopter_player", new PurePVERule() { description = "Minicopter can damage player", damage = true, source = pveentities["minicopter"].types, target = pveentities["player"].types });
-            pverules.Add("highwalls_player", new PurePVERule() { description = "Highwall can damage player", damage = true, source = pveentities["highwall"].types, target = pveentities["player"].types });
-            pverules.Add("npcturret_player", new PurePVERule() { description = "NPCAutoTurret can damage player", damage = true, source = pveentities["npcturret"].types, target = pveentities["player"].types });
-            pverules.Add("npcturret_animal", new PurePVERule() { description = "NPCAutoTurret can damage animal", damage = true, source = pveentities["npcturret"].types, target = pveentities["animal"].types });
-            pverules.Add("npcturret_npc", new PurePVERule() { description = "NPCAutoTurret can damage npc", damage = true, source = pveentities["npcturret"].types, target = pveentities["npc"].types });
+            pverules.Add("npc_player", new RealPVERule() { description = "npc can damage player", damage = true, source = pveentities["npc"].types, target = pveentities["player"].types });
+            pverules.Add("player_npc", new RealPVERule() { description = "Player can damage npc", damage = true, source = pveentities["player"].types, target = pveentities["npc"].types });
+            pverules.Add("player_player", new RealPVERule() { description = "Player can damage player", damage = true, source = pveentities["player"].types, target = pveentities["player"].types });
+            pverules.Add("player_resources", new RealPVERule() { description = "Player can damage resource", damage = true, source = pveentities["player"].types, target = pveentities["resource"].types });
+            pverules.Add("players_traps", new RealPVERule() { description = "Player can damage trap", damage = true, source = pveentities["player"].types, target = pveentities["trap"].types });
+            pverules.Add("traps_players", new RealPVERule() { description = "Trap can damage player", damage = true, source = pveentities["trap"].types, target = pveentities["player"].types });
+            pverules.Add("player_animal", new RealPVERule() { description = "Player can damage animal", damage = true, source = pveentities["player"].types, target = pveentities["animal"].types });
+            pverules.Add("animal_player", new RealPVERule() { description = "Animal can damage player", damage = true, source = pveentities["animal"].types, target = pveentities["player"].types });
+            pverules.Add("animal_animal", new RealPVERule() { description = "Animal can damage animal", damage = true, source = pveentities["animal"].types, target = pveentities["animal"].types });
+            pverules.Add("helicopter_player", new RealPVERule() { description = "Helicopter can damage player", damage = true, source = pveentities["helicopter"].types, target = pveentities["player"].types });
+            pverules.Add("player_minicopter", new RealPVERule() { description = "Player can damage minicopter", damage = true, source = pveentities["player"].types, target = pveentities["minicopter"].types });
+            pverules.Add("minicopter_player", new RealPVERule() { description = "Minicopter can damage player", damage = true, source = pveentities["minicopter"].types, target = pveentities["player"].types });
+            pverules.Add("highwalls_player", new RealPVERule() { description = "Highwall can damage player", damage = true, source = pveentities["highwall"].types, target = pveentities["player"].types });
+            pverules.Add("npcturret_player", new RealPVERule() { description = "NPCAutoTurret can damage player", damage = true, source = pveentities["npcturret"].types, target = pveentities["player"].types });
+            pverules.Add("npcturret_animal", new RealPVERule() { description = "NPCAutoTurret can damage animal", damage = true, source = pveentities["npcturret"].types, target = pveentities["animal"].types });
+            pverules.Add("npcturret_npc", new RealPVERule() { description = "NPCAutoTurret can damage npc", damage = true, source = pveentities["npcturret"].types, target = pveentities["npc"].types });
         }
         #endregion
     }
