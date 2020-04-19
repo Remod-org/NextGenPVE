@@ -17,6 +17,7 @@ using Oxide.Game.Rust.Cui;
 
 // TODO
 // Add the actual schedule handling...
+// Finish work on custom rule editor (src/target)
 // Verify all rules work as expected
 // Sanity checking for overlapping rule/zone combinations.  Schedule may have impact.
 
@@ -655,6 +656,10 @@ namespace Oxide.Plugins
                     case "closeruleschedule":
                         CuiHelper.DestroyUi(player, RPVESCHEDULEEDIT);
                         break;
+                    case "editrule":
+                        string rn = args[1];
+                        GUIRuleEditor(player, rn);
+                        break;
                     default:
                         GUIRuleSets(player);
                         break;
@@ -883,7 +888,9 @@ namespace Oxide.Plugins
                 }
                 else
                 {
-                    UI.Button(ref container, RPVERULESELECT, UI.Color("#d85540", 1f), pverule.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {pverule.Key} add");
+                    string ruleColor = "#5555cc";
+                    if(pverule.Value.custom) ruleColor = "#d85540";
+                    UI.Button(ref container, RPVERULESELECT, UI.Color(ruleColor, 1f), pverule.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {pverule.Key} add");
                 }
                 row++;
             }
@@ -969,6 +976,59 @@ namespace Oxide.Plugins
             CuiElementContainer container = UI.Container(RPVERULEEDIT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
             UI.Button(ref container, RPVERULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
             UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Lang("realpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
+
+            int col = 0;
+            int row = 0;
+
+            float[] pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Name", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Description", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Damage", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Source", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Target", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+            row = 0; col = 1;
+            pb = GetButtonPositionP(row, col);
+            if(!pverules[rulename].custom)
+            {
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), pverules[rulename].description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), pverules[rulename].damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), string.Join(",", pverules[rulename].source), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), string.Join(",", pverules[rulename].target), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} name");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), pverules[rulename].description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} description");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), pverules[rulename].damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} damage");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), string.Join(",", pverules[rulename].source), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} source");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), string.Join(",", pverules[rulename].target), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target");
+            }
 
             CuiHelper.AddUi(player, container);
         }
@@ -1337,6 +1397,7 @@ namespace Oxide.Plugins
         {
             public string description;
             public bool damage;
+            public bool custom = true;
             public List<string> source;
             public List<string> target;
         }
@@ -1483,24 +1544,24 @@ namespace Oxide.Plugins
         // Default rules which can be applied
         private void LoadDefaultRules()
         {
-            pverules.Add("npc_player", new RealPVERule() { description = "npc can damage player", damage = true, source = pveentities["npc"].types, target = pveentities["player"].types });
-            pverules.Add("player_npc", new RealPVERule() { description = "Player can damage npc", damage = true, source = pveentities["player"].types, target = pveentities["npc"].types });
-            pverules.Add("player_player", new RealPVERule() { description = "Player can damage player", damage = true, source = pveentities["player"].types, target = pveentities["player"].types });
-            pverules.Add("player_building", new RealPVERule() { description = "Player can damage building", damage = true, source = pveentities["player"].types, target = pveentities["building"].types });
-            pverules.Add("player_resources", new RealPVERule() { description = "Player can damage resource", damage = true, source = pveentities["player"].types, target = pveentities["resource"].types });
-            pverules.Add("players_traps", new RealPVERule() { description = "Player can damage trap", damage = true, source = pveentities["player"].types, target = pveentities["trap"].types });
-            pverules.Add("traps_players", new RealPVERule() { description = "Trap can damage player", damage = true, source = pveentities["trap"].types, target = pveentities["player"].types });
-            pverules.Add("player_animal", new RealPVERule() { description = "Player can damage animal", damage = true, source = pveentities["player"].types, target = pveentities["animal"].types });
-            pverules.Add("animal_player", new RealPVERule() { description = "Animal can damage player", damage = true, source = pveentities["animal"].types, target = pveentities["player"].types });
-            pverules.Add("animal_animal", new RealPVERule() { description = "Animal can damage animal", damage = true, source = pveentities["animal"].types, target = pveentities["animal"].types });
-            pverules.Add("helicopter_player", new RealPVERule() { description = "Helicopter can damage player", damage = true, source = pveentities["helicopter"].types, target = pveentities["player"].types });
-            pverules.Add("helicopter_building", new RealPVERule() { description = "Helicopter can damage building", damage = true, source = pveentities["helicopter"].types, target = pveentities["building"].types });
-            pverules.Add("player_minicopter", new RealPVERule() { description = "Player can damage minicopter", damage = true, source = pveentities["player"].types, target = pveentities["minicopter"].types });
-            pverules.Add("minicopter_player", new RealPVERule() { description = "Minicopter can damage player", damage = true, source = pveentities["minicopter"].types, target = pveentities["player"].types });
-            pverules.Add("highwalls_player", new RealPVERule() { description = "Highwall can damage player", damage = true, source = pveentities["highwall"].types, target = pveentities["player"].types });
-            pverules.Add("npcturret_player", new RealPVERule() { description = "NPCAutoTurret can damage player", damage = true, source = pveentities["npcturret"].types, target = pveentities["player"].types });
-            pverules.Add("npcturret_animal", new RealPVERule() { description = "NPCAutoTurret can damage animal", damage = true, source = pveentities["npcturret"].types, target = pveentities["animal"].types });
-            pverules.Add("npcturret_npc", new RealPVERule() { description = "NPCAutoTurret can damage npc", damage = true, source = pveentities["npcturret"].types, target = pveentities["npc"].types });
+            pverules.Add("npc_player", new RealPVERule() { description = "npc can damage player", damage = true, custom = false, source = pveentities["npc"].types, target = pveentities["player"].types });
+            pverules.Add("player_npc", new RealPVERule() { description = "Player can damage npc", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["npc"].types });
+            pverules.Add("player_player", new RealPVERule() { description = "Player can damage player", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["player"].types });
+            pverules.Add("player_building", new RealPVERule() { description = "Player can damage building", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["building"].types });
+            pverules.Add("player_resources", new RealPVERule() { description = "Player can damage resource", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["resource"].types });
+            pverules.Add("players_traps", new RealPVERule() { description = "Player can damage trap", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["trap"].types });
+            pverules.Add("traps_players", new RealPVERule() { description = "Trap can damage player", damage = true, custom = false, source = pveentities["trap"].types, target = pveentities["player"].types });
+            pverules.Add("player_animal", new RealPVERule() { description = "Player can damage animal", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["animal"].types });
+            pverules.Add("animal_player", new RealPVERule() { description = "Animal can damage player", damage = true, custom = false, source = pveentities["animal"].types, target = pveentities["player"].types });
+            pverules.Add("animal_animal", new RealPVERule() { description = "Animal can damage animal", damage = true, custom = false, source = pveentities["animal"].types, target = pveentities["animal"].types });
+            pverules.Add("helicopter_player", new RealPVERule() { description = "Helicopter can damage player", damage = true, custom = false, source = pveentities["helicopter"].types, target = pveentities["player"].types });
+            pverules.Add("helicopter_building", new RealPVERule() { description = "Helicopter can damage building", damage = true, custom = false, source = pveentities["helicopter"].types, target = pveentities["building"].types });
+            pverules.Add("player_minicopter", new RealPVERule() { description = "Player can damage minicopter", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["minicopter"].types });
+            pverules.Add("minicopter_player", new RealPVERule() { description = "Minicopter can damage player", damage = true, custom = false, source = pveentities["minicopter"].types, target = pveentities["player"].types });
+            pverules.Add("highwalls_player", new RealPVERule() { description = "Highwall can damage player", damage = true, custom = false, source = pveentities["highwall"].types, target = pveentities["player"].types });
+            pverules.Add("npcturret_player", new RealPVERule() { description = "NPCAutoTurret can damage player", damage = true, custom = false, source = pveentities["npcturret"].types, target = pveentities["player"].types });
+            pverules.Add("npcturret_animal", new RealPVERule() { description = "NPCAutoTurret can damage animal", damage = true, custom = false, source = pveentities["npcturret"].types, target = pveentities["animal"].types });
+            pverules.Add("npcturret_npc", new RealPVERule() { description = "NPCAutoTurret can damage npc", damage = true, custom = false, source = pveentities["npcturret"].types, target = pveentities["npc"].types });
         }
         #endregion
     }
