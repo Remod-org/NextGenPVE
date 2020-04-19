@@ -349,7 +349,7 @@ namespace Oxide.Plugins
                 DoLog($"Checking for match in ruleset {pveruleset.Key} for {stype} attacking {ttype}, default: {pveruleset.Value.damage.ToString()}");
                 bool zmatch = false;
 
-				if(pveruleset.Value.zone == zone || pveruleset.Value.zone == null)
+                if(pveruleset.Value.zone == zone || pveruleset.Value.zone == null)
                 {
                     zmatch = true;
                 }
@@ -517,7 +517,7 @@ namespace Oxide.Plugins
                                 case "except":
                                     if(args.Length < 5) return;
                                     //pverule editruleset {rulesetname} except {pverule.Key} add
-									//pverule editruleset noturret except npcturret_animal delete
+                                    //pverule editruleset noturret except npcturret_animal delete
                                     switch(args[4])
                                     {
                                         case "add":
@@ -821,14 +821,14 @@ namespace Oxide.Plugins
                     col++;
                 }
                 pb = GetButtonPositionP(row, col);
-				if(pverulesets[rulesetname].except.Contains(pverule.Key))
-				{
-	                UI.Button(ref container, RPVERULESELECT, UI.Color("#22ff22", 1f), pverule.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {pverule.Key} delete");
-				}
-				else
-				{
-	                UI.Button(ref container, RPVERULESELECT, UI.Color("#d85540", 1f), pverule.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {pverule.Key} add");
-				}
+                if(pverulesets[rulesetname].except.Contains(pverule.Key))
+                {
+                    UI.Button(ref container, RPVERULESELECT, UI.Color("#22ff22", 1f), pverule.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {pverule.Key} delete");
+                }
+                else
+                {
+                    UI.Button(ref container, RPVERULESELECT, UI.Color("#d85540", 1f), pverule.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {pverule.Key} add");
+                }
                 row++;
             }
 
@@ -847,58 +847,60 @@ namespace Oxide.Plugins
             int col = 0;
             int row = 0;
 
-			List<string> foundit = new List<string>();
-			foreach(var rulename in pverulesets[rulesetname].except)
-			{
-				string[] st = rulename.Split('_');
-				string src = st[0]; string tgt = st[1];
+            List<string> foundit = new List<string>();
+            foreach(var rulename in pverulesets[rulesetname].except)
+            {
+                string[] st = rulename.Split('_');
+                string src = st[0]; string tgt = st[1];
 
-				float[] pb = GetButtonPositionP(row, col);
-				foreach(var type in pveentities[src].types)
-				{
-					if(foundit.Contains(type)) continue;
-					foundit.Add(type);
-					if(row > 10)
-					{
-						row = 0;
-						col++;
-					}
-					pb = GetButtonPositionP(row, col);
-					string eColor = "#d85540";
-					if(pverulesets[rulesetname].exclude.Contains(type))
-					{
-						eColor = "#22ff22";
-						UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-					}
-					else
-					{
-						UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} add");
-					}
-					row++;
-				}
-				foreach(var type in pveentities[tgt].types)
-				{
-					if(foundit.Contains(type)) continue;
-					foundit.Add(type);
-					if(row > 10)
-					{
-						row = 0;
-						col++;
-					}
-					pb = GetButtonPositionP(row, col);
-					string eColor = "#d85540";
-					if(pverulesets[rulesetname].exclude.Contains(type))
-					{
-						eColor = "#22ff22";
-						UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} delete");
-					}
-					else
-					{
-						UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} add");
-					}
-					row++;
-				}
-			}
+                float[] pb = GetButtonPositionP(row, col);
+                if(!pveentities.ContainsKey(src)) continue;
+                foreach(var type in pveentities[src].types)
+                {
+                    if(foundit.Contains(type)) continue;
+                    foundit.Add(type);
+                    if(row > 10)
+                    {
+                        row = 0;
+                        col++;
+                    }
+                    pb = GetButtonPositionP(row, col);
+                    string eColor = "#d85540";
+                    if(pverulesets[rulesetname].exclude.Contains(type))
+                    {
+                        eColor = "#22ff22";
+                        UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    }
+                    else
+                    {
+                        UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} add");
+                    }
+                    row++;
+                }
+                if(!pveentities.ContainsKey(tgt)) continue;
+                foreach(var type in pveentities[tgt].types)
+                {
+                    if(foundit.Contains(type)) continue;
+                    foundit.Add(type);
+                    if(row > 10)
+                    {
+                        row = 0;
+                        col++;
+                    }
+                    pb = GetButtonPositionP(row, col);
+                    string eColor = "#d85540";
+                    if(pverulesets[rulesetname].exclude.Contains(type))
+                    {
+                        eColor = "#22ff22";
+                        UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} delete");
+                    }
+                    else
+                    {
+                        UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} add");
+                    }
+                    row++;
+                }
+            }
 
             CuiHelper.AddUi(player, container);
         }
