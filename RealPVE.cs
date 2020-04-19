@@ -349,7 +349,7 @@ namespace Oxide.Plugins
                 DoLog($"Checking for match in ruleset {pveruleset.Key} for {stype} attacking {ttype}, default: {pveruleset.Value.damage.ToString()}");
                 bool zmatch = false;
 
-                if(pveruleset.Value.zone == zone)
+				if(pveruleset.Value.zone == zone || pveruleset.Value.zone == null)
                 {
                     zmatch = true;
                 }
@@ -803,7 +803,7 @@ namespace Oxide.Plugins
         // Select rule to add to ruleset
         void GUISelectRule(BasePlayer player, string rulesetname)
         {
-            CuiHelper.DestroyUi(player, RPVEEDITRULESET);
+            CuiHelper.DestroyUi(player, RPVERULESELECT);
 
             CuiElementContainer container = UI.Container(RPVERULESELECT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
             UI.Button(ref container, RPVERULESELECT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleselect");
