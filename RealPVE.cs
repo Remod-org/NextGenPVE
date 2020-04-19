@@ -87,6 +87,8 @@ namespace Oxide.Plugins
                 ["currentschedule"] = "Currently scheduled for day: {0} from {1} until {2}",
                 ["noschedule"] = "Not currently scheduled",
                 ["defload"] = "RESET",
+                ["default"] = "default",
+                ["none"] = "none",
                 ["close"] = "Close",
                 ["save"] = "Save",
                 ["edit"] = "Edit",
@@ -526,7 +528,8 @@ namespace Oxide.Plugins
                                     rs = newrs;
                                     break;
                                 case "zone":
-                                    pverulesets[rs].zone = newval;
+									if(args[3] == "delete") pverulesets[rs].zone = null;
+                                    else pverulesets[rs].zone = newval;
                                     break;
                                 case "schedule":
                                     pverulesets[rs].schedule = newval;
@@ -818,13 +821,17 @@ namespace Oxide.Plugins
 
             col++; row = 1;
             pb = GetButtonPositionP(row, col);
-            if(pverulesets[rulesetname].zone != null)
+			if(rulesetname == "default")
+			{
+                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+			}
+            else if(pverulesets[rulesetname].zone != null)
             {
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), pverulesets[rulesetname].zone, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
             else
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
+                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
             row++;
             pb = GetButtonPositionP(row, col);
@@ -988,14 +995,26 @@ namespace Oxide.Plugins
                     break;
                 case "zone":
                     string[] zoneIDs = (string[])ZoneManager?.Call("GetZoneIDs");
-                    if(pverulesets[rulesetname].zone == null || pverulesets[rulesetname].zone =="default")
+                    if(pverulesets[rulesetname].zone == null && rulesetname != "default")
                     {
-                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#22ff22", 1f), "default", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
+		    			UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#22ff22", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
+					}
+					else
+					{
+		    			UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
+					}
+
+					row++;
+    				pb = GetButtonPositionP(row, col);
+                    if(pverulesets[rulesetname].zone == "default")
+                    {
+                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#22ff22", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
                     }
                     else
                     {
-                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), "default", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
+                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
                     }
+
                     row++;
                     foreach(string zoneID in zoneIDs)
                     {
