@@ -15,6 +15,11 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Oxide.Game.Rust.Cui;
 
+// TODO
+// Don't show add button unless that column is empty
+// Make Exceptions work like Exclusions: bring up a list instead of removing immediately
+// Add the actual schedule handling...
+
 namespace Oxide.Plugins
 {
     [Info("Real PVE", "RFC1920", "1.0.3")]
@@ -1300,7 +1305,7 @@ namespace Oxide.Plugins
             pverulesets.Add("default", new RealPVERuleSet()
             {
                 damage = false, zone = null, schedule = null, enabled = true,
-                except = new List<string>() { "animal_player", "player_animal", "animal_animal", "player_minicopter", "player_npc", "npc_player", "player_resources", "npcturret_player", "npcturret_animal", "npcturret_npc" },
+                except = new List<string>() { "animal_player", "player_animal", "animal_animal", "player_minicopter", "player_npc", "npc_player", "player_building", "player_resources", "npcturret_player", "npcturret_animal", "npcturret_npc" },
                 exclude = new List<string>() {}
             });
         }
@@ -1310,6 +1315,7 @@ namespace Oxide.Plugins
         {
             pveentities.Add("npc", new RealPVEEntities() { types = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer", "Murderer", "Scientist" } });
             pveentities.Add("player", new RealPVEEntities() { types = new List<string>() { "BasePlayer" } });
+            pveentities.Add("building", new RealPVEEntities() { types = new List<string>() { "BuildingBlock" } });
             pveentities.Add("resource", new RealPVEEntities() { types = new List<string>() { "ResourceEntity", "LootContainer" } });
             pveentities.Add("trap", new RealPVEEntities() { types = new List<string>() { "TeslaCoil", "BearTrap", "FlameTurret", "Landmine", "GunTrap", "ReactiveTarget", "spikes.floor" } });
             pveentities.Add("animal", new RealPVEEntities() { types = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" } });
@@ -1325,6 +1331,7 @@ namespace Oxide.Plugins
             pverules.Add("npc_player", new RealPVERule() { description = "npc can damage player", damage = true, source = pveentities["npc"].types, target = pveentities["player"].types });
             pverules.Add("player_npc", new RealPVERule() { description = "Player can damage npc", damage = true, source = pveentities["player"].types, target = pveentities["npc"].types });
             pverules.Add("player_player", new RealPVERule() { description = "Player can damage player", damage = true, source = pveentities["player"].types, target = pveentities["player"].types });
+            pverules.Add("player_building", new RealPVERule() { description = "Player can damage building", damage = true, source = pveentities["player"].types, target = pveentities["building"].types });
             pverules.Add("player_resources", new RealPVERule() { description = "Player can damage resource", damage = true, source = pveentities["player"].types, target = pveentities["resource"].types });
             pverules.Add("players_traps", new RealPVERule() { description = "Player can damage trap", damage = true, source = pveentities["player"].types, target = pveentities["trap"].types });
             pverules.Add("traps_players", new RealPVERule() { description = "Trap can damage player", damage = true, source = pveentities["trap"].types, target = pveentities["player"].types });
