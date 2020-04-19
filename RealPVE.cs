@@ -358,7 +358,7 @@ namespace Oxide.Plugins
 
             foreach(KeyValuePair<string,RealPVERuleSet> pveruleset in pverulesets)
             {
-				if(!pveruleset.Value.enabled) continue;
+                if(!pveruleset.Value.enabled) continue;
 
                 if(zone != "default" && zone != pveruleset.Value.zone)
                 {
@@ -530,7 +530,7 @@ namespace Oxide.Plugins
                                     rs = newrs;
                                     break;
                                 case "zone":
-									if(args[3] == "delete") pverulesets[rs].zone = null;
+                                    if(args[3] == "delete") pverulesets[rs].zone = null;
                                     else pverulesets[rs].zone = newval;
                                     break;
                                 case "schedule":
@@ -823,10 +823,10 @@ namespace Oxide.Plugins
 
             col++; row = 1;
             pb = GetButtonPositionP(row, col);
-			if(rulesetname == "default")
-			{
+            if(rulesetname == "default")
+            {
                 UI.Label(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-			}
+            }
             else if(pverulesets[rulesetname].zone != null)
             {
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), pverulesets[rulesetname].zone, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
@@ -999,15 +999,15 @@ namespace Oxide.Plugins
                     string[] zoneIDs = (string[])ZoneManager?.Call("GetZoneIDs");
                     if(pverulesets[rulesetname].zone == null && rulesetname != "default")
                     {
-		    			UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#22ff22", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
-					}
-					else
-					{
-		    			UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
-					}
+                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#22ff22", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
+                    }
+                    else
+                    {
+                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
+                    }
 
-					row++;
-    				pb = GetButtonPositionP(row, col);
+                    row++;
+                    pb = GetButtonPositionP(row, col);
                     if(pverulesets[rulesetname].zone == "default")
                     {
                         UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#22ff22", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
@@ -1025,7 +1025,7 @@ namespace Oxide.Plugins
                         if(zName == pverulesets[rulesetname].zone) zColor = "#22ff22";
 
                         pb = GetButtonPositionP(row, col);
-                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color(zColor, 1f), zName, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zName}");
+                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zName}");
                         row++;
                     }
                     break;
