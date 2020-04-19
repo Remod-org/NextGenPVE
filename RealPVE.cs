@@ -76,6 +76,7 @@ namespace Oxide.Plugins
                 ["realpveruleset"] = "RealPVE Ruleset",
                 ["realpverule"] = "RealPVE Rule",
                 ["realpvevalue"] = "RealPVE Ruleset Value",
+                ["realpveexclusions"] = "RealPVE Ruleset Exclusions",
                 ["realpveschedule"] = "RealPVE Ruleset Schedule",
                 ["scheduling"] = "Schedules should be in the format of 'day(s);starttime;endtime'.  Use * for all days.",
                 ["currentschedule"] = "Currently scheduled for day: {0} from {1} until {2}",
@@ -490,11 +491,11 @@ namespace Oxide.Plugins
                             CuiHelper.DestroyUi(player, RPVEVALUEEDIT);
                             switch(setting)
                             {
-								case "defload":
-									rs = "default";
-									pverulesets.Remove(rs);
-									LoadDefaultRuleset();
-									break;
+                                case "defload":
+                                    rs = "default";
+                                    pverulesets.Remove(rs);
+                                    LoadDefaultRuleset();
+                                    break;
                                 case "enable":
                                     pverulesets[rs].enabled = GetBoolValue(newval);
                                     break;
@@ -513,19 +514,33 @@ namespace Oxide.Plugins
                                 case "schedule":
                                     pverulesets[rs].schedule = newval;
                                     break;
-								case "except":
-									if(args.Length < 5) return;
-									//pverule editruleset {rulesetname} except {pverule.Key} add
-									switch(args[4])
-									{
-										case "add":
-											pverulesets[rs].except.Add(newval);
-											break;
-										case "delete":
-											pverulesets[rs].except.Remove(newval);
-											break;
-									}
-									break;
+                                case "except":
+                                    if(args.Length < 5) return;
+                                    //pverule editruleset {rulesetname} except {pverule.Key} add
+									//pverule editruleset noturret except npcturret_animal delete
+                                    switch(args[4])
+                                    {
+                                        case "add":
+                                            pverulesets[rs].except.Add(newval);
+                                            break;
+                                        case "delete":
+                                            pverulesets[rs].except.Remove(newval);
+                                            break;
+                                    }
+                                    break;
+                                case "exclude":
+                                    if(args.Length < 5) return;
+                                    //pverule editruleset {rulesetname} exclude Horse add
+                                    switch(args[4])
+                                    {
+                                        case "add":
+                                            pverulesets[rs].exclude.Add(newval);
+                                            break;
+                                        case "delete":
+                                            pverulesets[rs].exclude.Remove(newval);
+                                            break;
+                                    }
+                                    break;
                             }
                             SaveData();
                             LoadData();
@@ -553,10 +568,10 @@ namespace Oxide.Plugins
                                     GUIEditSchedule(player, args[1]);
                                     break;
                                 case "except":
-									GUISelectRule(player, args[1]);
+                                    GUISelectRule(player, args[1]);
                                     break;
                                 case "exclude":
-									GUISelectExclusion(player, args[1]);
+                                    GUISelectExclusion(player, args[1]);
                                     break;
 
                             }
@@ -599,8 +614,10 @@ namespace Oxide.Plugins
                         CuiHelper.DestroyUi(player, RPVEEDITRULESET);
                         CuiHelper.DestroyUi(player, RPVERULESELECT);
                         break;
+                    case "closeexclusions":
+                        CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
+                        break;
                     case "closeruleselect":
-						Puts("GOT HERE");
                         CuiHelper.DestroyUi(player, RPVERULESELECT);
                         break;
                     case "closeruleset":
@@ -681,13 +698,13 @@ namespace Oxide.Plugins
             }
 
             if(rulesetname == "default")
-			{
-				UI.Button(ref container, RPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("defload"), 12,"0.86 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} defload YES");
-			}
-			else
+            {
+                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("defload"), 12,"0.85 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} defload YES");
+            }
+            else
             {
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#2222ff", 1f), Lang("editname"), 12, "0.7 0.95", "0.76 0.98", $"pverule editruleset {rulesetname} name");
-				// pverule editruleset {rulesetname} defload
+                // pverule editruleset {rulesetname} defload
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("delete"), 12, "0.86 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} delete");
             }
             UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleset");
@@ -796,24 +813,95 @@ namespace Oxide.Plugins
             int row = 0;
 
             float[] pb = GetButtonPositionP(row, col);
-			foreach(KeyValuePair<string, RealPVERule> pverule in pverules)
-			{
+            foreach(KeyValuePair<string, RealPVERule> pverule in pverules)
+            {
                 if(row > 10)
                 {
                     row = 0;
                     col++;
                 }
                 pb = GetButtonPositionP(row, col);
-				UI.Button(ref container, RPVERULESELECT, UI.Color("#d85540", 1f), pverule.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {pverule.Key} add");
-				row++;
-			}
+				if(pverulesets[rulesetname].except.Contains(pverule.Key))
+				{
+	                UI.Button(ref container, RPVERULESELECT, UI.Color("#22ff22", 1f), pverule.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {pverule.Key} delete");
+				}
+				else
+				{
+	                UI.Button(ref container, RPVERULESELECT, UI.Color("#d85540", 1f), pverule.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {pverule.Key} add");
+				}
+                row++;
+            }
 
             CuiHelper.AddUi(player, container);
         }
 
-		void GUISelectExclusion(BasePlayer player, string xyz)
-		{
-		}
+        void GUISelectExclusion(BasePlayer player, string rulesetname)
+        {
+            // Need to run over entities based on a check of what is in the rule...
+            CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
+
+            CuiElementContainer container = UI.Container(RPVERULEEXCLUSIONS, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeexclusions");
+            UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color("#ffffff", 1f), Lang("realpveexclusions"), 24, "0.2 0.92", "0.7 1");
+
+            int col = 0;
+            int row = 0;
+
+			List<string> foundit = new List<string>();
+			foreach(var rulename in pverulesets[rulesetname].except)
+			{
+				string[] st = rulename.Split('_');
+				string src = st[0]; string tgt = st[1];
+
+				float[] pb = GetButtonPositionP(row, col);
+				foreach(var type in pveentities[src].types)
+				{
+					if(foundit.Contains(type)) continue;
+					foundit.Add(type);
+					if(row > 10)
+					{
+						row = 0;
+						col++;
+					}
+					pb = GetButtonPositionP(row, col);
+					string eColor = "#d85540";
+					if(pverulesets[rulesetname].exclude.Contains(type))
+					{
+						eColor = "#22ff22";
+						UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+					}
+					else
+					{
+						UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} add");
+					}
+					row++;
+				}
+				foreach(var type in pveentities[tgt].types)
+				{
+					if(foundit.Contains(type)) continue;
+					foundit.Add(type);
+					if(row > 10)
+					{
+						row = 0;
+						col++;
+					}
+					pb = GetButtonPositionP(row, col);
+					string eColor = "#d85540";
+					if(pverulesets[rulesetname].exclude.Contains(type))
+					{
+						eColor = "#22ff22";
+						UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} delete");
+					}
+					else
+					{
+						UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} add");
+					}
+					row++;
+				}
+			}
+
+            CuiHelper.AddUi(player, container);
+        }
 
         void GUIRuleEditor(BasePlayer player, string rulename)
         {
