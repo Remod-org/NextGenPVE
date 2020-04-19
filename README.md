@@ -48,6 +48,8 @@ There is in integrated GUI for the admin to use to:
 
 ![](https://i.imgur.com/dWiSvOB.jpg)
 
+![](https://i.imgur.com/a6O9Aaf.jpg)
+
 ## Permissions
 
 - realpve.use   -- Currently unused
