@@ -38,7 +38,7 @@ namespace Oxide.Plugins
         private ConfigData configData;
 
         [PluginReference]
-        Plugin ZoneManager, LiteZones, HumanNPC;
+        Plugin ZoneManager, LiteZones, HumanNPC, Friends, Clans, RustIO;
 
         private string logfilename = "log";
         private bool dolog = false;
@@ -266,14 +266,12 @@ namespace Oxide.Plugins
             }
             else
             {
-                DoLog($"dAMAGE BLOCKED for {stype} attacking {ttype}");
+                DoLog($"DAMAGE BLOCKED for {stype} attacking {ttype}");
             }
             return true;
         }
         #endregion
 
-        //private bool CreateMapping(string zoneID, string mapping) => (bool)TruePVE?.Call("AddOrUpdateMapping", zoneID, mapping);
-        //private bool RemoveMapping(string zoneID) => (bool)TruePVE?.Call("RemoveMapping", zoneID);
         #region inbound_hooks
         bool AddOrUpdateMapping(string key, string rulesetname)
         {
@@ -286,7 +284,6 @@ namespace Oxide.Plugins
             return true;
         }
 
-        // remove a mapping
         bool RemoveMapping(string key)
         {
             if(string.IsNullOrEmpty(key)) return false;
@@ -306,6 +303,7 @@ namespace Oxide.Plugins
             stype = source.GetType().Name;
             ttype = target.GetType().Name;
             string zone = "default";
+            bool hasBP = false;
 
             // Special case since HumanNPC contains a BasePlayer object
             if(stype == "BasePlayer" && HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
@@ -313,6 +311,12 @@ namespace Oxide.Plugins
 
             //var turret = source.Weapon?.GetComponentInParent<AutoTurret>();
 
+            if(stype == "BasePlayer" && ttype == "BuildingBlock")
+            {
+                if(PlayerOwnsItem(source as BasePlayer, target)) hasBP = true;
+            }
+
+            bool zmatch = false;
             if(configData.Options.UseZoneManager)
             {
                 string[] sourcezone = GetEntityZones(source);
@@ -326,7 +330,7 @@ namespace Oxide.Plugins
                         {
                             string zName = (string)ZoneManager?.Call("GetZoneName", z);
                             zone = zName;
-                            Puts($"Found zone {zone}");
+                            DoLog($"Found zone {zone}", 1);
                             break;
                         }
                     }
@@ -351,18 +355,14 @@ namespace Oxide.Plugins
 
             foreach(KeyValuePair<string,RealPVERuleSet> pveruleset in pverulesets)
             {
-                DoLog($"Checking for match in ruleset {pveruleset.Key} for {stype} attacking {ttype}, default: {pveruleset.Value.damage.ToString()}");
-                bool zmatch = false;
-
-                if(pveruleset.Value.zone == zone || pveruleset.Value.zone == null)
+                if(zone != "default" && zone != pveruleset.Value.zone)
                 {
-                    zmatch = true;
-                }
-                else
-                {
-                    DoLog($"Skipping check due to zone mismatch");
+//                    DoLog($"Skipping check due to zone {zone} mismatch");
                     continue;
                 }
+                zmatch = true;
+
+                DoLog($"Checking for match in ruleset {pveruleset.Key} (zone {zone}) for {stype} attacking {ttype}, default: {pveruleset.Value.damage.ToString()}");
 
                 bool rulematch = false;
 
@@ -373,18 +373,19 @@ namespace Oxide.Plugins
                     rulematch = EvaluateRule(rule, stype, ttype, pveruleset.Value.exclude);
                     if(rulematch)
                     {
-                        DoLog($"Matched rule {pveruleset.Key}", 1);
+//                        DoLog($"Matched rule {pveruleset.Key}", 1); //Log volume FIXME
                         return true;
                     }
-                    //else
-                    //{
-                    //    return false;
-                    //}
+					else if(ttype == "BuildingBlock" && hasBP)
+					{
+						DoLog($"Damage allowed based on HonorBuildingPrivilege for {stype} attacking {ttype}", 1);
+						return true;
+					}
                 }
                 if(zmatch) return pveruleset.Value.damage;
             }
 
-            DoLog($"NO RULESET MATCH!");
+//            DoLog($"NO RULESET MATCH!");
             return false;
         }
 
@@ -398,14 +399,14 @@ namespace Oxide.Plugins
 
             foreach(string src in pverules[rulename].source)
             {
-                DoLog($"Checking for source match, {stype} == {src}?", 2);
+//                DoLog($"Checking for source match, {stype} == {src}?", 1); //Log volume FIXME
                 if(stype == src)
                 {
-                    DoLog($"Matched {stype} to {src} in {rulename} and target {ttype}", 3);
+                    DoLog($"Matched {src} in {rulename} with target {ttype}", 2);
 //                    if(exclude.Contains(stype))
 //                    {
 //                        srcmatch = false; // ???
-//                        DoLog($"Exclusion match for source {stype}", 4);
+//                        DoLog($"Exclusion match for source {stype}", 3);
 //                        break;
 //                    }
                     smatch = stype;
@@ -415,10 +416,10 @@ namespace Oxide.Plugins
             }
             foreach(string tgt in pverules[rulename].target)
             {
-                DoLog($"Checking for target match, {ttype} == {tgt}?", 2);
-                if(ttype == tgt)
+//                DoLog($"Checking for target match, {ttype} == {tgt}?", 1); //Log volume FIXME
+                if(ttype == tgt && srcmatch)
                 {
-                    DoLog($"       Matched {ttype} to {tgt} in {rulename} and source {stype}", 3);
+                    DoLog($"Matched {tgt} in {rulename} with source {stype}", 2);
                     if(exclude.Contains(ttype))
                     {
                         tgtmatch = false; // ???
@@ -433,9 +434,18 @@ namespace Oxide.Plugins
 
             if(srcmatch && tgtmatch)
             {
+                if(rulename.Contains("npcturret")) return true; // Log volume FIXME
                 DoLog($"Matching rule {rulename} for {smatch} attacking {tmatch}");
                 return true;
             }
+//            else if(tgtmatch)
+//            {
+//                DoLog($"No source match", 2);
+//            }
+//            else if(srcmatch)
+//            {
+//                DoLog($"No target match", 2);
+//            }
 
             return false;
         }
@@ -443,6 +453,7 @@ namespace Oxide.Plugins
         private void DoLog(string message, int indent = 0)
         {
             if(!enabled) return;
+            if(message.Contains("Turret")) return; // Log volume FIXME
             if(dolog) LogToFile(logfilename, "".PadLeft(indent, ' ') + message, this);
         }
 
@@ -1116,6 +1127,57 @@ namespace Oxide.Plugins
             return false;
         }
 
+        private bool PlayerOwnsItem(BasePlayer player, BaseEntity entity)
+        {
+            if(entity is BuildingBlock)
+            {
+                if(!configData.Options.HonorBuildingPrivilege) return true;
+
+                BuildingManager.Building building = (entity as BuildingBlock).GetBuilding();
+
+                if(building != null)
+                {
+                    var privs = building.GetDominatingBuildingPrivilege();
+                    if(privs == null) return false;
+                    foreach(var auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
+                    {
+                        if(entity.OwnerID == player.userID)
+                        {
+                            DoLog($"Player owns BuildingBlock", 2);
+                            return true;
+                        }
+                        else if(player.userID == auth)
+                        {
+                            DoLog($"Player has privilege on BuildingBlock", 2);
+                            return true;
+                        }
+//                        else if(configData.Options.HonorRelationships && IsFriend(auth, entity.OwnerID))
+//                        {
+//                              DoLog($"Player is friends with owner of BuildingBlock", 2);
+//                            return true;
+//                        }
+                    }
+                }
+            }
+            else
+            {
+                if(configData.Options.HonorRelationships)
+                {
+                    if(IsFriend(player.userID, entity.OwnerID))
+                    {
+                        DoLog($"Player is friends with owner of entity", 2);
+                        return true;
+                    }
+                }
+                else if(entity.OwnerID == player.userID)
+                {
+                    DoLog($"Player owns BuildingBlock", 2);
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private static bool GetBoolValue(string value)
         {
             if(value == null) return false;
@@ -1132,6 +1194,41 @@ namespace Oxide.Plugins
                 default:
                     return false;
             }
+        }
+
+        bool IsFriend(ulong playerid, ulong ownerid)
+        {
+            if(configData.Options.useFriends && Friends != null)
+            {
+                var fr = Friends?.CallHook("AreFriends", playerid, ownerid);
+                if(fr != null && (bool)fr)
+                {
+                    return true;
+                }
+            }
+            if(configData.Options.useClans && Clans != null)
+            {
+                string playerclan = (string)Clans?.CallHook("GetClanOf", playerid);
+                string ownerclan  = (string)Clans?.CallHook("GetClanOf", ownerid);
+                if(playerclan == ownerclan && playerclan != null && ownerclan != null)
+                {
+                    return true;
+                }
+            }
+            if(configData.Options.useTeams)
+            {
+                BasePlayer player = BasePlayer.FindByID(playerid);
+                if(player.currentTeam != (long)0)
+                {
+                    RelationshipManager.PlayerTeam playerTeam = RelationshipManager.Instance.FindTeam(player.currentTeam);
+                    if(playerTeam == null) return false;
+                    if(playerTeam.members.Contains(ownerid))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
         #endregion
 
@@ -1164,6 +1261,11 @@ namespace Oxide.Plugins
             public bool AutoTurretTargetsPlayers = false;
             public bool AutoTurretTargetsNPCs = false;
             public bool TrapsIgnorePlayers = false;
+            public bool HonorBuildingPrivilege = true;
+            public bool HonorRelationships = false;
+            public bool useFriends = false;
+            public bool useClans = false;
+            public bool useTeams = false;
         }
         #endregion
 
@@ -1339,6 +1441,7 @@ namespace Oxide.Plugins
             pverules.Add("animal_player", new RealPVERule() { description = "Animal can damage player", damage = true, source = pveentities["animal"].types, target = pveentities["player"].types });
             pverules.Add("animal_animal", new RealPVERule() { description = "Animal can damage animal", damage = true, source = pveentities["animal"].types, target = pveentities["animal"].types });
             pverules.Add("helicopter_player", new RealPVERule() { description = "Helicopter can damage player", damage = true, source = pveentities["helicopter"].types, target = pveentities["player"].types });
+            pverules.Add("helicopter_building", new RealPVERule() { description = "Helicopter can damage building", damage = true, source = pveentities["helicopter"].types, target = pveentities["building"].types });
             pverules.Add("player_minicopter", new RealPVERule() { description = "Player can damage minicopter", damage = true, source = pveentities["player"].types, target = pveentities["minicopter"].types });
             pverules.Add("minicopter_player", new RealPVERule() { description = "Minicopter can damage player", damage = true, source = pveentities["minicopter"].types, target = pveentities["player"].types });
             pverules.Add("highwalls_player", new RealPVERule() { description = "Highwall can damage player", damage = true, source = pveentities["highwall"].types, target = pveentities["player"].types });
