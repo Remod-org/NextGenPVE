@@ -9,9 +9,9 @@ RealPVE is organized into entity collections, rules that use those collections, 
 
 Each ruleset has a default damage value of true or false.
 
-Each ruleset may include a list of rules which override the default setting called exclusions.
+Each ruleset may include a list of rules which override the default setting called exceptions.
 
-Each ruleset may include a list of exclusions to the exceptions that override the exclusions.
+Each ruleset may include a list of exclusions to the exceptions that override those exceptions.
 
 Each ruleset can and probably should be associated with a zone (if not the default ruleset).
 
