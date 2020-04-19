@@ -16,13 +16,13 @@ using Newtonsoft.Json.Linq;
 using Oxide.Game.Rust.Cui;
 
 // TODO
-// Don't show add button unless that column is empty
-// Make Exceptions work like Exclusions: bring up a list instead of removing immediately
 // Add the actual schedule handling...
+// Verify all rules work as expected
+// Sanity checking for overlapping rule/zone combinations.  Schedule may have impact.
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.3")]
+    [Info("Real PVE", "RFC1920", "1.0.4")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     class RealPVE : RustPlugin
     {
@@ -90,6 +90,7 @@ namespace Oxide.Plugins
                 ["close"] = "Close",
                 ["save"] = "Save",
                 ["edit"] = "Edit",
+                ["clicktoedit"] = "^Click to Edit^",
                 ["editname"] = "Edit Name",
                 ["add"] = "Add",
                 ["all"] = "All",
@@ -376,11 +377,11 @@ namespace Oxide.Plugins
 //                        DoLog($"Matched rule {pveruleset.Key}", 1); //Log volume FIXME
                         return true;
                     }
-					else if(ttype == "BuildingBlock" && hasBP)
-					{
-						DoLog($"Damage allowed based on HonorBuildingPrivilege for {stype} attacking {ttype}", 1);
-						return true;
-					}
+                    else if(ttype == "BuildingBlock" && hasBP)
+                    {
+                        DoLog($"Damage allowed based on HonorBuildingPrivilege for {stype} attacking {ttype}", 1);
+                        return true;
+                    }
                 }
                 if(zmatch) return pveruleset.Value.damage;
             }
@@ -543,6 +544,7 @@ namespace Oxide.Plugins
                                             pverulesets[rs].except.Remove(newval);
                                             break;
                                     }
+                                    if(pverulesets[rs].except.Count == 0) pverulesets[rs].exclude.Clear(); // No exclude with exceptions...
                                     break;
                                 case "exclude":
                                     if(args.Length < 5) return;
@@ -767,29 +769,52 @@ namespace Oxide.Plugins
             }
 
             col++;
+            bool noExceptions = true;
             foreach(string except in pverulesets[rulesetname].except)
             {
+                noExceptions = false;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {except} delete");
+                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
                 row++;
             }
-            pb = GetButtonPositionP(row, col);
-            UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
+            if(noExceptions)
+            {
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
+            }
+            else
+            {
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            }
 
             col++; row = 1;
-            foreach(string exclude in pverulesets[rulesetname].exclude)
+            bool noExclusions = true;
+            if(!noExceptions) // Cannot exclude from exceptions that do not exist
             {
-                if(row > 10)
+                foreach(string exclude in pverulesets[rulesetname].exclude)
                 {
-                    row = 0;
-                    col++;
+                    noExclusions = false;
+                    if(row > 10)
+                    {
+                        row = 0;
+                        col++;
+                    }
+                    pb = GetButtonPositionP(row, col);
+                    UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
+                    row++;
                 }
-                pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
-                row++;
+                if(noExclusions)
+                {
+                    pb = GetButtonPositionP(row, col);
+                    UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
+                }
+                else
+                {
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                }
             }
-            pb = GetButtonPositionP(row, col);
-            UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude");
 
             col++; row = 1;
             pb = GetButtonPositionP(row, col);
@@ -801,12 +826,18 @@ namespace Oxide.Plugins
             {
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
+            row++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             col++; row = 1;
             pb = GetButtonPositionP(row, col);
-            if(pverulesets[rulesetname].zone != null)
+            if(pverulesets[rulesetname].schedule != null)
             {
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), pverulesets[rulesetname].schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
             else
             {
@@ -885,7 +916,8 @@ namespace Oxide.Plugins
                     if(pverulesets[rulesetname].exclude.Contains(type))
                     {
                         eColor = "#22ff22";
-                        UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                        //UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                        UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} exclude {type} delete");
                     }
                     else
                     {
