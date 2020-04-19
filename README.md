@@ -46,6 +46,8 @@ There is in integrated GUI for the admin to use to:
  8. Set a schedule for ruleset enable/disable (WORK IN PROGRESS)
  9. Edit custom rules (WORK IN PROGRESS)
 
+![](https://i.imgur.com/dWiSvOB.jpg)
+
 ## Permissions
 
 - realpve.use   -- Currently unused
