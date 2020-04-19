@@ -358,6 +358,8 @@ namespace Oxide.Plugins
 
             foreach(KeyValuePair<string,RealPVERuleSet> pveruleset in pverulesets)
             {
+				if(!pveruleset.Value.enabled) continue;
+
                 if(zone != "default" && zone != pveruleset.Value.zone)
                 {
 //                    DoLog($"Skipping check due to zone {zone} mismatch");
