@@ -100,7 +100,7 @@ namespace Oxide.Plugins
                 ["true"] = "True",
                 ["false"] = "False",
                 ["editing"] = "Editing",
-                ["exclude"] = "Exclude",
+                ["exclude"] = "Exclude from Exceptions",
                 ["enableset"] = "Enable set to {0}",
                 ["enabled"] = "Enabled",
                 ["disabled"] = "Disabled",
@@ -555,8 +555,11 @@ namespace Oxide.Plugins
                                     break;
                                 case "name":
                                     string newrs = args[3];
-                                    pverulesets.Add(newrs, pverulesets[rs]);
-                                    pverulesets.Remove(rs);
+                                    if(!pverulesets.ContainsKey(newrs))
+                                    {
+                                        pverulesets.Add(newrs, pverulesets[rs]);
+                                        pverulesets.Remove(rs);
+                                    }
                                     rs = newrs;
                                     break;
                                 case "zone":
@@ -574,10 +577,10 @@ namespace Oxide.Plugins
                                     switch(args[4])
                                     {
                                         case "add":
-                                            pverulesets[rs].except.Add(newval);
+                                            if(!pverulesets[rs].except.Contains(newval)) pverulesets[rs].except.Add(newval);
                                             break;
                                         case "delete":
-                                            pverulesets[rs].except.Remove(newval);
+                                            if(pverulesets[rs].except.Contains(newval)) pverulesets[rs].except.Remove(newval);
                                             break;
                                     }
                                     if(pverulesets[rs].except.Count == 0) pverulesets[rs].exclude.Clear(); // No exclude with exceptions...
@@ -588,10 +591,10 @@ namespace Oxide.Plugins
                                     switch(args[4])
                                     {
                                         case "add":
-                                            pverulesets[rs].exclude.Add(newval);
+                                            if(!pverulesets[rs].exclude.Contains(newval)) pverulesets[rs].exclude.Add(newval);
                                             break;
                                         case "delete":
-                                            pverulesets[rs].exclude.Remove(newval);
+                                            if(pverulesets[rs].exclude.Contains(newval)) pverulesets[rs].exclude.Remove(newval);
                                             break;
                                     }
                                     break;
@@ -776,6 +779,7 @@ namespace Oxide.Plugins
             UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("damageexceptions"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             col++;
+            if(pverulesets[rulesetname].except.Count > 11) col++;
             pb = GetButtonPositionP(row, col);
             UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
@@ -808,6 +812,11 @@ namespace Oxide.Plugins
             bool noExceptions = true;
             foreach(string except in pverulesets[rulesetname].except)
             {
+                    if(row > 11)
+                    {
+                        row = 1;
+                        col++;
+                    }
                 noExceptions = false;
                 pb = GetButtonPositionP(row, col);
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
@@ -831,7 +840,7 @@ namespace Oxide.Plugins
                 foreach(string exclude in pverulesets[rulesetname].exclude)
                 {
                     noExclusions = false;
-                    if(row > 10)
+                    if(row > 11)
                     {
                         row = 0;
                         col++;
@@ -1554,7 +1563,7 @@ namespace Oxide.Plugins
             pverulesets.Add("default", new RealPVERuleSet()
             {
                 damage = false, zone = null, schedule = null, enabled = true,
-                except = new List<string>() { "animal_player", "player_animal", "animal_animal", "player_minicopter", "player_npc", "npc_player", "player_building", "player_resources", "npcturret_player", "npcturret_animal", "npcturret_npc" },
+                except = new List<string>() { "animal_player", "player_animal", "animal_animal", "player_minicopter", "player_npc", "npc_player", "player_building", "player_resource", "npcturret_player", "npcturret_animal", "npcturret_npc" },
                 exclude = new List<string>() {}
             });
         }
@@ -1581,7 +1590,7 @@ namespace Oxide.Plugins
             pverules.Add("player_npc", new RealPVERule() { description = "Player can damage npc", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["npc"].types });
             pverules.Add("player_player", new RealPVERule() { description = "Player can damage player", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["player"].types });
             pverules.Add("player_building", new RealPVERule() { description = "Player can damage building", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["building"].types });
-            pverules.Add("player_resources", new RealPVERule() { description = "Player can damage resource", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["resource"].types });
+            pverules.Add("player_resource", new RealPVERule() { description = "Player can damage resource", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["resource"].types });
             pverules.Add("players_traps", new RealPVERule() { description = "Player can damage trap", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["trap"].types });
             pverules.Add("traps_players", new RealPVERule() { description = "Trap can damage player", damage = true, custom = false, source = pveentities["trap"].types, target = pveentities["player"].types });
             pverules.Add("player_animal", new RealPVERule() { description = "Player can damage animal", damage = true, custom = false, source = pveentities["player"].types, target = pveentities["animal"].types });
