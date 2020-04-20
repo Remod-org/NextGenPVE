@@ -23,7 +23,7 @@ using Oxide.Game.Rust.Cui;
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.4")]
+    [Info("Real PVE", "RFC1920", "1.0.5")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     class RealPVE : RustPlugin
     {
@@ -84,7 +84,7 @@ namespace Oxide.Plugins
                 ["realpvevalue"] = "RealPVE Ruleset Value",
                 ["realpveexclusions"] = "RealPVE Ruleset Exclusions",
                 ["realpveschedule"] = "RealPVE Ruleset Schedule",
-                ["scheduling"] = "Schedules should be in the format of 'day(s);starttime;endtime'.  Use * for all days.",
+                ["scheduling"] = "Schedules should be in the format of 'day(s);starttime;endtime'.  Use * for all days.  Enter 0 to clear.",
                 ["currentschedule"] = "Currently scheduled for day: {0} from {1} until {2}",
                 ["noschedule"] = "Not currently scheduled",
                 ["defload"] = "RESET",
@@ -221,17 +221,17 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            // Check rulesets
-            string stype;
-            string ttype;
-            if(npcturret != null)
-            {
-                if(!EvaluateRulesets(npcturret as BaseEntity, target, out stype, out ttype)) return false;
-            }
-            else
-            {
-                if(!EvaluateRulesets(turret as BaseEntity, target, out stype, out ttype)) return false;
-            }
+            // Check rulesets - FIXME SERVER CRASH
+//            string stype;
+//            string ttype;
+//            if(npcturret != null)
+//            {
+//                if(!EvaluateRulesets(npcturret as BaseEntity, target, out stype, out ttype)) return false;
+//            }
+//            else
+//            {
+//                if(!EvaluateRulesets(turret as BaseEntity, target, out stype, out ttype)) return false;
+//            }
 
             // CanBeTargeted == yes
             return null;
@@ -277,24 +277,40 @@ namespace Oxide.Plugins
         #endregion
 
         #region inbound_hooks
-        bool AddOrUpdateMapping(string key, string rulesetname)
+        private bool TogglePVE(bool on = true) => enabled = on;
+
+        private bool TogglePVERuleset(string rulesetname, bool on = true) => pverulesets[rulesetname].enabled = on;
+
+        private bool AddOrUpdateMapping(string key, string rulesetname)
         {
             if(string.IsNullOrEmpty(key)) return false;
             if(rulesetname == null) return false;
 
-            pverulesets[rulesetname].zone = key;
-            SaveData();
+            if(pverulesets.ContainsKey(rulesetname))
+            {
+                pverulesets[rulesetname].zone = key;
+                SaveData();
+                return true;
+            }
+            else
+            {
+                pverulesets.Add(rulesetname, new RealPVERuleSet() { damage = true, enabled = true, zone = key, except = new List<string>(), exclude = new List<string>()});
+            }
 
-            return true;
+            return false;
         }
 
-        bool RemoveMapping(string key)
+        private bool RemoveMapping(string key)
         {
             if(string.IsNullOrEmpty(key)) return false;
 
             foreach(KeyValuePair<string, RealPVERuleSet> pveruleset in pverulesets)
             {
-                if(pveruleset.Value.zone == key) pverulesets[pveruleset.Key].zone = null;
+                if(pveruleset.Value.zone == key)
+                {
+                    pverulesets[pveruleset.Key].zone = null;
+                    return true;
+                }
             }
 
             return false;
@@ -304,6 +320,18 @@ namespace Oxide.Plugins
         #region Main
         private bool EvaluateRulesets(BaseEntity source, BaseEntity target, out string stype, out string ttype)
         {
+            if(source == null)
+            {
+                stype = null;
+                ttype = null;
+                return false;
+            }
+            if(target == null)
+            {
+                stype = null;
+                ttype = null;
+                return false;
+            }
             stype = source.GetType().Name;
             ttype = target.GetType().Name;
             string zone = "default";
@@ -333,7 +361,8 @@ namespace Oxide.Plugins
                         if(targetzone.Contains(z))
                         {
                             string zName = (string)ZoneManager?.Call("GetZoneName", z);
-                            zone = zName;
+                            if(zName != null) zone = zName;
+                            else zone = z;
                             DoLog($"Found zone {zone}", 1);
                             break;
                         }
@@ -535,7 +564,8 @@ namespace Oxide.Plugins
                                     else pverulesets[rs].zone = newval;
                                     break;
                                 case "schedule":
-                                    pverulesets[rs].schedule = newval;
+                                    if(newval == "0") pverulesets[rs].schedule = null;
+                                    else pverulesets[rs].schedule = newval;
                                     break;
                                 case "except":
                                     if(args.Length < 5) return;
@@ -626,10 +656,10 @@ namespace Oxide.Plugins
                             GUIRulesetEditor(player, newname);
                         }
                         break;
-//                    case "editrule":
-//                        Puts($"editrule {args[1]}");
-//                        GUIRulesetEditor(player, args[1]);
-//                        break;
+                    case "editrule":
+                        string rn = args[1];
+                        GUIRuleEditor(player, rn);
+                        break;
                     case "close":
                         CuiHelper.DestroyUi(player, RPVERULEEDITULELIST);
                         CuiHelper.DestroyUi(player, RPVERULEEDIT);
@@ -655,10 +685,6 @@ namespace Oxide.Plugins
                         break;
                     case "closeruleschedule":
                         CuiHelper.DestroyUi(player, RPVESCHEDULEEDIT);
-                        break;
-                    case "editrule":
-                        string rn = args[1];
-                        GUIRuleEditor(player, rn);
                         break;
                     default:
                         GUIRuleSets(player);
@@ -1043,15 +1069,15 @@ namespace Oxide.Plugins
 
             int col = 0;
             int row = 0;
-            float[] pb = GetButtonPositionP(row, col);
+            float[] pb = GetButtonPositionZ(row, col);
 
             switch(key)
             {
                 case "name":
-                    pb = GetButtonPositionP(row, col);
+                    pb = GetButtonPositionZ(row, col);
                     UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#ffffff", 1f), Lang("editname") + ":", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                     col++;
-                    pb = GetButtonPositionP(row, col);
+                    pb = GetButtonPositionZ(row, col);
                     UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#535353", 1f), rulesetname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                     UI.Input(ref container, RPVEVALUEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} name ");
                     break;
@@ -1067,7 +1093,7 @@ namespace Oxide.Plugins
                     }
 
                     row++;
-                    pb = GetButtonPositionP(row, col);
+                    pb = GetButtonPositionZ(row, col);
                     if(pverulesets[rulesetname].zone == "default")
                     {
                         UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#22ff22", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
@@ -1080,11 +1106,17 @@ namespace Oxide.Plugins
                     row++;
                     foreach(string zoneID in zoneIDs)
                     {
+                        if(row > 10)
+                        {
+                            row = 0;
+                            col++;
+                        }
                         string zName = (string)ZoneManager?.Call("GetZoneName", zoneID);
                         string zColor = "#222222";
                         if(zName == pverulesets[rulesetname].zone) zColor = "#22ff22";
+                        if(zoneID.ToString() == pverulesets[rulesetname].zone) zColor = "#22ff22";
 
-                        pb = GetButtonPositionP(row, col);
+                        pb = GetButtonPositionZ(row, col);
                         UI.Button(ref container, RPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zName}");
                         row++;
                     }
@@ -1138,7 +1170,7 @@ namespace Oxide.Plugins
             int col = 0;
             int row = 0;
 
-            float[] pb = GetButtonPositionP(row, col, 4f);
+            float[] pb = GetButtonPositionP(row, col, 5f);
             UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("scheduling"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             row++;
@@ -1147,26 +1179,27 @@ namespace Oxide.Plugins
 
             col++;
             pb = GetButtonPositionP(row, 4);
-            UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#535353", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#665353", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             UI.Input(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule ");
 
             CuiHelper.AddUi(player, container);
         }
 
         private int RowNumber(int max, int count) => Mathf.FloorToInt(count / max);
-        private float[] GetButtonPosition(int rowNumber, int columnNumber)
-        {
-            float offsetX = 0.05f + (0.096f * columnNumber);
-            float offsetY = (0.80f - (rowNumber * 0.064f));
-
-            return new float[] { offsetX, offsetY, offsetX + 0.196f, offsetY + 0.03f };
-        }
         private float[] GetButtonPositionP(int rowNumber, int columnNumber, float colspan = 1f)
         {
             float offsetX = 0.05f + (0.126f * columnNumber);
             float offsetY = (0.87f - (rowNumber * 0.064f));
 
             return new float[] { offsetX, offsetY, offsetX + (0.226f * colspan), offsetY + 0.03f };
+        }
+
+        private float[] GetButtonPositionZ(int rowNumber, int columnNumber)
+        {
+            float offsetX = 0.05f + (0.156f * columnNumber);
+            float offsetY = (0.80f - (rowNumber * 0.064f));
+
+            return new float[] { offsetX, offsetY, offsetX + 0.296f, offsetY + 0.03f };
         }
         #endregion
 
@@ -1532,7 +1565,7 @@ namespace Oxide.Plugins
             pveentities.Add("npc", new RealPVEEntities() { types = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer", "Murderer", "Scientist" } });
             pveentities.Add("player", new RealPVEEntities() { types = new List<string>() { "BasePlayer" } });
             pveentities.Add("building", new RealPVEEntities() { types = new List<string>() { "BuildingBlock" } });
-            pveentities.Add("resource", new RealPVEEntities() { types = new List<string>() { "ResourceEntity", "LootContainer" } });
+            pveentities.Add("resource", new RealPVEEntities() { types = new List<string>() { "ResourceEntity", "LootContainer", "BaseCorpse" } });
             pveentities.Add("trap", new RealPVEEntities() { types = new List<string>() { "TeslaCoil", "BearTrap", "FlameTurret", "Landmine", "GunTrap", "ReactiveTarget", "spikes.floor" } });
             pveentities.Add("animal", new RealPVEEntities() { types = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" } });
             pveentities.Add("helicopter", new RealPVEEntities() { types = new List<string>() { "BaseHeli" } });
