@@ -1785,7 +1785,7 @@ namespace Oxide.Plugins
             rpverulesets.Add("default", new RealPVERuleSet()
             {
                 damage = false, zone = null, schedule = null, enabled = true,
-                except = new List<string>() { "animal_player", "player_animal", "animal_animal", "player_helicopter", "player_minicopter", "player_scrapcopter", "player_npc", "npc_player", "player_building", "player_resource", "npcturret_player", "npcturret_animal", "npcturret_npc", "player_scrapcopter", "scrapcopter_player" },
+                except = new List<string>() { "animal_player", "player_animal", "animal_animal", "player_helicopter", "player_minicopter", "player_scrapcopter", "player_npc", "npc_player", "player_building", "player_resource", "npcturret_player", "npcturret_animal", "npcturret_npc", "player_scrapcopter", "scrapcopter_player", "helicopter_player" },
                 exclude = new List<string>() {}
             });
         }
