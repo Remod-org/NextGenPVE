@@ -17,19 +17,20 @@ using Oxide.Game.Rust.Cui;
 
 // TODO
 // Add the actual schedule handling...
-// Finish work on custom rule editor (src/target)
+// Finish work on custom rule editor gui (src/target)
 // Sanity checking for overlapping rule/zone combinations.  Schedule may have impact.
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.7")]
+    [Info("Real PVE", "RFC1920", "1.0.8")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     class RealPVE : RustPlugin
     {
         #region vars
         Dictionary<string, RealPVEEntities> rpveentities = new Dictionary<string, RealPVEEntities>();
+        Dictionary<string, RealPVEEntities> custom_entities = new Dictionary<string, RealPVEEntities>();
         Dictionary<string, RealPVERule> rpverules = new Dictionary<string, RealPVERule>();
-        Dictionary<string, RealPVERule> custom = new Dictionary<string, RealPVERule>();
+        Dictionary<string, RealPVERule> custom_rules = new Dictionary<string, RealPVERule>();
         Dictionary<string, RealPVERuleSet> rpverulesets = new Dictionary<string, RealPVERuleSet>();
         // Ruleset to multiple zones
         Dictionary<string, RealPVEZoneMap> rpvezonemaps = new Dictionary<string, RealPVEZoneMap>();
@@ -76,6 +77,7 @@ namespace Oxide.Plugins
             enabled = true;
         }
 
+        // Not yet implemented
         private void RunTimer()
         {
             if(!configData.Options.useSchedule) return;
@@ -218,6 +220,19 @@ namespace Oxide.Plugins
             {
                 LoadDefaultEntities();
             }
+
+            // Merge and overwrite from this file if it exists.
+            custom_entities = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVEEntities>>(this.Name + "/rpve_customentities");
+            if(custom_entities.Count > 0)
+            {
+                foreach(KeyValuePair<string, RealPVEEntities> ent in custom_entities)
+                {
+                    rpveentities[ent.Key] = ent.Value;
+                    rpveentities[ent.Key].custom = true;
+                }
+            }
+            custom_entities.Clear();
+
             rpverules = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVERule>>(this.Name + "/rpve_rules");
             if(rpverules.Count == 0)
             {
@@ -225,15 +240,15 @@ namespace Oxide.Plugins
             }
 
             // Merge and overwrite from this file if it exists.
-            custom = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVERule>>(this.Name + "/rpve_custom");
-            if(custom.Count > 0)
+            custom_rules = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVERule>>(this.Name + "/rpve_customrules");
+            if(custom_rules.Count > 0)
             {
-                foreach(KeyValuePair<string, RealPVERule> rule in custom)
+                foreach(KeyValuePair<string, RealPVERule> rule in custom_rules)
                 {
                     rpverules[rule.Key] = rule.Value;
                 }
             }
-            custom.Clear();
+            custom_rules.Clear();
 
             rpverulesets = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVERuleSet>>(this.Name + "/rpve_rulesets");
             if(rpverulesets.Count == 0)
@@ -844,6 +859,79 @@ namespace Oxide.Plugins
             {
                 GUIRuleSets(player);
             }
+        }
+        #endregion
+
+        #region config
+        private void LoadConfigVariables()
+        {
+            configData = Config.ReadObject<ConfigData>();
+            if(configData.Version < Version)
+            {
+                if(configData.Version <= new VersionNumber(1, 0, 7))
+                {
+                    try
+                    {
+                        rpveentities.Add("scrapcopter", new RealPVEEntities() { types = new List<string>() { "ScrapTransportHelicopter" } });
+                    }
+                    catch {}
+
+                    try
+                    {
+                        rpverules.Add("player_scrapcopter", new RealPVERule() { description = "Player can damage scrapcopter", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["scrapcopter"].types });
+                        rpverules.Add("scrapcopter_player", new RealPVERule() { description = "Scrapcopter can damage player", damage = true, custom = false, source = rpveentities["scrapcopter"].types, target = rpveentities["player"].types });
+                        rpverules.Add("player_helicopter", new RealPVERule() { description = "Player can damage helicopter", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["helicopter"].types });
+                    }
+                    catch {}
+
+                    if(rpverulesets.ContainsKey("default"))
+                    {
+                        rpverulesets["default"].except.Add("player_scrapcopter");
+                        rpverulesets["default"].except.Add("scrapcopter_player");
+                        rpverulesets["default"].except.Add("player_helicopter");
+                        rpverulesets["default"].except.Add("helicopter_player");
+                    }
+
+                    SaveData();
+                    LoadData();
+                }
+                configData.Version = Version;
+            }
+            SaveConfig(configData);
+        }
+        protected override void LoadDefaultConfig()
+        {
+            Puts("Creating new config file.");
+            var config = new ConfigData();
+            config.Version = Version;
+            SaveConfig(config);
+        }
+        private void SaveConfig(ConfigData config)
+        {
+            Config.WriteObject(config, true);
+        }
+        class ConfigData
+        {
+            public Options Options = new Options();
+            public VersionNumber Version;
+        }
+        class Options
+        {
+            public bool useZoneManager = true;
+            public bool useLiteZones = false;
+            public bool useSchedule = false;
+            public bool useRealtime = true;
+            public bool useFriends = false;
+            public bool useClans = false;
+            public bool useTeams = false;
+
+            public bool NPCAutoTurretTargetsPlayers = true;
+            public bool NPCAutoTurretTargetsNPCs = true;
+            public bool AutoTurretTargetsPlayers = false;
+            public bool AutoTurretTargetsNPCs = false;
+            public bool TrapsIgnorePlayers = false;
+            public bool HonorBuildingPrivilege = true;
+            public bool HonorRelationships = false;
         }
         #endregion
 
@@ -1566,80 +1654,6 @@ namespace Oxide.Plugins
         }
         #endregion
 
-        #region config
-        private void LoadConfigVariables()
-        {
-            configData = Config.ReadObject<ConfigData>();
-            if(configData.Version < Version)
-            {
-                if(configData.Version <= new VersionNumber(1, 0, 7))
-                {
-                    try
-                    {
-                        rpveentities.Add("scrapcopter", new RealPVEEntities() { types = new List<string>() { "ScrapTransportHelicopter" } });
-                    }
-                    catch {}
-
-                    try
-                    {
-                        rpverules.Add("player_scrapcopter", new RealPVERule() { description = "Player can damage scrapcopter", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["scrapcopter"].types });
-                        rpverules.Add("scrapcopter_player", new RealPVERule() { description = "Scrapcopter can damage player", damage = true, custom = false, source = rpveentities["scrapcopter"].types, target = rpveentities["player"].types });
-                        rpverules.Add("player_helicopter", new RealPVERule() { description = "Player can damage helicopter", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["helicopter"].types });
-                    }
-                    catch {}
-
-                    if(rpverulesets.ContainsKey("default"))
-                    {
-                        rpverulesets["default"].except.Add("player_scrapcopter");
-                        rpverulesets["default"].except.Add("scrapcopter_player");
-                        rpverulesets["default"].except.Add("player_helicopter");
-                        rpverulesets["default"].except.Add("helicopter_player");
-                    }
-
-                    SaveData();
-                    LoadData();
-
-                    configData.Version = Version;
-                }
-            }
-            SaveConfig(configData);
-        }
-        protected override void LoadDefaultConfig()
-        {
-            Puts("Creating new config file.");
-            var config = new ConfigData();
-            config.Version = Version;
-            SaveConfig(config);
-        }
-        private void SaveConfig(ConfigData config)
-        {
-            Config.WriteObject(config, true);
-        }
-        class ConfigData
-        {
-            public Options Options = new Options();
-            public VersionNumber Version;
-        }
-        class Options
-        {
-            public bool useZoneManager = true;
-            public bool useLiteZones = false;
-            public bool useSchedule = false;
-            public bool useRealtime = true;
-            public bool useFriends = false;
-            public bool useClans = false;
-            public bool useTeams = false;
-
-            public bool NPCAutoTurretTargetsPlayers = true;
-            public bool NPCAutoTurretTargetsNPCs = true;
-            public bool AutoTurretTargetsPlayers = false;
-            public bool AutoTurretTargetsNPCs = false;
-            public bool TrapsIgnorePlayers = false;
-            public bool HonorBuildingPrivilege = true;
-            public bool HonorRelationships = false;
-        }
-        #endregion
-
         #region classes
         public class RealPVERuleSet
         {
@@ -1664,6 +1678,7 @@ namespace Oxide.Plugins
         public class RealPVEEntities
         {
             public List<string> types;
+            public bool custom = false;
         }
 
         private class RealPVEZoneMap
