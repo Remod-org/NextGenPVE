@@ -22,7 +22,7 @@ using Oxide.Game.Rust.Cui;
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.6")]
+    [Info("Real PVE", "RFC1920", "1.0.7")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     class RealPVE : RustPlugin
     {
@@ -65,6 +65,7 @@ namespace Oxide.Plugins
         #region init
         private void Init()
         {
+            LoadData();
             LoadConfigVariables();
             AddCovalenceCommand("pveenable", "cmdRealPVEenable");
             AddCovalenceCommand("pvelog", "cmdRealPVElog");
@@ -140,7 +141,6 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
-            LoadData();
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 ["notauthorized"] = "You don't have permission to use this command.",
@@ -164,6 +164,8 @@ namespace Oxide.Plugins
                 ["edit"] = "Edit",
                 ["clicktoedit"] = "^Click to Edit^",
                 ["editname"] = "Edit Name",
+                ["standard"] = "Standard",
+                ["automated"] = "Automated",
                 ["add"] = "Add",
                 ["all"] = "All",
                 ["true"] = "True",
@@ -240,6 +242,8 @@ namespace Oxide.Plugins
             }
 
             rpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVEZoneMap>>(this.Name + "/rpve_zonemaps");
+
+            SortData();
             SaveData();
         }
 
@@ -249,6 +253,20 @@ namespace Oxide.Plugins
             Interface.Oxide.DataFileSystem.WriteObject(Name + "/rpve_rules", rpverules);
             Interface.Oxide.DataFileSystem.WriteObject(Name + "/rpve_rulesets", rpverulesets);
             Interface.Oxide.DataFileSystem.WriteObject(Name + "/rpve_zonemaps", rpvezonemaps);
+        }
+
+        private void SortData()
+        {
+            // Verify no duplicate rules, exclusions, and entities - also sort
+            foreach(KeyValuePair<string, RealPVERuleSet> rs in rpverulesets)
+            {
+                rpverulesets[rs.Key].except = rs.Value.except.Distinct().OrderBy(q => q).ToList();
+                rpverulesets[rs.Key].exclude = rs.Value.exclude.Distinct().OrderBy(q => q).ToList();
+            }
+            foreach(KeyValuePair<string, RealPVEEntities> ent in rpveentities)
+            {
+                rpveentities[ent.Key].types = ent.Value.types.Distinct().OrderBy(q => q).ToList();
+            }
         }
         #endregion
 
@@ -383,7 +401,8 @@ namespace Oxide.Plugins
             }
             else
             {
-                rpverulesets.Add(rulesetname, new RealPVERuleSet() { damage = true, enabled = true, zone = "lookup", except = new List<string>(), exclude = new List<string>() });
+                rpverulesets.Add(rulesetname, new RealPVERuleSet() { damage = true, enabled = true, automated = true, zone = "lookup", except = new List<string>(), exclude = new List<string>() });
+                if(rpvezonemaps.ContainsKey(rulesetname)) rpvezonemaps.Remove(rulesetname);
                 rpvezonemaps.Add(rulesetname, new RealPVEZoneMap() { map = new List<string>() { key } });
                 SaveData();
                 return true;
@@ -834,7 +853,10 @@ namespace Oxide.Plugins
             CuiHelper.DestroyUi(player, RPVERULEEDITULELIST);
 
             CuiElementContainer container = UI.Container(RPVERULEEDITULELIST, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Button(ref container, RPVERULEEDITULELIST, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule close");
+            UI.Label(ref container, RPVERULEEDITULELIST, UI.Color("#ffffff", 1f), Lang("realpverulesets"), 24, "0.2 0.92", "0.65 1");
+            UI.Label(ref container, RPVERULEEDITULELIST, UI.Color("#d85540", 1f), Lang("standard"), 12, "0.66 0.95", "0.72 0.98");
+            UI.Label(ref container, RPVERULEEDITULELIST, UI.Color("#5540d8", 1f), Lang("automated"), 12, "0.73 0.95", "0.79 0.98");
+
             if(enabled)
             {
                 UI.Button(ref container, RPVERULEEDITULELIST, UI.Color("#55d840", 1f), Lang("genabled"), 12, "0.8 0.95", "0.92 0.98", $"pveenable gui");
@@ -843,7 +865,7 @@ namespace Oxide.Plugins
             {
                 UI.Button(ref container, RPVERULEEDITULELIST, UI.Color("#ff2222", 1f), Lang("gdisabled"), 12, "0.8 0.95", "0.92 0.98", $"pveenable gui");
             }
-            UI.Label(ref container, RPVERULEEDITULELIST, UI.Color("#ffffff", 1f), Lang("realpverulesets"), 24, "0.2 0.92", "0.7 1");
+            UI.Button(ref container, RPVERULEEDITULELIST, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule close");
 
             int col = 0;
             int row = 0;
@@ -856,8 +878,10 @@ namespace Oxide.Plugins
                     col++;
                 }
                 pb = GetButtonPositionP(row, col);
+                string rColor = "#d85540";
+                if(ruleset.Value.automated) rColor = "#5540d8";
 
-                UI.Button(ref container, RPVERULEEDITULELIST, UI.Color("#d85540", 1f), ruleset.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {ruleset.Key}");
+                UI.Button(ref container, RPVERULEEDITULELIST, UI.Color(rColor, 1f), ruleset.Key, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {ruleset.Key}");
                 row++;
             }
             pb = GetButtonPositionP(row, col);
@@ -869,9 +893,11 @@ namespace Oxide.Plugins
         private void GUIRulesetEditor(BasePlayer player, string rulesetname)
         {
             CuiHelper.DestroyUi(player, RPVEEDITRULESET);
+            string rulename = rulesetname;
+            if(rpverulesets[rulesetname].automated) rulename += " (" + Lang("automated") + ")";
 
             CuiElementContainer container = UI.Container(RPVEEDITRULESET, UI.Color("3b3b3b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("realpveruleset") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("realpveruleset") + ": " + rulename, 24, "0.15 0.92", "0.7 1");
             UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedulenotworking"), 12, "0.3 0.05", "0.7 0.08");
 
             UI.Button(ref container, RPVEEDITRULESET, UI.Color("#2222ff", 1f), Lang("clone"), 12, "0.63 0.95", "0.69 0.98", $"pverule editruleset {rulesetname} clone");
@@ -891,7 +917,6 @@ namespace Oxide.Plugins
             else
             {
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#2222ff", 1f), Lang("editname"), 12, "0.7 0.95", "0.76 0.98", $"pverule editruleset {rulesetname} name");
-                // pverule editruleset {rulesetname} defload
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("delete"), 12, "0.86 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} delete");
             }
             UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleset");
@@ -1545,12 +1570,45 @@ namespace Oxide.Plugins
         private void LoadConfigVariables()
         {
             configData = Config.ReadObject<ConfigData>();
+            if(configData.Version < Version)
+            {
+                if(configData.Version <= new VersionNumber(1, 0, 7))
+                {
+                    try
+                    {
+                        rpveentities.Add("scrapcopter", new RealPVEEntities() { types = new List<string>() { "ScrapTransportHelicopter" } });
+                    }
+                    catch {}
+
+                    try
+                    {
+                        rpverules.Add("player_scrapcopter", new RealPVERule() { description = "Player can damage scrapcopter", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["scrapcopter"].types });
+                        rpverules.Add("scrapcopter_player", new RealPVERule() { description = "Scrapcopter can damage player", damage = true, custom = false, source = rpveentities["scrapcopter"].types, target = rpveentities["player"].types });
+                        rpverules.Add("player_helicopter", new RealPVERule() { description = "Player can damage helicopter", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["helicopter"].types });
+                    }
+                    catch {}
+
+                    if(rpverulesets.ContainsKey("default"))
+                    {
+                        rpverulesets["default"].except.Add("player_scrapcopter");
+                        rpverulesets["default"].except.Add("scrapcopter_player");
+                        rpverulesets["default"].except.Add("player_helicopter");
+                        rpverulesets["default"].except.Add("helicopter_player");
+                    }
+
+                    SaveData();
+                    LoadData();
+
+                    configData.Version = Version;
+                }
+            }
             SaveConfig(configData);
         }
         protected override void LoadDefaultConfig()
         {
             Puts("Creating new config file.");
             var config = new ConfigData();
+            config.Version = Version;
             SaveConfig(config);
         }
         private void SaveConfig(ConfigData config)
@@ -1560,6 +1618,7 @@ namespace Oxide.Plugins
         class ConfigData
         {
             public Options Options = new Options();
+            public VersionNumber Version;
         }
         class Options
         {
@@ -1590,6 +1649,7 @@ namespace Oxide.Plugins
             public string zone;
             public string schedule;
             public bool enabled;
+            public bool automated = false;
         }
 
         public class RealPVERule
@@ -1725,7 +1785,7 @@ namespace Oxide.Plugins
             rpverulesets.Add("default", new RealPVERuleSet()
             {
                 damage = false, zone = null, schedule = null, enabled = true,
-                except = new List<string>() { "animal_player", "player_animal", "animal_animal", "player_minicopter", "player_npc", "npc_player", "player_building", "player_resource", "npcturret_player", "npcturret_animal", "npcturret_npc" },
+                except = new List<string>() { "animal_player", "player_animal", "animal_animal", "player_helicopter", "player_minicopter", "player_scrapcopter", "player_npc", "npc_player", "player_building", "player_resource", "npcturret_player", "npcturret_animal", "npcturret_npc", "player_scrapcopter", "scrapcopter_player" },
                 exclude = new List<string>() {}
             });
         }
@@ -1741,6 +1801,7 @@ namespace Oxide.Plugins
             rpveentities.Add("animal", new RealPVEEntities() { types = new List<string>() { "BaseAnimalNPC", "Boar", "Bear", "Chicken", "Stag", "Wolf", "Horse" } });
             rpveentities.Add("helicopter", new RealPVEEntities() { types = new List<string>() { "BaseHeli" } });
             rpveentities.Add("minicopter", new RealPVEEntities() { types = new List<string>() { "Minicopter" } });
+            rpveentities.Add("scrapcopter", new RealPVEEntities() { types = new List<string>() { "ScrapTransportHelicopter" } });
             rpveentities.Add("highwall", new RealPVEEntities() { types = new List<string>() { "wall.external.high.stone", "wall.external.high.wood", "gates.external.high.wood", "gates.external.high.stone" } });
             rpveentities.Add("npcturret", new RealPVEEntities() { types = new List<string>() { "NPCAutoTurret" } });
         }
@@ -1762,6 +1823,9 @@ namespace Oxide.Plugins
             rpverules.Add("helicopter_building", new RealPVERule() { description = "Helicopter can damage building", damage = true, custom = false, source = rpveentities["helicopter"].types, target = rpveentities["building"].types });
             rpverules.Add("player_minicopter", new RealPVERule() { description = "Player can damage minicopter", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["minicopter"].types });
             rpverules.Add("minicopter_player", new RealPVERule() { description = "Minicopter can damage player", damage = true, custom = false, source = rpveentities["minicopter"].types, target = rpveentities["player"].types });
+            rpverules.Add("player_scrapcopter", new RealPVERule() { description = "Player can damage scrapcopter", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["scrapcopter"].types });
+            rpverules.Add("scrapcopter_player", new RealPVERule() { description = "Scrapcopter can damage player", damage = true, custom = false, source = rpveentities["scrapcopter"].types, target = rpveentities["player"].types });
+            rpverules.Add("player_helicopter", new RealPVERule() { description = "Player can damage helicopter", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["helicopter"].types });
             rpverules.Add("highwalls_player", new RealPVERule() { description = "Highwall can damage player", damage = true, custom = false, source = rpveentities["highwall"].types, target = rpveentities["player"].types });
             rpverules.Add("npcturret_player", new RealPVERule() { description = "NPCAutoTurret can damage player", damage = true, custom = false, source = rpveentities["npcturret"].types, target = rpveentities["player"].types });
             rpverules.Add("npcturret_animal", new RealPVERule() { description = "NPCAutoTurret can damage animal", damage = true, custom = false, source = rpveentities["npcturret"].types, target = rpveentities["animal"].types });
