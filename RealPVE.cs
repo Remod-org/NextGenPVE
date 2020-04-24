@@ -19,10 +19,11 @@ using Oxide.Game.Rust.Cui;
 // Add the actual schedule handling...
 // Finish work on custom rule editor gui (src/target)
 // Sanity checking for overlapping rule/zone combinations.  Schedule may have impact.
+// Add setting global flags
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.8")]
+    [Info("Real PVE", "RFC1920", "1.0.10")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     class RealPVE : RustPlugin
     {
@@ -868,7 +869,43 @@ namespace Oxide.Plugins
             configData = Config.ReadObject<ConfigData>();
             if(configData.Version < Version)
             {
-                if(configData.Version <= new VersionNumber(1, 0, 7))
+                if(configData.Version < new VersionNumber(1, 0, 10))
+                {
+                    try
+                    {
+                        rpveentities.Add("fire", new RealPVEEntities() { types = new List<string>() { "BaseOven", "FireBall" } });
+                        rpverules.Add("fire_player", new RealPVERule() { description = "Fire can damage player", damage = true, custom = false, source = rpveentities["fire"].types, target = rpveentities["player"].types });
+                        rpverules.Add("player_trap", new RealPVERule() { description = "Player can damage trap", damage = true, custom = false, source = rpveentities["player"].types, target = rpveentities["trap"].types });
+                        rpverules.Add("trap_player", new RealPVERule() { description = "Trap can damage player", damage = true, custom = false, source = rpveentities["trap"].types, target = rpveentities["player"].types });
+                        rpverules.Add("trap_trap", new RealPVERule() { description = "Trap can damage trap", damage = true, custom = false, source = rpveentities["trap"].types, target = rpveentities["trap"].types });
+
+                        rpverulesets["default"].except.Add("fire_player");
+                        rpverulesets["default"].except.Add("trap_player");
+                        rpverulesets["default"].except.Add("player_trap");
+                        rpverulesets["default"].except.Add("trap_trap");
+
+                        rpverules.Remove("traps_players");
+                        rpverules.Remove("players_traps");
+                        rpverulesets["default"].except.Remove("traps_players");
+                        rpverulesets["default"].except.Remove("players_traps");
+                    }
+                    catch {}
+
+                    SaveData();
+                    LoadData();
+                }
+                if(configData.Version < new VersionNumber(1, 0, 9))
+                {
+                    try
+                    {
+                        rpveentities["npc"].types.Add("Zombie");
+                    }
+                    catch {}
+
+                    SaveData();
+                    LoadData();
+                }
+                if(configData.Version < new VersionNumber(1, 0, 7))
                 {
                     try
                     {
@@ -1808,7 +1845,7 @@ namespace Oxide.Plugins
         // Default entity categories and types to consider
         private void LoadDefaultEntities()
         {
-            rpveentities.Add("npc", new RealPVEEntities() { types = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer", "Murderer", "Scientist" } });
+            rpveentities.Add("npc", new RealPVEEntities() { types = new List<string>() { "NPCPlayerApex", "BradleyAPC", "HumanNPC", "BaseNpc", "HTNPlayer", "Murderer", "Scientist", "Zombie" } });
             rpveentities.Add("player", new RealPVEEntities() { types = new List<string>() { "BasePlayer" } });
             rpveentities.Add("building", new RealPVEEntities() { types = new List<string>() { "BuildingBlock" } });
             rpveentities.Add("resource", new RealPVEEntities() { types = new List<string>() { "ResourceEntity", "LootContainer", "BaseCorpse" } });
@@ -1819,6 +1856,7 @@ namespace Oxide.Plugins
             rpveentities.Add("scrapcopter", new RealPVEEntities() { types = new List<string>() { "ScrapTransportHelicopter" } });
             rpveentities.Add("highwall", new RealPVEEntities() { types = new List<string>() { "wall.external.high.stone", "wall.external.high.wood", "gates.external.high.wood", "gates.external.high.stone" } });
             rpveentities.Add("npcturret", new RealPVEEntities() { types = new List<string>() { "NPCAutoTurret" } });
+            rpveentities.Add("fire", new RealPVEEntities() { types = new List<string>() { "BaseOven", "FireBall" } });
         }
 
         // Default rules which can be applied
@@ -1845,6 +1883,7 @@ namespace Oxide.Plugins
             rpverules.Add("npcturret_player", new RealPVERule() { description = "NPCAutoTurret can damage player", damage = true, custom = false, source = rpveentities["npcturret"].types, target = rpveentities["player"].types });
             rpverules.Add("npcturret_animal", new RealPVERule() { description = "NPCAutoTurret can damage animal", damage = true, custom = false, source = rpveentities["npcturret"].types, target = rpveentities["animal"].types });
             rpverules.Add("npcturret_npc", new RealPVERule() { description = "NPCAutoTurret can damage npc", damage = true, custom = false, source = rpveentities["npcturret"].types, target = rpveentities["npc"].types });
+            rpverules.Add("fire_player", new RealPVERule() { description = "Fire can damage player", damage = true, custom = false, source = rpveentities["fire"].types, target = rpveentities["player"].types });
         }
         #endregion
     }
