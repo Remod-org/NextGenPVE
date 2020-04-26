@@ -520,69 +520,65 @@ namespace Oxide.Plugins
                 bool damage = true;
                 bool enabled = false;
                 string rulesetname = null;
-                string source_type = stype;
-                string target_type = ttype;
 
                 string src = null; string tgt = null;
-                SQLiteCommand selectSrc = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{source_type}'", sqlConnection);
-                SQLiteDataReader ss = selectSrc.ExecuteReader();
-                while(ss.Read())
+                SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection);
+                SQLiteDataReader readMe = findIt.ExecuteReader();
+                while(readMe.Read())
                 {
-                    src = ss.GetString(0);
+                    src = readMe.GetString(0);
                     break;
                 }
 
-                SQLiteCommand selectTgt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{target_type}'", sqlConnection);
-                SQLiteDataReader st = selectTgt.ExecuteReader();
-                while(st.Read())
+                findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection);
+                readMe = findIt.ExecuteReader();
+                while(readMe.Read())
                 {
-                    tgt = st.GetString(0);
+                    tgt = readMe.GetString(0);
                     break;
                 }
 
-                SQLiteCommand r = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM rpve_rulesets", sqlConnection);
-                SQLiteDataReader rentry = r.ExecuteReader();
-                while(rentry.Read())
+                findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM rpve_rulesets", sqlConnection);
+                readMe = findIt.ExecuteReader();
+                while(readMe.Read())
                 {
-                     rulesetname = rentry.GetString(0);
-                     zone = rentry.GetString(1);
-                     damage = rentry.GetBoolean(2);
-                     enabled = rentry.GetBoolean(3);
+                     rulesetname = readMe.GetString(0);
+                     zone = readMe.GetString(1);
+                     damage = readMe.GetBoolean(2);
+                     enabled = readMe.GetBoolean(3);
 
-                    DoLog($"Checking {rulesetname} for {source_type} attacking {target_type}");
-                    Puts($"Checking {rulesetname} for {source_type} attacking {target_type}");
+                    DoLog($"Checking {rulesetname} for {stype} attacking {ttype}");
+                    Puts($"Checking {rulesetname} for {stype} attacking {ttype}");
                     if (src != null && tgt != null)
                     {
-                        DoLog($"Found {source_type} attacking {target_type}.  Checking ruleset {rulesetname}");
-                        Puts($"Found {source_type} attacking {target_type}.  Checking ruleset {rulesetname}");
-                        // source and target exist - verify that they are not excluded
+                        DoLog($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}");
+                        Puts($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}");
                         int en = enabled ? 1 : 0;
-                        string rquery = $"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='{en}' AND exception='{src}_{tgt}'";
-                        //Puts(rquery);
-                        SQLiteCommand rq = new SQLiteCommand(rquery, sqlConnection);
+                        SQLiteCommand rq = new SQLiteCommand($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='{en}' AND exception='{src}_{tgt}'", sqlConnection);
                         SQLiteDataReader entry = rq.ExecuteReader();
                    
                         while(entry.Read())
                         {
-                            DoLog($"Found match for {source_type} attacking {target_type}");
-                            Puts($"Found match for {source_type} attacking {target_type}");
+                            // source and target exist - verify that they are not excluded
+                            DoLog($"Found exception match for {stype} attacking {ttype}");
+                            Puts($"Found exception match for {stype} attacking {ttype}");
                             string foundsrc = entry.GetValue(1).ToString();
                             string foundtgt = entry.GetValue(2).ToString();
-                            if (foundsrc.Contains(source_type))
+                            if (foundsrc.Contains(stype))
                             {
-                                Puts($"Exclusion for {source_type}");
+                                Puts($"Exclusion for {stype}");
                                 foundmatch = false;
                                 break;
                             }
-                            else if (foundtgt.Contains(target_type))
+                            else if (foundtgt.Contains(ttype))
                             {
-                                Puts($"Exclusion for {target_type}");
+                                Puts($"Exclusion for {ttype}");
                                 foundmatch = false;
                                 break;
                             }
                             else
                             {
-                                Puts($"No exclusions for {source_type} to {target_type}");
+                                Puts($"No exclusions for {stype} to {ttype}");
                                 foundmatch = true;
                                 break;
                             }
@@ -591,12 +587,12 @@ namespace Oxide.Plugins
                 }
                 if (foundmatch)
                 {
-                    Puts($"No rule match, setting damage to NOT {damage.ToString()}");
+                    Puts($"Ruleset exception: Setting damage to {(!damage).ToString()}");
                     return !damage;
                 }
                 else
                 {
-                    Puts($"Rule match, setting damage to {damage.ToString()}");
+                    Puts($"Ruleset match: Setting damage to {damage.ToString()}");
                     return damage;
                 }
             }
