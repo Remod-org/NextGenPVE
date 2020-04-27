@@ -662,46 +662,60 @@ namespace Oxide.Plugins
                                             break;
                                     }
                                     break;
-//                                case "src_exclude":
-//                                    if (args.Length < 5) return;
-//                                    //pverule editruleset {rulesetname} src_exclude Horse add
-//                                    switch (args[4])
-//                                    {
-//                                        case "add":
-//                                            if (rpverulesets[rs].src_exclude == null)
-//                                            {
-//                                                rpverulesets[rs].src_exclude = new List<string>() { newval };
-//                                            }
-//                                            else if (!rpverulesets[rs].src_exclude.Contains(newval))
-//                                            {
-//                                                rpverulesets[rs].src_exclude.Add(newval);
-//                                            }
-//                                            break;
-//                                        case "delete":
-//                                            if (rpverulesets[rs].src_exclude != null && rpverulesets[rs].src_exclude.Contains(newval)) rpverulesets[rs].src_exclude.Remove(newval);
-//                                            break;
-//                                    }
-//                                    break;
-//                                case "tgt_exclude":
-//                                    if (args.Length < 5) return;
-//                                    //pverule editruleset {rulesetname} tgt_exclude Horse add
-//                                    switch (args[4])
-//                                    {
-//                                        case "add":
-//                                            if (rpverulesets[rs].tgt_exclude == null)
-//                                            {
-//                                                rpverulesets[rs].tgt_exclude = new List<string>() { newval };
-//                                            }
-//                                            else if (!rpverulesets[rs].tgt_exclude.Contains(newval))
-//                                            {
-//                                                rpverulesets[rs].tgt_exclude.Add(newval);
-//                                            }
-//                                            break;
-//                                        case "delete":
-//                                            if (rpverulesets[rs].tgt_exclude != null && rpverulesets[rs].tgt_exclude.Contains(newval)) rpverulesets[rs].tgt_exclude.Remove(newval);
-//                                            break;
-//                                    }
-//                                    break;
+                                case "src_exclude":
+                                    if (args.Length < 5) return;
+                                    //pverule editruleset {rulesetname} src_exclude Horse add
+                                    switch (args[4])
+                                    {
+                                        case "add":
+                                            Puts($"SELECT src_exclude FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'");
+                                            SQLiteCommand cex = new SQLiteCommand($"SELECT src_exclude FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'", sqlConnection);
+                                            SQLiteDataReader rex = cex.ExecuteReader();
+                                            bool isNew = true;
+                                            while (rex.Read())
+                                            {
+                                                isNew = false;
+                                            }
+                                            if (isNew)
+                                            {
+                                                Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
+                                                SQLiteCommand aes = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '', 0)", sqlConnection);
+                                                aes.ExecuteNonQuery();
+                                            }
+                                            break;
+                                        case "delete":
+                                            SQLiteCommand ads =  new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'", sqlConnection);
+                                            ads.ExecuteNonQuery();
+                                            break;
+                                    }
+                                    break;
+                                case "tgt_exclude":
+                                    if (args.Length < 5) return;
+                                    //pverule editruleset {rulesetname} tgt_exclude Horse delete
+                                    switch (args[4])
+                                    {
+                                        case "add":
+                                            Puts($"SELECT tgt_exclude FROM rpve_rulesets WHERE name='{rs}' AND tgt_exclude='{newval}'");
+                                            SQLiteCommand cext = new SQLiteCommand($"SELECT tgt_exclude FROM rpve_rulesets WHERE name='{rs}' AND tgt_exclude='{newval}'", sqlConnection);
+                                            SQLiteDataReader rex = cext.ExecuteReader();
+                                            bool isNew = true;
+                                            while (rex.Read())
+                                            {
+                                                isNew = false;
+                                            }
+                                            if (isNew)
+                                            {
+                                                Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{newval}', '', '')");
+                                                SQLiteCommand aes = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '', '{newval}', '', 0)", sqlConnection);
+                                                aes.ExecuteNonQuery();
+                                            }
+                                            break;
+                                        case "delete":
+                                            SQLiteCommand ads =  new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'", sqlConnection);
+                                            ads.ExecuteNonQuery();
+                                            break;
+                                    }
+                                    break;
                             }
                             GUIRuleSets(player);
                             GUIRulesetEditor(player, rs);
@@ -732,56 +746,63 @@ namespace Oxide.Plugins
                                 case "tgt_exclude":
                                     GUISelectExclusion(player, args[1], args[2]);
                                     break;
-//                                case "clone":
-//                                    int id = 0;
-//                                    string oldname = args[1];
-//                                    string clone = oldname + "1";
-//                                    while (rpverulesets.ContainsKey(clone))
-//                                    {
-//                                        id++;
-//                                        if (id > 4) break;
-//                                        clone = oldname + id.ToString();
-//                                    }
-//                                    Puts($"Creating clone {clone}");
-//                                    rpverulesets.Add(clone, rpverulesets[oldname]);
-//                                    GUIRuleSets(player);
-//                                    GUIRulesetEditor(player, clone);
-//                                    break;
+                                case "clone":
+                                    int id = 0;
+                                    string oldname = args[1];
+                                    string clone = oldname + "1";
+                                    while (true)
+                                    {
+                                        SQLiteCommand checkrs = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_rulesets WHERE name='{clone}'", sqlConnection);
+                                        SQLiteDataReader crs = checkrs.ExecuteReader();
+                                        while (crs.Read())
+                                        {
+                                            id++;
+                                            if (id > 4) break;
+                                            clone = oldname + id.ToString();
+                                        }
+                                        break;
+                                    }
+                                    Puts($"Creating clone {clone}");
+                                    SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets ('{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) SELECT (damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) FROM rpve_rulesets WHERE name='{oldname}'", sqlConnection);
+                                    newrs.ExecuteNonQuery();
+                                    GUIRuleSets(player);
+                                    GUIRulesetEditor(player, clone);
+                                    break;
                             }
                         }
                         //pverule editruleset {rulesetname}
                         else if (args.Length > 1)
                         {
                             string newname = args[1];
-//                            if (newname == "add")
-//                            {
-//                                int id = 0;
-//                                newname = "new1";
-//                                while (rpverulesets.ContainsKey(newname))
-//                                {
-//                                    id++;
-//                                    if (id > 4) break;
-//                                    newname = "new" + id.ToString();
-//                                }
-//                                rpverulesets.Add(newname, new RealPVERuleSet()
-//                                {
-//                                    damage = false,
-//                                    zone = null,
-//                                    schedule = null,
-//                                    except = new List<string>() { },
-//                                    src_exclude = new List<string>() { },
-//                                    tgt_exclude = new List<string>() { }
-//                                });
-//                                GUIRuleSets(player);// FIXME
-//                            }
+                            if (newname == "add")
+                            {
+                                int id = 0;
+                                newname = "new";
+                                while (true)
+                                {
+                                    SQLiteCommand addrs = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_rulesets WHERE name='{newname}'", sqlConnection);
+                                    SQLiteDataReader addcrsd = addrs.ExecuteReader();
+                                    while (addcrsd.Read())
+                                    {
+                                        id++;
+                                        if (id > 4) break;
+                                        newname = "new" + id.ToString();
+                                    }
+                                    break;
+                                }
+                                Puts($"Creating new ruleset {newname}");
+                                SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets ('{newname}', 0, 1, 0, 0, '', '', '', 0)", sqlConnection);
+                                newrs.ExecuteNonQuery();
+                                GUIRuleSets(player);
+                            }
 
                             GUIRulesetEditor(player, newname);
                         }
                         break;
-//                    case "editrule":
-//                        string rn = args[1];
-//                        GUIRuleEditor(player, rn);
-//                        break;
+                    case "editrule":
+                        string rn = args[1];
+                        GUIRuleEditor(player, rn);
+                        break;
                     case "close":
                         CuiHelper.DestroyUi(player, RPVERULELIST);
                         CuiHelper.DestroyUi(player, RPVERULEEDIT);
@@ -1321,70 +1342,87 @@ namespace Oxide.Plugins
             CuiHelper.AddUi(player, container);
         }
 
-//        private void GUIRuleEditor(BasePlayer player, string rulename)
-//        {
-//            CuiHelper.DestroyUi(player, RPVERULEEDIT);
-//
-//            CuiElementContainer container = UI.Container(RPVERULEEDIT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-//            UI.Button(ref container, RPVERULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
-//            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Lang("realpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
-//            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
-//
-//            int col = 0;
-//            int row = 0;
-//
-//            float[] pb = GetButtonPositionP(row, col);
-//            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Name", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//            row++;
-//            pb = GetButtonPositionP(row, col);
-//            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Description", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//            row++;
-//            pb = GetButtonPositionP(row, col);
-//            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Damage", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//            row++;
-//            pb = GetButtonPositionP(row, col);
-//            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Source", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//            row++;
-//            pb = GetButtonPositionP(row, col);
-//            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Target", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//
-//            row = 0; col = 1;
-//            pb = GetButtonPositionP(row, col);
-//            if (!rpverules[rulename].custom)
-//            {
-//                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//                row++;
-//                pb = GetButtonPositionP(row, col);
-//                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), rpverules[rulename].description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//                row++;
-//                pb = GetButtonPositionP(row, col);
-//                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), rpverules[rulename].damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//                row++;
-//                pb = GetButtonPositionP(row, col);
-//                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), string.Join(",", rpverules[rulename].source), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//                row++;
-//                pb = GetButtonPositionP(row, col);
-//                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), string.Join(",", rpverules[rulename].target), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-//            }
-//            else
-//            {
-//                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} name");
-//                row++;
-//                pb = GetButtonPositionP(row, col);
-//                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), rpverules[rulename].description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} description");
-//                row++;
-//                pb = GetButtonPositionP(row, col);
-//                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), rpverules[rulename].damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} damage");
-//                row++;
-//                pb = GetButtonPositionP(row, col);
-//                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), string.Join(",", rpverules[rulename].source), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} source");
-//                row++;
-//                pb = GetButtonPositionP(row, col);
-//                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), string.Join(",", rpverules[rulename].target), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target");
-//            }
-//
-//            CuiHelper.AddUi(player, container);
-//        }
+        private void GUIRuleEditor(BasePlayer player, string rulename)
+        {
+            CuiHelper.DestroyUi(player, RPVERULEEDIT);
+
+            CuiElementContainer container = UI.Container(RPVERULEEDIT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Button(ref container, RPVERULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Lang("realpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
+
+            int col = 0;
+            int row = 0;
+
+            float[] pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Name", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Description", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Damage", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Source", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Target", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+            //CREATE TABLE rpve_rules (name varchar(32),description varchar(255),damage INTEGER(1) DEFAULT 1,custom INTEGER(1) DEFAULT 0,source VARCHAR(32),target VARCHAR(32));
+            SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT FROM rpve_rules WHERE name='{rulename}'", sqlConnection);
+            SQLiteDataReader rd = getrs.ExecuteReader();
+
+            string description = "";
+            bool damage = false;
+            bool custom = false;
+            string source = "";
+            string target = "";
+            while(rd.Read())
+            {
+                description = rd.GetString(1);
+                damage = rd.GetBoolean(2);
+                custom = rd.GetBoolean(3);
+                source = rd.GetString(4);
+                target = rd.GetString(5);
+            }
+            row = 0; col = 1;
+            pb = GetButtonPositionP(row, col);
+            if (!custom)
+            {
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} name");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} description");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} damage");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} source");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target");
+            }
+
+            CuiHelper.AddUi(player, container);
+        }
 
         private void GUIEditValue(BasePlayer player, string rulesetname, string key = null)
         {
