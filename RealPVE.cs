@@ -18,7 +18,7 @@ using System.IO;
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.13")]
+    [Info("Real PVE", "RFC1920", "1.0.15")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     class RealPVE : RustPlugin
     {
