@@ -162,35 +162,22 @@ namespace Oxide.Plugins
             {
                 SQLiteCommand r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='rpve_entities'", sqlConnection);
                 SQLiteDataReader rentry = r.ExecuteReader();
+                bool found = false;
 
-                while(rentry.Read())
-                {
-                    //if (rentry.GetInt32(0) == 0)
-                    if(rentry.GetValue(0) == null)
-                    {
-                        LoadDefaultEntities();
-                    }
-                };
+                while (rentry.Read()) { found = true; }
+                if(!found) LoadDefaultEntities();
 
+                found = false;
                 r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='rpve_rules'", sqlConnection);
                 rentry = r.ExecuteReader();
-                while(rentry.Read())
-                {
-                    if(rentry.GetValue(0) == null)
-                    {
-                        LoadDefaultRules();
-                    }
-                };
+                while(rentry.Read()) { found = true; }
+                if(!found) LoadDefaultRules();
 
+                found = false;
                 r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='rpve_rulesets'", sqlConnection);
                 rentry = r.ExecuteReader();
-                while(rentry.Read())
-                {
-                    if(rentry.GetValue(0) == null)
-                    {
-                        LoadDefaultRuleset(true);
-                    }
-                }
+                while(rentry.Read()) { found = true; }
+                if(!found) LoadDefaultRuleset();
             }
         }
         #endregion
@@ -755,9 +742,9 @@ namespace Oxide.Plugins
                             }
                         }
                         //pverule editruleset {rulesetname}
-//                        else if (args.Length > 1)
-//                        {
-//                            string newname = args[1];
+                        else if (args.Length > 1)
+                        {
+                            string newname = args[1];
 //                            if (newname == "add")
 //                            {
 //                                int id = 0;
@@ -779,9 +766,9 @@ namespace Oxide.Plugins
 //                                });
 //                                GUIRuleSets(player);// FIXME
 //                            }
-//
-//                            GUIRulesetEditor(player, newname);
-//                        }
+
+                            GUIRulesetEditor(player, newname);
+                        }
                         break;
 //                    case "editrule":
 //                        string rn = args[1];
@@ -941,7 +928,7 @@ namespace Oxide.Plugins
                     zone = rsread.GetString(4);
                     try
                     {
-                        //schedule = rsread.GetString(3) ?? "0";
+                        schedule = rsread.GetString(3) ?? "0";
                     }
                     catch
                     {
@@ -997,15 +984,6 @@ namespace Oxide.Plugins
             string de = Lang("block"); if (!damage) de = Lang("allow");
             UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), de, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
-            col++;
-//            if(!configData.Options.useSQLITE) if (rpverulesets[rulesetname].except.Count > 11) col++; // FIXME
-            pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude") + " " + Lang("source"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-
-            col++;
-            pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude") + " " + Lang("target"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-
             row++;
             col = 0;
 
@@ -1024,7 +1002,7 @@ namespace Oxide.Plugins
             }
 
             col++;
-            bool noExceptions = true;
+            int numExceptions = 0;
             if (configData.Options.useSQLITE)
             {
                 SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT exception FROM rpve_rulesets WHERE name='{rulesetname}'", sqlConnection);
@@ -1037,14 +1015,14 @@ namespace Oxide.Plugins
                         row = 1;
                         col++;
                     }
-                    noExceptions = false;
+                    numExceptions++;
                     pb = GetButtonPositionP(row, col);
                     UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
                     row++;
                 }
             }
 
-            if (noExceptions)
+            if (numExceptions == 0)
             {
                 pb = GetButtonPositionP(row, col);
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
@@ -1052,12 +1030,21 @@ namespace Oxide.Plugins
             else
             {
                 pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+//                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
+
+            col++; row = 0;
+            if(!configData.Options.useSQLITE) if (numExceptions> 11) col++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude") + " " + Lang("source"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+            col++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude") + " " + Lang("target"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             col++; row = 1;
             bool noExclusions = true;
-            if (!noExceptions) // Cannot exclude from exceptions that do not exist
+            if (numExceptions == 0) // Cannot exclude from exceptions that do not exist
             {
                 if (configData.Options.useSQLITE)
                 {
@@ -1065,23 +1052,30 @@ namespace Oxide.Plugins
                     SQLiteDataReader rsread = getrs.ExecuteReader();
                     while (rsread.Read())
                     {
-                        string exclude = rsread.GetString(0) ?? "";
+                        string exclude = rsread.GetValue(0).ToString() ?? "";
                         noExclusions = false;
                         if (row > 11)
                         {
                             row = 0;
                             col++;
                         }
+                        noExclusions = false;
                         pb = GetButtonPositionP(row, col);
                         UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
                         row++;
                     }
                 }
             }
+            if(noExclusions)
+            {
+                col--; col--;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude add");
+            }
 
             col++; row = 1;
             noExclusions = true;
-            if (!noExceptions) // Cannot exclude from exceptions that do not exist
+            if (numExceptions == 0) // Cannot exclude from exceptions that do not exist
             {
                 if (configData.Options.useSQLITE)
                 {
@@ -1089,18 +1083,27 @@ namespace Oxide.Plugins
                     SQLiteDataReader rsread = getrs.ExecuteReader();
                     while (rsread.Read())
                     {
-                        string exclude = rsread.GetString(0) ?? "";
+                        string exclude = rsread.GetValue(0).ToString() ?? "";
+                        Puts("GOT HERE");
                         noExclusions = false;
                         if (row > 11)
                         {
                             row = 0;
                             col++;
                         }
+                        noExclusions = false;
                         pb = GetButtonPositionP(row, col);
-                        UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
+                        UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
                         row++;
                     }
                 }
+            }
+
+            if(noExclusions)
+            {
+//                col--;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude add");
             }
 
             col = 0; row = 3;
@@ -1865,105 +1868,192 @@ namespace Oxide.Plugins
         #endregion
 
         #region load_defaults
-        private void LoadDefaultRuleset(bool drop=true)
-        {
-            if (drop)
-            {
-                SQLiteCommand cd = new SQLiteCommand("DROP TABLE IF EXISTS rpve_rulesets", sqlConnection);
-                cd = new SQLiteCommand("CREATE TABLE rpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255))", sqlConnection);
-            }
-            SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_player', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_animal', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_animal', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_helicopter', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_minicopter', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_npc', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_player', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_building', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_resource', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_player', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_animal', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_npc', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'scrapcopter_player', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_player', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'trap_trap', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_player', null, null, null)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_resource', null, null, null)", sqlConnection);
-        }
-
         // Default entity categories and types to consider
         private void LoadDefaultEntities()
         {
+            Puts("Trying to recreate entities data...");
             SQLiteCommand ct = new SQLiteCommand("DROP TABLE IF EXISTS rpve_entities", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("CREATE TABLE rpve_entities (name varchar(32), type varchar(32), custom INTEGER(1) DEFAULT 0)", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'NPCPlayerApex')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'NPCPlayerApex')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'BradleyAPC')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'HumanNPC')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'BaseNpc')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'HTNPlayer')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Murderer')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Scientist')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Zombie')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'ResourceEntity')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'LootContainer')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'DroppedItemContainer')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'BaseCorpse')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'TeslaCoil')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'BearTrap')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'FlameTurret')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'Landmine')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'GunTrap')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'ReactiveTarget')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'spikes.floor')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'Landmine')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'BaseAnimalNPC')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Boar')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Bear')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Chicken')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Stag')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Wolf')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Horse')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'BaseOven')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'FireBall')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('player', 'BasePlayer')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('building', 'BuildingBlock')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('helicopter', 'BaseHeli')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('minicopter', 'Minicopter')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter')", sqlConnection);
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npcturret', 'NPCAutoTurret')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'BradleyAPC', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'HumanNPC', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'BaseNpc', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'HTNPlayer', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Murderer', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Scientist', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Zombie', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'ResourceEntity', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'LootContainer', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'DroppedItemContainer', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'BaseCorpse', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'TeslaCoil', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'BearTrap', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'FlameTurret', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'Landmine', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'GunTrap', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'ReactiveTarget', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'spikes.floor', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'Landmine', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'BaseAnimalNPC', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Boar', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Bear', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Chicken', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Stag', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Wolf', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Horse', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'BaseOven', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'FireBall', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('player', 'BasePlayer', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('building', 'BuildingBlock', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('helicopter', 'BaseHeli', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('minicopter', 'Minicopter', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npcturret', 'NPCAutoTurret', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+        }
+
+        private void LoadDefaultRuleset(bool drop=true)
+        {
+            Puts("Trying to recreate ruleset data...");
+            if (drop)
+            {
+                SQLiteCommand cd = new SQLiteCommand("DROP TABLE IF EXISTS rpve_rulesets", sqlConnection);
+                cd.ExecuteNonQuery();
+                cd = new SQLiteCommand("CREATE TABLE rpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255))", sqlConnection);
+                cd.ExecuteNonQuery();
+            }
+            SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_player', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_animal', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_animal', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_helicopter', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_minicopter', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_npc', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_player', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_building', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_resource', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_player', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_animal', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_npc', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'scrapcopter_player', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_player', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'trap_trap', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_player', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_resource', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
         }
 
         // Default rules which can be applied
         private void LoadDefaultRules()
         {
+            Puts("Trying to recreate rules data...");
             SQLiteCommand ct = new SQLiteCommand("DROP TABLE IF EXISTS rpve_rules", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("CREATE TABLE rpve_rules (name varchar(32),description varchar(255),damage INTEGER(1) DEFAULT 1,custom INTEGER(1) DEFAULT 0,source VARCHAR(32),target VARCHAR(32));", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('npc_player', 'NPC can damage player', 1, 0, 'npc', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_npc', 'Player can damage NPC', 1, 0, 'player', 'npc')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_player', 'Player can damage Player', 1, 0, 'player', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_building', 'Player can damage Building', 1, 0, 'player', 'building')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_resource', 'Player can damage Resource', 1, 0, 'player', 'resource')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('players_traps', 'Player can damage Trap', 1, 0, 'player', 'trap')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('traps_players', 'Trap can damage Player', 1, 0, 'trap', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_animal', 'Player can damage Animal', 1, 0, 'player', 'animal')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('animal_player', 'Animal can damage Player', 1, 0, 'animal', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('animal_animal', 'Animal can damage Animal', 1, 0, 'animal', 'animal')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('helicopter_player', 'Helicopter can damage Player', 1, 0, 'helicopter', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('helicopter_building', 'Helicopter can damage Building', 1, 0, 'helicopter', 'building')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_minicopter', 'Player can damage Minicopter', 1, 0, 'player', 'minicopter')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('minicopter_player', 'Minicopter can damage Player', 1, 0, 'minicopter', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_scrapcopter', 'Player can damage Scrapcopter', 1, 0, 'player', 'scrapcopter')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('scrapcopter_player', 'Scrapcopter can damage Player', 1, 0, 'scrapcopter', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_helicopter', 'Player can damage Helicopter', 1, 0, 'player', 'helicopter')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('highwalls_player', 'Highwall can damage Player', 1, 0, 'highwall', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('npcturret_player', 'NPCAutoTurret can damage Player', 1, 0, 'npcturret', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('npcturret_animal', 'NPCAutoTurret can damage Animal', 1, 0, 'npcturret', 'animal')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('npcturret_npc', 'NPCAutoTurret can damage NPC', 1, 0, 'npcturret', 'npc')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('fire_player', 'Fire can damage Player', 1, 0, 'fire', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('fire_resource', 'Fire can damage Resource', 1, 0, 'fire', 'resource')", sqlConnection);
+            ct.ExecuteNonQuery();
         }
         #endregion
     }
