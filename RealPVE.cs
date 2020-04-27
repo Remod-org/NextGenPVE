@@ -597,17 +597,21 @@ namespace Oxide.Plugins
                             {
                                 case "defload":
                                     rs = "default";
-                                    new SQLiteCommand("DELETE FROM rpve_rulesets WHERE name='default'", sqlConnection);
+                                    SQLiteCommand defload =  new SQLiteCommand("DELETE FROM rpve_rulesets WHERE name='default'", sqlConnection);
+                                    defload.ExecuteNonQuery();
                                     LoadDefaultRuleset(false);
                                     break;
                                 case "enable":
-                                    new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='{newval}' WHERE name='{rs}'", sqlConnection);
+                                    SQLiteCommand en = new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='{newval}' WHERE name='{rs}'", sqlConnection);
+                                    en.ExecuteNonQuery();
                                     break;
                                 case "damage":
-                                    new SQLiteCommand($"UPDATE rpve_rulesets SET damage='{newval}' WHERE name='{rs}'", sqlConnection);
+                                    SQLiteCommand dm = new SQLiteCommand($"UPDATE rpve_rulesets SET damage='{newval}' WHERE name='{rs}'", sqlConnection);
+                                    dm.ExecuteNonQuery();
                                     break;
                                 case "name":
-                                    new SQLiteCommand($"UPDATE rpve_rulesets SET name='{newval}' WHERE name='{rs}'", sqlConnection);
+                                    SQLiteCommand nm = new SQLiteCommand($"UPDATE rpve_rulesets SET name='{newval}' WHERE name='{rs}'", sqlConnection);
+                                    nm.ExecuteNonQuery();
                                     rs = newval;
                                     break;
                                 case "zone":
@@ -722,13 +726,15 @@ namespace Oxide.Plugins
                         }
                         //pverule editruleset {rulesetname} delete
                         //pverule editruleset {rulesetname} zone
+                        //pverule editruleset new src_exclude add
                         // This is where we either delete or load the dialog to edit values.
                         else if (args.Length > 2)
                         {
                             switch (args[2])
                             {
                                 case "delete":
-                                    new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{args[1]}'", sqlConnection);
+                                    SQLiteCommand drs = new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{args[1]}'", sqlConnection);
+                                    drs.ExecuteNonQuery();
                                     CuiHelper.DestroyUi(player, RPVEEDITRULESET);
                                     GUIRuleSets(player);
                                     break;
@@ -763,7 +769,7 @@ namespace Oxide.Plugins
                                         break;
                                     }
                                     Puts($"Creating clone {clone}");
-                                    SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets ('{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) SELECT (damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) FROM rpve_rulesets WHERE name='{oldname}'", sqlConnection);
+                                    SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets (name, damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) SELECT '{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule FROM rpve_rulesets WHERE name='{oldname}'", sqlConnection);
                                     newrs.ExecuteNonQuery();
                                     GUIRuleSets(player);
                                     GUIRulesetEditor(player, clone);
@@ -791,7 +797,7 @@ namespace Oxide.Plugins
                                     break;
                                 }
                                 Puts($"Creating new ruleset {newname}");
-                                SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets ('{newname}', 0, 1, 0, 0, '', '', '', 0)", sqlConnection);
+                                SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES ('{newname}', 0, 1, 0, 0, '', '', '', 0)", sqlConnection);
                                 newrs.ExecuteNonQuery();
                                 GUIRuleSets(player);
                             }
@@ -1233,7 +1239,7 @@ namespace Oxide.Plugins
 
         private void GUISelectExclusion(BasePlayer player, string rulesetname, string srctgt)
         {
-            // Need to run over entities based on a check of what is in the rule...
+            Puts($"GUISelectExclusion called for {rulesetname}");
             CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
             string t = Lang("source"); if (srctgt == "tgt_exclude") t = Lang("target");
 
