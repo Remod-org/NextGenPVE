@@ -613,21 +613,25 @@ namespace Oxide.Plugins
                                 case "zone":
                                     if (newval == "delete")
                                     {
-                                        new SQLiteCommand($"UPDATE rpve_rulesets SET zone='' WHERE name='{rs}'", sqlConnection);
+                                        SQLiteCommand zup =  new SQLiteCommand($"UPDATE rpve_rulesets SET zone='' WHERE name='{rs}'", sqlConnection);
+                                        zup.ExecuteNonQuery();
                                     }
                                     else
                                     {
-                                        new SQLiteCommand($"UPDATE rpve_rulesets SET zone='{newval}' WHERE name='{rs}'", sqlConnection);
+                                        SQLiteCommand zu = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='{newval}' WHERE name='{rs}'", sqlConnection);
+                                        zu.ExecuteNonQuery();
                                     }
                                     break;
                                 case "schedule":
                                     if (newval == "0")
                                     {
-                                        new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='' WHERE name='{rs}'", sqlConnection);
+                                        SQLiteCommand use = new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='' WHERE name='{rs}'", sqlConnection);
+                                        use.ExecuteNonQuery();
                                     }
                                     else
                                     {
-                                        new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='{newval}' WHERE name='{rs}'", sqlConnection);
+                                        SQLiteCommand us =  new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='{newval}' WHERE name='{rs}'", sqlConnection);
+                                        us.ExecuteNonQuery();
                                     }
                                     break;
                                 case "except":
@@ -637,6 +641,7 @@ namespace Oxide.Plugins
                                     switch (args[4])
                                     {
                                         case "add":
+                                            Puts($"SELECT exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'");
                                             SQLiteCommand ce = new SQLiteCommand($"SELECT exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", sqlConnection);
                                             SQLiteDataReader re = ce.ExecuteReader();
                                             bool isNew = true;
@@ -646,11 +651,14 @@ namespace Oxide.Plugins
                                             }
                                             if (isNew)
                                             {
-                                                new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', ''", sqlConnection);
+                                                Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
+                                                SQLiteCommand ae = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '', 0)", sqlConnection);
+                                                ae.ExecuteNonQuery();
                                             }
                                             break;
                                         case "delete":
-                                            new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}", sqlConnection);
+                                            SQLiteCommand ad =  new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", sqlConnection);
+                                            ad.ExecuteNonQuery();
                                             break;
                                     }
                                     break;
@@ -1005,7 +1013,7 @@ namespace Oxide.Plugins
             int numExceptions = 0;
             if (configData.Options.useSQLITE)
             {
-                SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT exception FROM rpve_rulesets WHERE name='{rulesetname}'", sqlConnection);
+                SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT exception FROM rpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", sqlConnection);
                 SQLiteDataReader rsread = getrs.ExecuteReader();
                 while (rsread.Read())
                 {
@@ -1101,7 +1109,6 @@ namespace Oxide.Plugins
 
             if(noExclusions)
             {
-//                col--;
                 pb = GetButtonPositionP(row, col);
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude add");
             }
@@ -1165,7 +1172,7 @@ namespace Oxide.Plugins
             int col = 0;
             int row = 0;
 
-            SQLiteCommand crs = new SQLiteCommand($"SELECT exception from rpve_rules WHERE name='{rulesetname}'", sqlConnection);
+            SQLiteCommand crs = new SQLiteCommand($"SELECT exception from rpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", sqlConnection);
             SQLiteDataReader crd = crs.ExecuteReader();
             List<string> exc = new List<string>();
             while(crd.Read())
@@ -1173,7 +1180,7 @@ namespace Oxide.Plugins
                 exc.Add(crd.GetString(0));
             }
 
-            SQLiteCommand sr = new SQLiteCommand($"SELECT DISTINCT name, custom from rpve_rules", sqlConnection);
+            SQLiteCommand sr = new SQLiteCommand($"SELECT DISTINCT name, custom from rpve_rules ORDER BY name", sqlConnection);
             SQLiteDataReader rr = sr.ExecuteReader();
 
             float[] pb = GetButtonPositionP(row, col);
