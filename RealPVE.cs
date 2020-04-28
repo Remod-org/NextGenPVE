@@ -11,6 +11,7 @@ using System.Data.SQLite;
 using System.IO;
 
 // TODO
+// Finish sqlite rework
 // Add the actual schedule handling...
 // Finish work on custom rule editor gui (src/target)
 // Sanity checking for overlapping rule/zone combinations.  Schedule may have impact.
@@ -33,11 +34,12 @@ namespace Oxide.Plugins
         private ConfigData configData;
 
         SQLiteConnection sqlConnection;
+        private string connStr;
 
         [PluginReference]
-        Plugin ZoneManager, LiteZones, HumanNPC, Friends, Clans, RustIO;
+        private readonly Plugin ZoneManager, LiteZones, HumanNPC, Friends, Clans, RustIO;
 
-        private string logfilename = "log";
+        private readonly string logfilename = "log";
         private bool dolog = false;
         private bool enabled = true;
 
@@ -64,8 +66,8 @@ namespace Oxide.Plugins
             if (configData.Options.useSQLITE)
             {
                 Puts("Creating connection...");
-                string cs = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}realpve.db;";
-                sqlConnection = new SQLiteConnection(cs);
+                connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}realpve.db;";
+                sqlConnection = new SQLiteConnection(connStr);
                 Puts("Opening...");
                 sqlConnection.Open();
             }
@@ -165,18 +167,21 @@ namespace Oxide.Plugins
                 bool found = false;
 
                 while (rentry.Read()) { found = true; }
+                rentry.Close();
                 if(!found) LoadDefaultEntities();
 
                 found = false;
                 r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='rpve_rules'", sqlConnection);
                 rentry = r.ExecuteReader();
                 while(rentry.Read()) { found = true; }
+                rentry.Close();
                 if(!found) LoadDefaultRules();
 
                 found = false;
                 r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='rpve_rulesets'", sqlConnection);
                 rentry = r.ExecuteReader();
                 while(rentry.Read()) { found = true; }
+                rentry.Close();
                 if(!found) LoadDefaultRuleset();
             }
         }
@@ -315,6 +320,7 @@ namespace Oxide.Plugins
             {
                 foundrs = true;
             }
+            ar.Close();
             if(foundrs)
             {
                 if (rpvezonemaps.ContainsKey(rulesetname) && !rpvezonemaps[rulesetname].map.Contains(key))
@@ -356,6 +362,8 @@ namespace Oxide.Plugins
                 foundrs.Add(rn);
                 rpvezonemaps.Remove(rn);
             }
+            rd.Close();
+
             if (foundrs.Count > 0)
             {
                 foreach (var found in foundrs)
@@ -453,6 +461,7 @@ namespace Oxide.Plugins
                     src = readMe.GetString(0);
                     break;
                 }
+                readMe.Close();
 
                 findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection);
                 readMe = findIt.ExecuteReader();
@@ -480,7 +489,7 @@ namespace Oxide.Plugins
                         int en = enabled ? 1 : 0;
                         SQLiteCommand rq = new SQLiteCommand($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='{en}' AND exception='{src}_{tgt}'", sqlConnection);
                         SQLiteDataReader entry = rq.ExecuteReader();
-                   
+
                         while(entry.Read())
                         {
                             // source and target exist - verify that they are not excluded
@@ -507,6 +516,7 @@ namespace Oxide.Plugins
                                 break;
                             }
                        }
+                       entry.Close();
                     }
                 }
                 if (rulesetzone == "lookup" && rpvezonemaps.ContainsKey(rulesetname))
@@ -597,45 +607,93 @@ namespace Oxide.Plugins
                             {
                                 case "defload":
                                     rs = "default";
-                                    SQLiteCommand defload =  new SQLiteCommand("DELETE FROM rpve_rulesets WHERE name='default'", sqlConnection);
-                                    defload.ExecuteNonQuery();
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand defload = new SQLiteCommand("DELETE FROM rpve_rulesets WHERE name='default'", c))
+                                        {
+                                            defload.ExecuteNonQuery();
+                                        }
+                                    }
                                     LoadDefaultRuleset(false);
                                     break;
                                 case "enable":
-                                    SQLiteCommand en = new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='{newval}' WHERE name='{rs}'", sqlConnection);
-                                    en.ExecuteNonQuery();
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand en = new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='{newval}' WHERE name='{rs}'", c))
+                                        {
+                                            en.ExecuteNonQuery();
+                                        }
+                                    }
                                     break;
                                 case "damage":
-                                    SQLiteCommand dm = new SQLiteCommand($"UPDATE rpve_rulesets SET damage='{newval}' WHERE name='{rs}'", sqlConnection);
-                                    dm.ExecuteNonQuery();
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand dm = new SQLiteCommand($"UPDATE rpve_rulesets SET damage='{newval}' WHERE name='{rs}'", c))
+                                        {
+                                            dm.ExecuteNonQuery();
+                                        }
+                                    }
                                     break;
                                 case "name":
-                                    SQLiteCommand nm = new SQLiteCommand($"UPDATE rpve_rulesets SET name='{newval}' WHERE name='{rs}'", sqlConnection);
-                                    nm.ExecuteNonQuery();
-                                    rs = newval;
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand nm = new SQLiteCommand($"UPDATE rpve_rulesets SET name='{newval}' WHERE name='{rs}'", c))
+                                        {
+                                            nm.ExecuteNonQuery();
+                                            rs = newval;
+                                        }
+                                    }
                                     break;
                                 case "zone":
                                     if (newval == "delete")
                                     {
-                                        SQLiteCommand zup =  new SQLiteCommand($"UPDATE rpve_rulesets SET zone='' WHERE name='{rs}'", sqlConnection);
-                                        zup.ExecuteNonQuery();
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                        {
+                                            c.Open();
+                                            using (SQLiteCommand zup = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='' WHERE name='{rs}'", c))
+                                            {
+                                                zup.ExecuteNonQuery();
+                                            }
+                                        }
                                     }
                                     else
                                     {
-                                        SQLiteCommand zu = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='{newval}' WHERE name='{rs}'", sqlConnection);
-                                        zu.ExecuteNonQuery();
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                        {
+                                            c.Open();
+                                            using (SQLiteCommand zu = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='{newval}' WHERE name='{rs}'", c))
+                                            {
+                                                zu.ExecuteNonQuery();
+                                            }
+                                        }
                                     }
                                     break;
                                 case "schedule":
                                     if (newval == "0")
                                     {
-                                        SQLiteCommand use = new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='' WHERE name='{rs}'", sqlConnection);
-                                        use.ExecuteNonQuery();
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                        {
+                                            c.Open();
+                                            using (SQLiteCommand use = new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='' WHERE name='{rs}'", c))
+                                            {
+                                                use.ExecuteNonQuery();
+                                            }
+                                        }
                                     }
                                     else
                                     {
-                                        SQLiteCommand us =  new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='{newval}' WHERE name='{rs}'", sqlConnection);
-                                        us.ExecuteNonQuery();
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                        {
+                                            c.Open();
+                                            using (SQLiteCommand us = new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='{newval}' WHERE name='{rs}'", c))
+                                            {
+                                                us.ExecuteNonQuery();
+                                            }
+                                        }
                                     }
                                     break;
                                 case "except":
@@ -646,9 +704,9 @@ namespace Oxide.Plugins
                                     {
                                         case "add":
                                             Puts($"SELECT exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'");
+                                            bool isNew = true;
                                             SQLiteCommand ce = new SQLiteCommand($"SELECT exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", sqlConnection);
                                             SQLiteDataReader re = ce.ExecuteReader();
-                                            bool isNew = true;
                                             while (re.Read())
                                             {
                                                 isNew = false;
@@ -656,13 +714,25 @@ namespace Oxide.Plugins
                                             if (isNew)
                                             {
                                                 Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
-                                                SQLiteCommand ae = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '', 0)", sqlConnection);
-                                                ae.ExecuteNonQuery();
+                                                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                                {
+                                                    c.Open();
+                                                    using (SQLiteCommand ae = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '', 0)", c))
+                                                    {
+                                                        ae.ExecuteNonQuery();
+                                                    }
+                                                }
                                             }
                                             break;
                                         case "delete":
-                                            SQLiteCommand ad =  new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", sqlConnection);
-                                            ad.ExecuteNonQuery();
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                            {
+                                                c.Open();
+                                                using (SQLiteCommand ad = new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", c))
+                                                {
+                                                    ad.ExecuteNonQuery();
+                                                }
+                                            }
                                             break;
                                     }
                                     break;
@@ -672,24 +742,76 @@ namespace Oxide.Plugins
                                     switch (args[4])
                                     {
                                         case "add":
-                                            Puts($"SELECT src_exclude FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'");
-                                            SQLiteCommand cex = new SQLiteCommand($"SELECT src_exclude FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'", sqlConnection);
-                                            SQLiteDataReader rex = cex.ExecuteReader();
-                                            bool isNew = true;
-                                            while (rex.Read())
+                                            string etype = null;
+                                            SQLiteCommand aee = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{newval}'", sqlConnection);
+                                            SQLiteDataReader aed = aee.ExecuteReader();
+                                            while (aed.Read())
                                             {
-                                                isNew = false;
+                                                etype = aed.GetString(0) ?? "";
+                                                Puts($"Found type {etype} of {newval}");
                                             }
-                                            if (isNew)
+
+                                            if(etype != "")
                                             {
-                                                Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
-                                                SQLiteCommand aes = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '', 0)", sqlConnection);
-                                                aes.ExecuteNonQuery();
+                                                string exception = ""; string oldsrc = "";
+                                                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                                {
+                                                    c.Open();
+                                                    using (SQLiteCommand cex = new SQLiteCommand($"SELECT exception, src_exclude FROM rpve_rulesets WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
+                                                    {
+                                                        SQLiteDataReader rex = cex.ExecuteReader();
+                                                        while (rex.Read())
+                                                        {
+                                                            exception = rex.GetValue(0).ToString();
+                                                            oldsrc = rex.GetValue(1).ToString();
+                                                            Puts($"Found existing exception '{exception}' and src_exclude of '{oldsrc}'");
+                                                        }
+                                                    }
+                                                }
+                                                if (exception != "" && oldsrc != "")
+                                                {
+                                                    if (!oldsrc.Contains(newval))
+                                                    {
+                                                        string newsrc = string.Join(",", oldsrc, newval);
+                                                        Puts($"Adding src_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}, oldsrc = '{oldsrc}'");
+                                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                                        {
+                                                            c.Open();
+                                                            Puts($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
+                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
+                                                            {
+                                                                aes.ExecuteNonQuery();
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                else if(exception != "")
+                                                {
+                                                    if (!oldsrc.Contains(newval))
+                                                    {
+                                                        Puts($"Updating src_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}, oldsrc = '{oldsrc}'");
+                                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                                        {
+                                                            c.Open();
+                                                            Puts($"UPDATE rpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
+                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
+                                                            {
+                                                                aes.ExecuteNonQuery();
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                             break;
                                         case "delete":
-                                            SQLiteCommand ads =  new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'", sqlConnection);
-                                            ads.ExecuteNonQuery();
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                            {
+                                                c.Open();
+                                                using (SQLiteCommand ads = new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'", c))
+                                                {
+                                                    ads.ExecuteNonQuery();
+                                                }
+                                            }
                                             break;
                                     }
                                     break;
@@ -699,24 +821,76 @@ namespace Oxide.Plugins
                                     switch (args[4])
                                     {
                                         case "add":
-                                            Puts($"SELECT tgt_exclude FROM rpve_rulesets WHERE name='{rs}' AND tgt_exclude='{newval}'");
-                                            SQLiteCommand cext = new SQLiteCommand($"SELECT tgt_exclude FROM rpve_rulesets WHERE name='{rs}' AND tgt_exclude='{newval}'", sqlConnection);
-                                            SQLiteDataReader rex = cext.ExecuteReader();
-                                            bool isNew = true;
-                                            while (rex.Read())
+                                            string etype = null;
+                                            SQLiteCommand aee = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{newval}'", sqlConnection);
+                                            SQLiteDataReader aed = aee.ExecuteReader();
+                                            while (aed.Read())
                                             {
-                                                isNew = false;
+                                                etype = aed.GetString(0) ?? "";
+                                                Puts($"Found type {etype} of {newval}");
                                             }
-                                            if (isNew)
+
+                                            if(etype != "")
                                             {
-                                                Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{newval}', '', '')");
-                                                SQLiteCommand aes = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '', '{newval}', '', 0)", sqlConnection);
-                                                aes.ExecuteNonQuery();
+                                                string exception = ""; string oldtgt = "";
+                                                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                                {
+                                                    c.Open();
+                                                    using (SQLiteCommand cex = new SQLiteCommand($"SELECT exception, tgt_exclude FROM rpve_rulesets WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
+                                                    {
+                                                        SQLiteDataReader rex = cex.ExecuteReader();
+                                                        while (rex.Read())
+                                                        {
+                                                            exception = rex.GetValue(0).ToString();
+                                                            oldtgt = rex.GetValue(1).ToString();
+                                                            Puts($"Found existing exception {exception} and tgt_exclude of {oldtgt}");
+                                                        }
+                                                    }
+                                                }
+                                                if (exception != "" && oldtgt != "")
+                                                {
+                                                    if (!oldtgt.Contains(newval))
+                                                    {
+                                                        string newtgt = string.Join(",", oldtgt, newval);
+                                                        Puts($"Adding tgt_exclude of '{newtgt}' to ruleset: '{rs}', type: '{etype}' - Input was {newval}");
+                                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                                        {
+                                                            c.Open();
+                                                            Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
+                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
+                                                            {
+                                                                aes.ExecuteNonQuery();
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                else if(exception != "")
+                                                {
+                                                    if (!oldtgt.Contains(newval))
+                                                    {
+                                                        Puts($"Updating tgt_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}");
+                                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                                        {
+                                                            c.Open();
+                                                            Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
+                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
+                                                            {
+                                                                aes.ExecuteNonQuery();
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                             break;
                                         case "delete":
-                                            SQLiteCommand ads =  new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'", sqlConnection);
-                                            ads.ExecuteNonQuery();
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                            {
+                                                c.Open();
+                                                using (SQLiteCommand ads = new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND src_exclude='{newval}'", c))
+                                                {
+                                                    ads.ExecuteNonQuery();
+                                                }
+                                            }
                                             break;
                                     }
                                     break;
@@ -733,8 +907,14 @@ namespace Oxide.Plugins
                             switch (args[2])
                             {
                                 case "delete":
-                                    SQLiteCommand drs = new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{args[1]}'", sqlConnection);
-                                    drs.ExecuteNonQuery();
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand drs = new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{args[1]}'", c))
+                                        {
+                                            drs.ExecuteNonQuery();
+                                        }
+                                    }
                                     CuiHelper.DestroyUi(player, RPVEEDITRULESET);
                                     GUIRuleSets(player);
                                     break;
@@ -766,11 +946,18 @@ namespace Oxide.Plugins
                                             if (id > 4) break;
                                             clone = oldname + id.ToString();
                                         }
+                                        crs.Close();
                                         break;
                                     }
                                     Puts($"Creating clone {clone}");
-                                    SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets (name, damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) SELECT '{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule FROM rpve_rulesets WHERE name='{oldname}'", sqlConnection);
-                                    newrs.ExecuteNonQuery();
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets (name, damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) SELECT '{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule FROM rpve_rulesets WHERE name='{oldname}'", c))
+                                        {
+                                            newrs.ExecuteNonQuery();
+                                        }
+                                    }
                                     GUIRuleSets(player);
                                     GUIRulesetEditor(player, clone);
                                     break;
@@ -794,11 +981,18 @@ namespace Oxide.Plugins
                                         if (id > 4) break;
                                         newname = "new" + id.ToString();
                                     }
+                                    addcrsd.Close();
                                     break;
                                 }
                                 Puts($"Creating new ruleset {newname}");
-                                SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES ('{newname}', 0, 1, 0, 0, '', '', '', 0)", sqlConnection);
-                                newrs.ExecuteNonQuery();
+                                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                {
+                                    c.Open();
+                                    using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES ('{newname}', 0, 1, 0, 0, '', '', '', 0)", c))
+                                    {
+                                        newrs.ExecuteNonQuery();
+                                    }
+                                }
                                 GUIRuleSets(player);
                             }
 
@@ -936,6 +1130,7 @@ namespace Oxide.Plugins
                     UI.Button(ref container, RPVERULELIST, UI.Color(rColor, 1f), rsname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rsname}");
                     row++;
                 }
+                rsread.Close();
                 pb = GetButtonPositionP(row, col);
                 UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset add");
             }
@@ -970,6 +1165,7 @@ namespace Oxide.Plugins
                         schedule = "0";
                     }
                 }
+                rsread.Close();
             }
 
             CuiElementContainer container = UI.Container(RPVEEDITRULESET, UI.Color("3b3b3b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
@@ -1044,7 +1240,8 @@ namespace Oxide.Plugins
                 SQLiteDataReader rsread = getrs.ExecuteReader();
                 while (rsread.Read())
                 {
-                    string except = rsread.GetString(0) ?? "";
+                    string except = rsread.GetValue(0).ToString() ?? null;
+                    if(except == "") continue;
                     if (row > 11)
                     {
                         row = 1;
@@ -1055,6 +1252,7 @@ namespace Oxide.Plugins
                     UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
                     row++;
                 }
+                rsread.Close();
             }
 
             if (numExceptions == 0)
@@ -1087,7 +1285,8 @@ namespace Oxide.Plugins
                     SQLiteDataReader rsread = getrs.ExecuteReader();
                     while (rsread.Read())
                     {
-                        string exclude = rsread.GetValue(0).ToString() ?? "";
+                        string exclude = rsread.GetValue(0).ToString();
+                        if(exclude == "") continue;
                         noExclusions = false;
                         if (row > 11)
                         {
@@ -1099,13 +1298,14 @@ namespace Oxide.Plugins
                         UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
                         row++;
                     }
+                    rsread.Close();
                 }
             }
-            if(noExclusions)
+            if(noExclusions && numExceptions > 0)
             {
                 col--; col--;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude add");
+                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
             }
 
             col++; row = 1;
@@ -1118,8 +1318,8 @@ namespace Oxide.Plugins
                     SQLiteDataReader rsread = getrs.ExecuteReader();
                     while (rsread.Read())
                     {
-                        string exclude = rsread.GetValue(0).ToString() ?? "";
-                        Puts("GOT HERE");
+                        string exclude = rsread.GetValue(0).ToString();
+                        if(exclude == "") continue;
                         noExclusions = false;
                         if (row > 11)
                         {
@@ -1131,13 +1331,14 @@ namespace Oxide.Plugins
                         UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
                         row++;
                     }
+                    rsread.Close();
                 }
             }
 
-            if(noExclusions)
+            if(noExclusions && numExceptions > 0)
             {
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude add");
+                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
             }
 
             col = 0; row = 3;
@@ -1160,9 +1361,9 @@ namespace Oxide.Plugins
             }
             if (rulesetname != "default")
             {
-                //                row++;
-                //                pb = GetButtonPositionP(row, col);
-                //                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+//                row++;
+//                pb = GetButtonPositionP(row, col);
+//                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
 
             col = 0; row = 5;
@@ -1170,9 +1371,9 @@ namespace Oxide.Plugins
             if (schedule != null)
             {
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
-                //                row++;
-                //                pb = GetButtonPositionP(row, col);
-                //                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+//                row++;
+//                pb = GetButtonPositionP(row, col);
+//                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
             else
             {
@@ -1206,6 +1407,7 @@ namespace Oxide.Plugins
             {
                 exc.Add(crd.GetString(0));
             }
+            crd.Close();
 
             SQLiteCommand sr = new SQLiteCommand($"SELECT DISTINCT name, custom from rpve_rules ORDER BY name", sqlConnection);
             SQLiteDataReader rr = sr.ExecuteReader();
@@ -1233,6 +1435,7 @@ namespace Oxide.Plugins
                 }
                 row++;
             }
+            rr.Close();
 
             CuiHelper.AddUi(player, container);
         }
@@ -1251,52 +1454,76 @@ namespace Oxide.Plugins
             int col = 0;
             int row = 0;
 
-            List<string> foundit = new List<string>();
+            List<string> foundsrc = new List<string>();
+            List<string> foundtgt = new List<string>();
             List<string> src_exclude = new List<string>();
             List<string> tgt_exclude = new List<string>();
+
+            // Get ruleset src and tgt exclusions
             SQLiteCommand rs = new SQLiteCommand("SELECT src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}'", sqlConnection);
             SQLiteDataReader rsd = rs.ExecuteReader();
             while(rsd.Read())
             {
-                src_exclude.Add(rsd.GetString(0));
-                tgt_exclude.Add(rsd.GetString(1));
+                string sr = rsd.GetValue(0).ToString();
+                string tg = rsd.GetValue(1).ToString();
+                if (sr != "" && tg != "")
+                {
+                    src_exclude.Add(sr);
+                    tgt_exclude.Add(tg);
+                }
             }
+            rsd.Close();
 
+            // Get organized entities list
             Dictionary<string, RealPVEEntities> rpveentities = new Dictionary<string, RealPVEEntities>();
-            SQLiteCommand ent = new SQLiteCommand("SELECT name,type,custom FROM rpve_entities", sqlConnection);
+            SQLiteCommand ent = new SQLiteCommand("SELECT name,type,custom FROM rpve_entities ORDER BY name", sqlConnection);
             SQLiteDataReader ntd = ent.ExecuteReader();
             while(ntd.Read())
             {
                 string nm = ntd.GetString(0);
+                string tp = ntd.GetString(1);
+                if (nm == "" || tp == "") continue;
+                bool cs = ntd.GetBoolean(2);
+                //Puts($"Adding {nm} {tp} to entities list");
                 if (!rpveentities.ContainsKey(nm))
                 {
-                    rpveentities[nm] = new RealPVEEntities() { types = new List<string> { ntd.GetString(1) }, custom = ntd.GetBoolean(2) };
+                    rpveentities[nm] = new RealPVEEntities() { types = new List<string> { tp }, custom = cs };
                 }
                 else
                 {
-                    rpveentities[nm].types.Add(ntd.GetString(1));
+                    rpveentities[nm].types.Add(tp);
                 }
             }
+            ntd.Close();
 
-            SQLiteCommand crs = new SQLiteCommand($"SELECT exception from rpve_rules WHERE name='{rulesetname}'", sqlConnection);
+            // Go through the ruleset looking for exceptions, which we convert into entity types
+            SQLiteCommand crs = new SQLiteCommand($"SELECT exception from rpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", sqlConnection);
             SQLiteDataReader crd = crs.ExecuteReader();
             List<string> exc = new List<string>();
             while(crd.Read())
             {
-                string rulename = crd.GetString(0);
+                string rulename = crd.GetValue(0).ToString();
+                if (rulename == "") continue;
+                string src = null;
+                string tgt = null;
 
-                string[] st = rulename.Split('_');
-                string src = st[0]; string tgt = st[1];
+                if (rulename != null && rulename != "")
+                {
+                    string[] st = rulename.Split('_');
+                    src = st[0]; tgt = st[1];
+                }
 
                 float[] pb = GetButtonPositionP(row, col);
                 switch (srctgt)
                 {
                     case "src_exclude":
-                        if (!rpveentities.ContainsKey(src)) continue;
+                        if (src == null || !rpveentities.ContainsKey(src)) break;
                         foreach (string type in rpveentities[src].types)
                         {
-                            if (foundit.Contains(type)) continue;
-                            foundit.Add(type);
+                            Puts($"Checking for {type}");
+                            if (type == "") continue;
+                            if (foundsrc.Contains(type)) continue;
+                            foundsrc.Add(type);
                             if (row > 10)
                             {
                                 row = 0;
@@ -1305,7 +1532,8 @@ namespace Oxide.Plugins
                             pb = GetButtonPositionP(row, col);
                             string eColor = "#d85540";
 
-                            if (src_exclude == null || !src_exclude.Contains(type))
+                            Puts($"  Creating button for {type}");
+                            if (!src_exclude.Contains(type))
                             {
                                 UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} add");
                             }
@@ -1314,14 +1542,17 @@ namespace Oxide.Plugins
                                 eColor = "#55d840";
                                 UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} delete");
                             }
+                            row++;
                         }
                         break;
                     case "tgt_exclude":
-                        if (!rpveentities.ContainsKey(tgt)) continue;
+                        if (tgt == null || !rpveentities.ContainsKey(tgt)) break;
                         foreach (var type in rpveentities[tgt].types)
                         {
-                            if (foundit.Contains(type)) continue;
-                            foundit.Add(type);
+                            Puts($"Checking for {type}");
+                            if (type == "") continue;
+                            if (foundtgt.Contains(type)) continue;
+                            foundtgt.Add(type);
                             if (row > 10)
                             {
                                 row = 0;
@@ -1330,7 +1561,8 @@ namespace Oxide.Plugins
                             pb = GetButtonPositionP(row, col);
                             string eColor = "#d85540";
 
-                            if (tgt_exclude == null || !tgt_exclude.Contains(type))
+                            Puts($"  Creating button for {type}");
+                            if (!tgt_exclude.Contains(type))
                             {
                                 UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} add");
                             }
@@ -1339,11 +1571,13 @@ namespace Oxide.Plugins
                                 eColor = "#55d840";
                                 UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} delete");
                             }
+                            row++;
                         }
                         break;
                 }
                 row++;
             }
+            crd.Close();
 
             CuiHelper.AddUi(player, container);
         }
@@ -1392,6 +1626,8 @@ namespace Oxide.Plugins
                 source = rd.GetString(4);
                 target = rd.GetString(5);
             }
+            rd.Close();
+
             row = 0; col = 1;
             pb = GetButtonPositionP(row, col);
             if (!custom)
@@ -1450,6 +1686,7 @@ namespace Oxide.Plugins
             {
                 zone = rsd.GetString(0);
             }
+            rsd.Close();
 
             switch (key)
             {
@@ -1533,6 +1770,7 @@ namespace Oxide.Plugins
             {
                 schedule = rsd.GetString(0);
             }
+            rsd.Close();
 
             CuiElementContainer container = UI.Container(RPVESCHEDULEEDIT, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
             UI.Button(ref container, RPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleschedule");
