@@ -515,69 +515,79 @@ namespace Oxide.Plugins
                 string rulesetname = null;
 
                 string src = null; string tgt = null;
-                SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection);
-                SQLiteDataReader readMe = findIt.ExecuteReader();
-                while(readMe.Read())
+                using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection))
                 {
-                    src = readMe.GetString(0);
-                    break;
-                }
-                readMe.Close();
-
-                findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection);
-                readMe = findIt.ExecuteReader();
-                while(readMe.Read())
-                {
-                    tgt = readMe.GetString(0);
-                    break;
-                }
-
-                findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM rpve_rulesets", sqlConnection);
-                readMe = findIt.ExecuteReader();
-                while(readMe.Read())
-                {
-                     rulesetname = readMe.GetString(0);
-                     rulesetzone = readMe.GetString(1);
-                     damage = readMe.GetBoolean(2);
-                     enabled = readMe.GetBoolean(3);
-
-                    DoLog($"Checking {rulesetname} for {stype} attacking {ttype}");
-                    Puts($"Checking {rulesetname} for {stype} attacking {ttype}");
-                    if (src != null && tgt != null)
+                    using (SQLiteDataReader readMe = findIt.ExecuteReader())
                     {
-                        DoLog($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}");
-                        Puts($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}");
-                        int en = enabled ? 1 : 0;
-                        SQLiteCommand rq = new SQLiteCommand($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='{en}' AND exception='{src}_{tgt}'", sqlConnection);
-                        SQLiteDataReader entry = rq.ExecuteReader();
-
-                        while(entry.Read())
+                        while (readMe.Read())
                         {
-                            // source and target exist - verify that they are not excluded
-                            DoLog($"Found exception match for {stype} attacking {ttype}");
-                            Puts($"Found exception match for {stype} attacking {ttype}");
-                            string foundsrc = entry.GetValue(1).ToString();
-                            string foundtgt = entry.GetValue(2).ToString();
-                            if (foundsrc.Contains(stype))
+                            src = readMe.GetString(0);
+                            break;
+                        }
+                    }
+                }
+
+                using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection))
+                {
+                    using (SQLiteDataReader readMe = findIt.ExecuteReader())
+                    {
+                        while (readMe.Read())
+                        {
+                            tgt = readMe.GetString(0);
+                            break;
+                        }
+                    }
+                }
+
+                using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM rpve_rulesets", sqlConnection))
+                {
+                    using (SQLiteDataReader readMe = findIt.ExecuteReader())
+                    {
+                        while (readMe.Read())
+                        {
+                            rulesetname = readMe.GetString(0);
+                            rulesetzone = readMe.GetString(1);
+                            damage = readMe.GetBoolean(2);
+                            enabled = readMe.GetBoolean(3);
+
+                            DoLog($"Checking {rulesetname} for {stype} attacking {ttype}");
+                            if (src != null && tgt != null)
                             {
-                                Puts($"Exclusion for {stype}");
-                                foundmatch = false;
-                                break;
+                                DoLog($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}");
+                                int en = enabled ? 1 : 0;
+                                using (SQLiteCommand rq = new SQLiteCommand($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='{en}' AND exception='{src}_{tgt}'", sqlConnection))
+                                {
+                                    using (SQLiteDataReader entry = rq.ExecuteReader())
+                                    {
+                                        while (entry.Read())
+                                        {
+                                            // source and target exist - verify that they are not excluded
+                                            DoLog($"Found exception match for {stype} attacking {ttype}");
+                                            string foundsrc = entry.GetValue(1).ToString();
+                                            string foundtgt = entry.GetValue(2).ToString();
+                                            if (foundsrc.Contains(stype))
+                                            {
+                                                DoLog($"Exclusion for {stype}");
+                                                foundmatch = false;
+                                                break;
+                                            }
+                                            else if (foundtgt.Contains(ttype))
+                                            {
+                                                DoLog($"Exclusion for {ttype}");
+                                                foundmatch = false;
+                                                break;
+                                            }
+                                            else
+                                            {
+                                                DoLog($"No exclusions for {stype} to {ttype}");
+                                                foundmatch = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            else if (foundtgt.Contains(ttype))
-                            {
-                                Puts($"Exclusion for {ttype}");
-                                foundmatch = false;
-                                break;
-                            }
-                            else
-                            {
-                                Puts($"No exclusions for {stype} to {ttype}");
-                                foundmatch = true;
-                                break;
-                            }
-                       }
-                       entry.Close();
+                        }
                     }
                 }
                 if (rulesetzone == "lookup" && rpvezonemaps.ContainsKey(rulesetname))
@@ -596,12 +606,12 @@ namespace Oxide.Plugins
 
                 if (foundmatch)
                 {
-                    Puts($"Ruleset exception: Setting damage to {(!damage).ToString()}");
+                    DoLog($"Ruleset exception: Setting damage to {(!damage).ToString()}");
                     return !damage;
                 }
                 else
                 {
-                    Puts($"Ruleset match: Setting damage to {damage.ToString()}");
+                    DoLog($"Ruleset match: Setting damage to {damage.ToString()}");
                     return damage;
                 }
             }
@@ -904,6 +914,7 @@ namespace Oxide.Plugins
                                             {
                                                 string newsrc = src_excl.Replace(newval, "");
                                                 newsrc.Replace(",,", ",");
+                                                if (newsrc.Trim() == "," || newsrc.Trim() == ",,") newsrc = "";
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
@@ -1016,6 +1027,7 @@ namespace Oxide.Plugins
                                             {
                                                 string newtgt = tgt_excl.Replace(newval, "");
                                                 newtgt.Replace(",,", ",");
+                                                if (newtgt.Trim() == "," || newtgt.Trim() == ",,") newtgt = "";
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
@@ -1508,7 +1520,7 @@ namespace Oxide.Plugins
             }
 
             // Target exclusions from exceptions above
-            col += 2; row = 1;
+            col++; row = 1;
             noExclusions = true;
             if (numExceptions > 0) // Cannot exclude from exceptions that do not exist
             {
@@ -1559,7 +1571,7 @@ namespace Oxide.Plugins
 
             if(noExclusions && numExceptions > 0)
             {
-                col--; row = 1;
+                row = 1;
                 pb = GetButtonPositionP(row, col);
                 UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
             }
@@ -1707,12 +1719,17 @@ namespace Oxide.Plugins
                         while (rsd.Read())
                         {
                             string a = rsd.GetValue(0).ToString();
-                            Puts($"Adding {a} to src_exclude");
+                            if (a != "")
+                            {
+                                Puts($"Adding {a} to src_exclude");
+                                src_exclude += a;
+                            }
                             string b = rsd.GetValue(1).ToString();
-                            Puts($"Adding {b} to src_exclude");
-
-                            src_exclude += a;
-                            tgt_exclude += b;
+                            if (b != "")
+                            {
+                                Puts($"Adding {b} to tgt_exclude");
+                                tgt_exclude += b;
+                            }
                         }
                     }
                 }
@@ -1734,13 +1751,16 @@ namespace Oxide.Plugins
                             if (nm == "" || tp == "") continue;
                             bool cs = ntd.GetBoolean(2);
                             //Puts($"Adding {nm} {tp} to entities list");
-                            if (!rpveentities.ContainsKey(nm))
+                            if (nm != "" && tp != "")
                             {
-                                rpveentities[nm] = new RealPVEEntities() { types = new List<string> { tp }, custom = cs };
-                            }
-                            else
-                            {
-                                rpveentities[nm].types.Add(tp);
+                                if (!rpveentities.ContainsKey(nm))
+                                {
+                                    rpveentities[nm] = new RealPVEEntities() { types = new List<string> { tp }, custom = cs };
+                                }
+                                else
+                                {
+                                    rpveentities[nm].types.Add(tp);
+                                }
                             }
                         }
                     }
@@ -1776,7 +1796,7 @@ namespace Oxide.Plugins
                                     if (src == null || !rpveentities.ContainsKey(src)) break;
                                     foreach (string type in rpveentities[src].types)
                                     {
-                                        Puts($"Checking for {type}");
+                                        Puts($"Checking for '{type}'");
                                         if (type == "") continue;
                                         if (foundsrc.Contains(type)) continue;
                                         foundsrc.Add(type);
@@ -1805,7 +1825,7 @@ namespace Oxide.Plugins
                                     if (tgt == null || !rpveentities.ContainsKey(tgt)) break;
                                     foreach (var type in rpveentities[tgt].types)
                                     {
-                                        Puts($"Checking for {type}");
+                                        Puts($"Checking for '{type}'");
                                         if (type == "") continue;
                                         if (foundtgt.Contains(type)) continue;
                                         foundtgt.Add(type);
@@ -1831,8 +1851,8 @@ namespace Oxide.Plugins
                                     }
                                     break;
                             }
-                            row++;
                         }
+                        row++;
                     }
                 }
             }
