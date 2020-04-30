@@ -200,6 +200,13 @@ namespace Oxide.Plugins
                 }
             }
             if (!found) LoadDefaultRuleset();
+
+            rpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVEZoneMap>>(this.Name + "/rpve_zonemaps");
+        }
+
+        private void SaveData()
+        {
+            Interface.Oxide.DataFileSystem.WriteObject(Name + "/rpve_zonemaps", rpvezonemaps);
         }
         #endregion
 
@@ -334,7 +341,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand au = new SQLiteCommand($"SELECT DISTINCT enable FROM rpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand au = new SQLiteCommand($"SELECT DISTINCT enabled FROM rpve_rulesets WHERE name='{rulesetname}'", c))
                 {
                     using (SQLiteDataReader ar = au.ExecuteReader())
                     {
@@ -355,11 +362,12 @@ namespace Oxide.Plugins
                 {
                     rpvezonemaps.Add(rulesetname, new RealPVEZoneMap() { map = new List<string>() { key } });
                 }
+                SaveData();
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
                     DoLog($"UPDATE rpve_rulesets SET zone='lookup' WHERE rulesetname='{rulesetname}'");
-                    using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='lookup' WHERE rulesetname='{rulesetname}'", c))
+                    using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='lookup' WHERE name='{rulesetname}'", c))
                     {
                         cmd.ExecuteNonQuery();
                     }
@@ -379,6 +387,7 @@ namespace Oxide.Plugins
                 }
                 if (rpvezonemaps.ContainsKey(rulesetname)) rpvezonemaps.Remove(rulesetname);
                 rpvezonemaps.Add(rulesetname, new RealPVEZoneMap() { map = new List<string>() { key } });
+                SaveData();
                 return true;
             }
         }
@@ -403,6 +412,7 @@ namespace Oxide.Plugins
                             string rn = rd.GetString(0);
                             foundrs.Add(rn);
                             rpvezonemaps.Remove(rn);
+                            SaveData();
                         }
                     }
                 }
@@ -498,11 +508,14 @@ namespace Oxide.Plugins
             }
 
             bool foundmatch = false;
+            bool foundexception = false;
+            bool foundexclusion = false;
             bool damage = true;
             bool enabled = false;
             string rulesetname = null;
 
             string src = null; string tgt = null;
+            Puts($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection);
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection))
                 {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
@@ -515,6 +528,7 @@ namespace Oxide.Plugins
                 }
             }
 
+            Puts($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection);
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
@@ -533,15 +547,40 @@ namespace Oxide.Plugins
                 {
                     while (readMe.Read())
                     {
+                        bool zmatch = false;
+                        if (foundmatch) break; // Breaking due to match found in previously checked ruleset
+                        foundexception = false;
+                        foundexclusion = false;
+
                         rulesetname = readMe.GetString(0);
                         rulesetzone = readMe.GetString(1);
                         damage = readMe.GetBoolean(2);
                         enabled = readMe.GetBoolean(3);
 
-                        DoLog($"Checking {rulesetname} for {stype} attacking {ttype}");
+                        if (zone == rulesetzone || (zone == "default" && (rulesetzone == "" || rulesetzone == "0")))
+                        {
+                            DoLog($"Zone match for ruleset {rulesetname}, zone {rulesetzone}");
+                            zmatch = true;
+                        }
+                        else if (rulesetzone == "lookup" && rpvezonemaps.ContainsKey(rulesetname))
+                        {
+                            if (!rpvezonemaps[rulesetname].map.Contains(zone))
+                            {
+                                DoLog($"Skipping ruleset due to zone {zone} lookup mismatch");
+                                continue;
+                            }
+                        }
+                        else if (zone != "default" && rulesetzone != "" && zone != rulesetzone)
+                        {
+                            DoLog($"Skipping ruleset due to zone {zone} mismatch with ruleset {rulesetname}:{rulesetzone}");
+                            continue;
+                        }
+
+                        DoLog($"Checking ruleset {rulesetname} for {stype} attacking {ttype}");
+                        Puts($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='1' AND exception='{src}_{tgt}'");
                         if (src != null && tgt != null)
                         {
-                            DoLog($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}");
+                            DoLog($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}, zone {rulesetzone}");
                             int en = enabled ? 1 : 0;
                             using (SQLiteCommand rq = new SQLiteCommand($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='{en}' AND exception='{src}_{tgt}'", sqlConnection))
                             {
@@ -553,25 +592,36 @@ namespace Oxide.Plugins
                                         DoLog($"Found exception match for {stype} attacking {ttype}");
                                         string foundsrc = entry.GetValue(1).ToString();
                                         string foundtgt = entry.GetValue(2).ToString();
+                                        if (foundsrc != "" && foundtgt != "")
+                                        {
+                                            foundexception = true;
+                                        }
                                         if (foundsrc.Contains(stype))
                                         {
                                             DoLog($"Exclusion for {stype}");
-                                            foundmatch = false;
+                                            foundexclusion = true;
                                             break;
                                         }
                                         else if (foundtgt.Contains(ttype))
                                         {
                                             DoLog($"Exclusion for {ttype}");
-                                            foundmatch = false;
+                                            foundexclusion = true;
                                             break;
                                         }
                                         else
                                         {
                                             DoLog($"No exclusions for {stype} to {ttype}");
-                                            foundmatch = true;
-                                            break;
                                         }
                                     }
+                                }
+                            }
+                            // FIXME/CHECKME
+                            if (zmatch) // Only match if zone match
+                            {
+                                if ((foundexception && !foundexclusion) || !foundexception)
+                                {
+                                    // allow break on current ruleset and zone match with no exceptions, etc.
+                                    foundmatch = true;
                                 }
                             }
                         }
@@ -583,29 +633,15 @@ namespace Oxide.Plugins
                 DoLog($"Player has building privilege and is attacking a BuildingBlock");
                 return true;
             }
-            // These zone checks currently override all of the work above and are utter shit
-            if (rulesetzone == "lookup" && rpvezonemaps.ContainsKey(rulesetname))
-            {
-                if (!rpvezonemaps[rulesetname].map.Contains(zone))
-                {
-                    DoLog($"Skipping check due to zone {zone} mismatch");
-                    return false;
-                }
-            }
-            else if (zone != "default" && zone != rulesetzone)
-            {
-                DoLog($"Skipping check due to zone {zone} mismatch");
-                return false;
-            }
 
             if (foundmatch)
             {
-                DoLog($"Ruleset exception: Setting damage to {(!damage).ToString()}");
+                DoLog($"Ruleset '{rulesetname}' exception: Setting damage to {(!damage).ToString()}");
                 return !damage;
             }
             else
             {
-                DoLog($"Ruleset match: Setting damage to {damage.ToString()}");
+                DoLog($"No Ruleset match or exclusions: Setting damage to {damage.ToString()}");
                 return damage;
             }
 
@@ -812,6 +848,7 @@ namespace Oxide.Plugins
                                     break;
                                 case "src_exclude":
                                     if (args.Length < 5) return;
+                                    CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
                                     //pverule editruleset {rulesetname} src_exclude Horse add
                                     switch (args[4])
                                     {
@@ -925,6 +962,7 @@ namespace Oxide.Plugins
                                     break;
                                 case "tgt_exclude":
                                     if (args.Length < 5) return;
+                                    CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
                                     //pverule editruleset {rulesetname} tgt_exclude Horse delete
                                     switch (args[4])
                                     {
