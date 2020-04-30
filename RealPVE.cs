@@ -11,15 +11,14 @@ using System.Data.SQLite;
 using System.IO;
 
 // TODO
-// Finish sqlite rework
 // Add the actual schedule handling...
 // Finish work on custom rule editor gui (src/target)
 // Sanity checking for overlapping rule/zone combinations.  Schedule may have impact.
-// Add setting global flags
+// Add setting global flags (config)
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.15")]
+    [Info("Real PVE", "RFC1920", "1.0.16")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     class RealPVE : RustPlugin
     {
@@ -88,6 +87,7 @@ namespace Oxide.Plugins
             {
                 ["notauthorized"] = "You don't have permission to use this command.",
                 ["realpverulesets"] = "RealPVE Rulesets",
+                ["rulesets"] = "Rulesets",
                 ["realpveruleset"] = "RealPVE Ruleset",
                 ["realpverule"] = "RealPVE Rule",
                 ["realpveruleselect"] = "RealPVE Rule Select",
@@ -98,6 +98,7 @@ namespace Oxide.Plugins
                 ["current2chedule"] = "Currently scheduled for day: {0} from {1} until {2}",
                 ["noschedule"] = "Not currently scheduled",
                 ["schedulenotworking"] = "Scheduling is not yet working...",
+                ["flags"] = "Global Flags",
                 ["defload"] = "RESET",
                 ["default"] = "default",
                 ["none"] = "none",
@@ -136,7 +137,14 @@ namespace Oxide.Plugins
                 ["damageexceptions"] = "Damage Exceptions",
                 ["rule"] = "Rule",
                 ["rules"] = "Rules",
-                ["logging"] = "Logging set to {0}"
+                ["logging"] = "Logging set to {0}",
+                ["NPCAutoTurretTargetsPlayers"] = "NPC AutoTurret Targets Players",
+                ["NPCAutoTurretTargetsNPCs"] = "NPC AutoTurret Targets NPCs",
+                ["AutoTurretTargetsPlayers"] = "AutoTurret Targets Players",
+                ["AutoTurretTargetsNPCs"] = "AutoTurret Targets NPCs",
+                ["TrapsIgnorePlayers"] = "Traps Ignore Players",
+                ["HonorBuildingPrivilege"] = "Honor Building Privilege",
+                ["HonorRelationships"] = "Honor Relationships"
             }, this);
         }
 
@@ -211,7 +219,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region Oxide_hooks
-        object OnTrapTrigger(BaseTrap trap, UnityEngine.GameObject go)
+        object OnTrapTrigger(BaseTrap trap, GameObject go)
         {
             if (!enabled) return null;
             var player = go.GetComponent<BasePlayer>();
@@ -229,11 +237,11 @@ namespace Oxide.Plugins
             return null;
         }
 
-        private object CanBeTargeted(BasePlayer target, UnityEngine.MonoBehaviour turret)
+        private object CanBeTargeted(BasePlayer target, MonoBehaviour turret)
         {
             if (target == null || turret == null) return null;
             if (!enabled) return null;
-            //            Puts($"Checking whether {turret.name} can target {target.displayName}");
+            //Puts($"Checking whether {turret.name} can target {target.displayName}");
 
             object canbetargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
             if (canbetargeted != null && canbetargeted is bool && (bool)canbetargeted) return null;
@@ -515,7 +523,7 @@ namespace Oxide.Plugins
             string rulesetname = null;
 
             string src = null; string tgt = null;
-            Puts($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection);
+            //Puts($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection);
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection))
                 {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
@@ -528,7 +536,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            Puts($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection);
+            //Puts($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection);
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
@@ -547,15 +555,21 @@ namespace Oxide.Plugins
                 {
                     while (readMe.Read())
                     {
-                        bool zmatch = false;
                         if (foundmatch) break; // Breaking due to match found in previously checked ruleset
+                        enabled = readMe.GetBoolean(3);
+                        if (enabled != true)
+                        {
+                            DoLog($"Skipping ruleset {rulesetname}, which is disabled");
+                            continue;
+                        }
+
+                        bool zmatch = false;
                         foundexception = false;
                         foundexclusion = false;
 
                         rulesetname = readMe.GetString(0);
                         rulesetzone = readMe.GetString(1);
                         damage = readMe.GetBoolean(2);
-                        enabled = readMe.GetBoolean(3);
 
                         if (zone == rulesetzone || (zone == "default" && (rulesetzone == "" || rulesetzone == "0")))
                         {
@@ -576,13 +590,11 @@ namespace Oxide.Plugins
                             continue;
                         }
 
-                        DoLog($"Checking ruleset {rulesetname} for {stype} attacking {ttype}");
-                        Puts($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='1' AND exception='{src}_{tgt}'");
+                        //Puts($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='1' AND exception='{src}_{tgt}'");
                         if (src != null && tgt != null)
                         {
                             DoLog($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}, zone {rulesetzone}");
-                            int en = enabled ? 1 : 0;
-                            using (SQLiteCommand rq = new SQLiteCommand($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='{en}' AND exception='{src}_{tgt}'", sqlConnection))
+                            using (SQLiteCommand rq = new SQLiteCommand($"SELECT src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND exception='{src}_{tgt}'", sqlConnection))
                             {
                                 using (SQLiteDataReader entry = rq.ExecuteReader())
                                 {
@@ -590,8 +602,8 @@ namespace Oxide.Plugins
                                     {
                                         // source and target exist - verify that they are not excluded
                                         DoLog($"Found exception match for {stype} attacking {ttype}");
-                                        string foundsrc = entry.GetValue(1).ToString();
-                                        string foundtgt = entry.GetValue(2).ToString();
+                                        string foundsrc = entry.GetValue(0).ToString();
+                                        string foundtgt = entry.GetValue(1).ToString();
                                         if (foundsrc != "" && foundtgt != "")
                                         {
                                             foundexception = true;
@@ -636,16 +648,19 @@ namespace Oxide.Plugins
 
             if (foundmatch)
             {
-                DoLog($"Ruleset '{rulesetname}' exception: Setting damage to {(!damage).ToString()}");
-                return !damage;
+                if (foundexception && !foundexclusion)
+                {
+                    DoLog($"Ruleset '{rulesetname}' exception: Setting damage to {(!damage).ToString()}");
+                    return !damage;
+                }
             }
             else
             {
                 DoLog($"No Ruleset match or exclusions: Setting damage to {damage.ToString()}");
                 return damage;
             }
-
-            //DoLog($"NO RULESET MATCH!");
+            DoLog($"NO RULESET MATCH!");
+            return damage;
         }
 
         private void DoLog(string message, int indent = 0)
@@ -1193,6 +1208,40 @@ namespace Oxide.Plugins
                             GUIRulesetEditor(player, newname);
                         }
                         break;
+                    case "editconfig":
+                        string cfg = args[1];
+                        bool val = GetBoolValue(args[2]);
+                        switch (cfg)
+                        {
+                            case "NPCAutoTurretTargetsPlayers":
+                                configData.Options.NPCAutoTurretTargetsPlayers = val;
+                                break;
+                            case "NPCAutoTurretTargetsNPCs":
+                                configData.Options.NPCAutoTurretTargetsNPCs= val;
+                                break;
+                            case "AutoTurretTargetsPlayers":
+                                configData.Options.AutoTurretTargetsPlayers= val;
+                                break;
+                            case "AutoTurretTargetsNPCs":
+                                configData.Options.AutoTurretTargetsNPCs = val;
+                                break;
+                            case "TrapsIgnorePlayers":
+                                configData.Options.TrapsIgnorePlayers = val;
+                                break;
+                            case "HonorBuildingPrivilege":
+                                configData.Options.HonorBuildingPrivilege = val;
+                                break;
+                            case "HonorRelationships":
+                                configData.Options.HonorRelationships = val;
+                                break;
+                            case "RESET":
+                                LoadDefaultFlags();
+                                LoadConfigVariables();
+                                break;
+                        }
+                        SaveConfig();
+                        GUIRuleSets(player);
+                        break;
                     case "editrule":
                         string rn = args[1];
                         GUIRuleEditor(player, rn);
@@ -1245,8 +1294,10 @@ namespace Oxide.Plugins
         protected override void LoadDefaultConfig()
         {
             Puts("Creating new config file.");
-            var config = new ConfigData();
-            config.Version = Version;
+            var config = new ConfigData
+            {
+                Version = Version
+            };
             SaveConfig(config);
         }
         private void SaveConfig(ConfigData config)
@@ -1276,6 +1327,17 @@ namespace Oxide.Plugins
             public bool HonorBuildingPrivilege = true;
             public bool HonorRelationships = false;
         }
+        protected void LoadDefaultFlags()
+        {
+            Puts("Creating new config file.");
+            configData.Options.NPCAutoTurretTargetsPlayers = true;
+            configData.Options.NPCAutoTurretTargetsNPCs = true;
+            configData.Options.AutoTurretTargetsPlayers = false;
+            configData.Options.AutoTurretTargetsNPCs = false;
+            configData.Options.TrapsIgnorePlayers = false;
+            configData.Options.HonorBuildingPrivilege = true;
+            configData.Options.HonorRelationships = false;
+        }
         #endregion
 
         #region GUI
@@ -1302,6 +1364,10 @@ namespace Oxide.Plugins
             int col = 0;
             int row = 0;
             float[] pb;
+
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Lang("rulesets"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
 
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
@@ -1332,6 +1398,85 @@ namespace Oxide.Plugins
 
             pb = GetButtonPositionP(row, col);
             UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset add");
+
+            row = 0;col = 6;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Lang("flags"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+            col = 5;
+            pb = GetButtonPositionZ(row, col);
+            if (configData.Options.NPCAutoTurretTargetsPlayers)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if (configData.Options.NPCAutoTurretTargetsNPCs)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.AutoTurretTargetsPlayers)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.AutoTurretTargetsNPCs)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.TrapsIgnorePlayers)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.HonorBuildingPrivilege)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.HonorRelationships)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships true");
+            }
+
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            UI.Button(ref container, RPVERULELIST, UI.Color("#d82222", 1f), Lang("defload"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig RESET true");
 
             CuiHelper.AddUi(player, container);
         }
@@ -1988,7 +2133,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand rs = new SQLiteCommand("SELECT DISTINCT zone FROM rpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand rs = new SQLiteCommand($"SELECT DISTINCT zone FROM rpve_rulesets WHERE name='{rulesetname}'", c))
                 {
                     using (SQLiteDataReader rsd = rs.ExecuteReader())
                     {
@@ -2012,7 +2157,11 @@ namespace Oxide.Plugins
                     break;
                 case "zone":
                     string[] zoneIDs = (string[])ZoneManager?.Call("GetZoneIDs");
-                    if (zone == null && rulesetname != "default")
+                    if (zone == "lookup")
+                    {
+                        UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    }
+                    else if (zone == null && rulesetname != "default")
                     {
                         UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
                     }
@@ -2023,7 +2172,11 @@ namespace Oxide.Plugins
 
                     row++;
                     pb = GetButtonPositionZ(row, col);
-                    if (zone == "default")
+                    if (zone == "lookup")
+                    {
+                        UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    }
+                    else if (zone == "default")
                     {
                         UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#55d840", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
                     }
@@ -2588,6 +2741,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_resource', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'resource_player', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_animal', null, null, null)", sqlConnection);
@@ -2625,6 +2780,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_building', 'Player can damage Building', 1, 0, 'player', 'building')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_resource', 'Player can damage Resource', 1, 0, 'player', 'resource')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('resource_player', 'Resource can damage Player', 1, 0, 'resource', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('players_traps', 'Player can damage Trap', 1, 0, 'player', 'trap')", sqlConnection);
             ct.ExecuteNonQuery();
