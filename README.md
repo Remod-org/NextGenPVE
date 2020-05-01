@@ -21,18 +21,29 @@ The default ruleset (out of the box) has the following settings:
 
 - Default damage false
 - Exceptions:
-    - animal can damage player
-	- player can damage animal
 	- animal can damage animal
+    - animal can damage player
+	- fire can damage building
+	- fire can damage player
+	- fire can damage resource
+	- helicopter can damage building
+	- helicopter can damage player
+	- npc can damage player
+	- npc turret can damage animal
+	- npc turret can damage npc
+	- npc turret can damage player
+	- player can damage animal
+	- player can damage building (their own or a friend's)
+	- player can damage helicopter
 	- player can damage minicopter
 	- player can damage npc
-	- npc can damage player
-	- player can damage building (their own or a friend's)
-	- player can damage resources
-	- npc turrets can damage players
-	- npc turrets can damage animals
-	- npc turrets can damage npcs
-- Exclusions: NONE
+	- player can damage resource
+	- player can damage scrapcopter
+	- resource can damage player
+	- scrapcopter can damage player
+	- trap can damage trap
+
+- Exclusions: NONE (Could be chicken, bear, HumanNPC, etc.)
 
 There is in integrated GUI for the admin to use to:
 
@@ -45,10 +56,21 @@ There is in integrated GUI for the admin to use to:
  7. Set the zone enabling activation of a ruleset
  8. Set a schedule for ruleset enable/disable (WORK IN PROGRESS)
  9. Edit custom rules (WORK IN PROGRESS)
+10. Set global flags.
 
 ![](https://i.imgur.com/dWiSvOB.jpg)
 
 ![](https://i.imgur.com/a6O9Aaf.jpg)
+
+## Commands
+
+The following commands have been implemented:
+
+    - `/pverule` - Starts the GUI for editing, creating, and deleting rulesets
+	- `/pveenable` - Toggles the enabled status of the plugin
+	- `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
+
+The above commands can also be run from console or RCON.
 
 ## Permissions
 
@@ -61,18 +83,26 @@ There is in integrated GUI for the admin to use to:
 ```json
 {
   "Options": {
-    "UseZoneManager": true,
-    "UseLiteZones": false,
+    "useZoneManager": true,
+    "useLiteZones": false,
+    "useSchedule": false,
+    "useRealtime": true,
+    "useFriends": false,
+    "useClans": false,
+    "useTeams": false,
     "NPCAutoTurretTargetsPlayers": true,
     "NPCAutoTurretTargetsNPCs": true,
     "AutoTurretTargetsPlayers": false,
     "AutoTurretTargetsNPCs": false,
     "TrapsIgnorePlayers": false,
     "HonorBuildingPrivilege": true,
-    "HonorRelationships": false,
-    "useFriends": false,
-    "useClans": false,
-    "useTeams": false
+    "UnprotectedBuildingDamage": false,
+    "HonorRelationships": false
+  },
+  "Version": {
+    "Major": 1,
+    "Minor": 0,
+    "Patch": 16
   }
 }
 ```
@@ -83,103 +113,47 @@ A few global flags are currently available to limit NPC AutoTurret and trap dama
 
 If a player is trying to damage a building, "HonorBuildingPrivilege" determines whether or not they are limited to damaging their own structures or any structures.
 
+"UnprotectedDamage" determines whether or not an unprotected building (no TC) can be damaged by players other than the builder.
+
 "HonorRelationships" determines whether or not a player can damage their friend's structures or deployables.
 
 Note that friends support can include Friends, Clans, or Teams.
 
-## Details and Data Files
+## Details
 
-The data file, RealPVE_rulesets.json, includes the following ruleset by default:
+RealPVE uses SQLite for most of its data storage.  The database file is named realpve.db.
 
-```json
-{
-  "default": {
-    "damage": false,
-    "except": [
-      "animal_player",
-      "player_animal",
-      "animal_animal",
-      "player_minicopter",
-      "player_npc",
-      "npc_player",
-      "player_building",
-      "player_resources",
-      "npcturret_player",
-      "npcturret_animal",
-      "npcturret_npc"
-    ],
-    "exclude": [],
-    "zone": null,
-    "schedule": null,
-    "enabled": true
-  }
-}
-```
-
-Following is a sample of the /RealPVE_rules.json data file.  The names of these rules match the "except" fields in the ruleset above:
-
-```json
-{
-  "npc_player": {
-    "description": "npc can damage player",
-    "damage": true,
-    "custom": false,
-    "source": [
-      "NPCPlayerApex",
-      "BradleyAPC",
-      "HumanNPC",
-      "BaseNpc",
-      "HTNPlayer",
-      "Murderer",
-      "Scientist"
-    ],
-    "target": [
-      "BasePlayer"
-    ]
-  },
-  "player_building": {
-    "description": "Player can damage building",
-    "damage": true,
-    "custom": false,
-    "source": [
-      "BasePlayer"
-    ],
-    "target": [
-      "BuildingBlock"
-    ]
-  }
-}
-```
+The only other data file is rpve_zonemaps.json.  This is currently used by third party plugins that create their own PVP ruleset and zones.
 
 Each rule includes a source and target listing all of the types that will be matched for the rule.  The player is simply BasePlayer, whereas NPCs include several different types.
 
-Any individual type of NPC, for example, can be added to the "exclude" field of a ruleset.  Currently, this only excludes them as a potential target.
+Any individual type of NPC, for example, can be added to one of the "exclude" fields of a ruleset.  This can be source or target.  The list is based on the exception rules added to the ruleset, and the entity types they contain.
 
-These types are populated from the RealPVE_entities.json file.  Here is a sample:
+The default ruleset allows quite a bit of damage other than player to player.  For example, it has an exception for player_animal, allowing players to kill animals.  You can add, for example, "Chicken" to the target exclusion list to block killing just chickens.
 
-```json
-{
-  "npc": {
-    "types": [
-      "NPCPlayerApex",
-      "BradleyAPC",
-      "HumanNPC",
-      "BaseNpc",
-      "HTNPlayer",
-      "Murderer",
-      "Scientist"
-    ]
-  },
-  "player": {
-    "types": [
-      "BasePlayer"
-    ]
-  },
-  "building": {
-    "types": [
-      "BuildingBlock"
-    ]
-  }
-}
-```
+
+The basic rule evaluation order is:
+
+Ruleset -> Default Damage -> Exception Rule -> Exclusion.
+
+1. Player attacking Bear
+2. Default ruleset damage False.
+3. Exception for player_animal.
+4. No source exclusion for BasePlayer.
+5. No target exclusion for Bear.
+6. DAMAGE ALLOWED.
+
+1. Bear attacking Player
+2. Default ruleset damage False.
+3. Exception for animal_player
+4. No source exclusion for BasePlayer.
+5. No target exclusion for Bear.
+6. DAMAGE ALLOWED.
+
+1. Player attacking Chicken
+2. Default damage False.
+3. Exception for player_animal.
+4. No source exclusion for BasePlayer.
+5. Target exclusion for Chicken.
+6. DAMAGE BLOCKED.
 
