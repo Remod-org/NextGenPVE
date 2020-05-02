@@ -9,29 +9,30 @@ using System.Linq;
 using UnityEngine;
 using System.Data.SQLite;
 using System.IO;
+using System.Text.RegularExpressions;
 
 // TODO
-// Add the actual schedule handling...
 // Finish work on custom rule editor gui (src/target)
 // Sanity checking for overlapping rule/zone combinations.  Schedule may have impact.
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.16")]
+    [Info("Real PVE", "RFC1920", "1.0.17")]
     [Description("Prevent damage to players and objects in a PVE environment")]
-    class RealPVE : RustPlugin
+    internal class RealPVE : RustPlugin
     {
         #region vars
-        Dictionary<string, RealPVERule> custom_rules = new Dictionary<string, RealPVERule>();
+        private Dictionary<string, RealPVERule> custom_rules = new Dictionary<string, RealPVERule>();
+
         // Ruleset to multiple zones
-        Dictionary<string, RealPVEZoneMap> rpvezonemaps = new Dictionary<string, RealPVEZoneMap>();
+        private Dictionary<string, RealPVEZoneMap> rpvezonemaps = new Dictionary<string, RealPVEZoneMap>();
+        private Dictionary<string, string> rpveschedule = new Dictionary<string, string>();
 
         private const string permRealPVEUse = "realpve.use";
         private const string permRealPVEAdmin = "realpve.admin";
         private const string permRealPVEGod = "realpve.god";
         private ConfigData configData;
-
-        SQLiteConnection sqlConnection;
+        private SQLiteConnection sqlConnection;
         private string connStr;
 
         [PluginReference]
@@ -40,16 +41,14 @@ namespace Oxide.Plugins
         private readonly string logfilename = "log";
         private bool dolog = false;
         private bool enabled = true;
-
-        Timer scheduleTimer;
-
-        const string RPVERULELIST = "realpve.rulelist";
-        const string RPVEEDITRULESET = "realpve.ruleseteditor";
-        const string RPVERULEEDIT = "realpve.ruleeditor";
-        const string RPVEVALUEEDIT = "realpve.value";
-        const string RPVESCHEDULEEDIT = "realpve.schedule";
-        const string RPVERULESELECT = "realpve.selectrule";
-        const string RPVERULEEXCLUSIONS = "realpve.exclusions";
+        private Timer scheduleTimer;
+        private const string RPVERULELIST = "realpve.rulelist";
+        private const string RPVEEDITRULESET = "realpve.ruleseteditor";
+        private const string RPVERULEEDIT = "realpve.ruleeditor";
+        private const string RPVEVALUEEDIT = "realpve.value";
+        private const string RPVESCHEDULEEDIT = "realpve.schedule";
+        private const string RPVERULESELECT = "realpve.selectrule";
+        private const string RPVERULEEXCLUSIONS = "realpve.exclusions";
         #endregion
 
         #region Message
@@ -78,6 +77,8 @@ namespace Oxide.Plugins
             permission.RegisterPermission(permRealPVEAdmin, this);
             permission.RegisterPermission(permRealPVEGod, this);
             enabled = true;
+
+            RunSchedule(true);
         }
 
         private void OnServerInitialized()
@@ -219,7 +220,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region Oxide_hooks
-        object OnTrapTrigger(BaseTrap trap, GameObject go)
+        private object OnTrapTrigger(BaseTrap trap, GameObject go)
         {
             if (!enabled) return null;
             var player = go.GetComponent<BasePlayer>();
@@ -272,7 +273,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitInfo)
+        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitInfo)
         {
             if (entity == null) return null;
             if (hitInfo.Initiator == null) return null;
@@ -532,6 +533,18 @@ namespace Oxide.Plugins
                 }
             }
 
+            bool foundZone = false;
+            // Are there any rulesets with this zone defined?
+            using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT zone FROM rpve_rulesets WHERE zone='{zone}'", sqlConnection))
+            {
+                using (SQLiteDataReader readMe = findIt.ExecuteReader())
+                {
+                    while(readMe.Read())
+                    {
+                        if (zone != "") foundZone = true;
+                    }
+                }
+            }
             using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM rpve_rulesets", sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
@@ -567,7 +580,7 @@ namespace Oxide.Plugins
                                 continue;
                             }
                         }
-                        else if (zone != "default" && rulesetzone != "" && zone != rulesetzone)
+                        else if (zone != "default" && rulesetzone != "" && zone != rulesetzone && foundZone)
                         {
                             DoLog($"Skipping ruleset due to zone {zone} mismatch with ruleset {rulesetname}:{rulesetzone}");
                             continue;
@@ -646,6 +659,141 @@ namespace Oxide.Plugins
             }
             DoLog($"NO RULESET MATCH!");
             return damage;
+        }
+
+        private void RunSchedule(bool refresh = false)
+        {
+            Puts("RunSchedule called...");
+            TimeSpan ts = configData.Options.useRealtime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
+            if (refresh)
+            {
+                rpveschedule = new Dictionary<string, string>();
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand use = new SQLiteCommand($"SELECT name, schedule FROM rpve_rulesets WHERE schedule != '0'", c))
+                    {
+                        using (SQLiteDataReader schedule = use.ExecuteReader())
+                        {
+                            while (schedule.Read())
+                            {
+                                string nm = schedule.GetString(0);
+                                string sc = schedule.GetValue(1).ToString();
+                                if (nm != "" && sc != "")
+                                {
+                                    rpveschedule.Add(nm, sc);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Puts($"{ts.Days.ToString()} {ts.Hours.ToString()}:{ts.Minutes.ToString()}");
+            // Actual schedule processing here...
+            foreach(KeyValuePair<string,string> scheduleInfo in rpveschedule)
+            {
+                Puts($"Checking schedule string {scheduleInfo.Value}");
+                RealPVESchedule parsed;// = new RealPVESchedule();
+                if (ParseSchedule(scheduleInfo.Value, out parsed))
+                {
+                    int i = 0;
+                    foreach (var x in parsed.day)
+                    {
+                        Puts($"Schedule day == {x.ToString()} {parsed.dayName[i]} {parsed.starthour} to {parsed.endhour}");
+                        if(ts.Days == x)
+                        {
+                            Puts($"Day matched.  Comparing {ts.Hours.ToString()} to start time {parsed.starthour}:{parsed.startminute} and end time {parsed.endhour}:{parsed.endminute}");
+                            if (ts.Hours >= Convert.ToInt32(parsed.starthour) && ts.Hours <= Convert.ToInt32(parsed.endhour))
+                            {
+                                if(ts.Minutes >= Convert.ToInt32(parsed.endminute))
+                                {
+                                    Puts($"Disabling ruleset {scheduleInfo.Key}");
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='0' WHERE name='{scheduleInfo.Key}'", c))
+                                        {
+                                            cmd.ExecuteNonQuery();
+                                        }
+                                    }
+                                }
+                                else if(ts.Minutes >= Convert.ToInt32(parsed.startminute))
+                                {
+                                    Puts($"Enabling ruleset {scheduleInfo.Key}");
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='1' WHERE name='{scheduleInfo.Key}'", c))
+                                        {
+                                            cmd.ExecuteNonQuery();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        i++;
+                    }
+                }
+            }
+
+            scheduleTimer = timer.Once(configData.Options.useRealtime ? 30f : 3f, () => RunSchedule());
+        }
+
+        private bool ParseSchedule(string dbschedule, out RealPVESchedule parsed)
+        {
+            Puts($"Parsing schedule... {dbschedule}");
+            // day, dayName, starttime, endtime, second
+            int day = 0;
+            parsed = new RealPVESchedule();
+
+            string[] realschedule = Regex.Split(dbschedule, @"(.*)\;(.*)\:(.*)\;(.*)\:(.*)");
+//            string[] realschedule = dbschedule.Split(';');
+            Puts($"{realschedule.Length.ToString()}");
+            if (realschedule.Length < 5) return false;
+            Puts($"Schedule: {string.Join("#", realschedule)}");
+
+            Puts($"SCHEDULE DAY {realschedule[1]}");
+            Puts($"START HOUR   {realschedule[2]}");
+            Puts($"START MINUTE {realschedule[3]}");
+            Puts($"END HOUR     {realschedule[4]}");
+            Puts($"END MINUTE   {realschedule[5]}");
+            parsed.starthour = realschedule[2];
+            parsed.startminute = realschedule[3];
+            parsed.endhour = realschedule[4];
+            parsed.endminute = realschedule[5];
+
+            parsed.day = new List<int>();
+            parsed.dayName = new List<string>();
+
+            string tmp = realschedule[1];
+            string[] days = tmp.Split(',');
+
+            if (tmp == "*")
+            {
+//                parsed.dayName.Add(Lang("all") + "(*)");
+                for (int i = 0; i < 7; i++)
+                {
+                    parsed.day.Add(i);
+                    parsed.dayName.Add(Enum.GetName(typeof(DayOfWeek), i));
+                }
+            }
+            else if (days.Length > 0)
+            {
+                foreach (var d in days)
+                {
+                    int.TryParse(d, out day);
+                    parsed.day.Add(day);
+                    parsed.dayName.Add(Enum.GetName(typeof(DayOfWeek), day));
+                }
+            }
+            else
+            {
+                int.TryParse(tmp, out day);
+                parsed.day.Add(day);
+                parsed.dayName.Add(Enum.GetName(typeof(DayOfWeek), day));
+            }
+            return true;
         }
 
         private void DoLog(string message, int indent = 0)
@@ -797,6 +945,7 @@ namespace Oxide.Plugins
                                             }
                                         }
                                     }
+                                    RunSchedule(true);
                                     break;
                                 case "except":
                                     if (args.Length < 5) return;
@@ -1292,12 +1441,14 @@ namespace Oxide.Plugins
         {
             Config.WriteObject(config, true);
         }
-        class ConfigData
+
+        private class ConfigData
         {
             public Options Options = new Options();
             public VersionNumber Version;
         }
-        class Options
+
+        private class Options
         {
             public bool useZoneManager = true;
             public bool useLiteZones = false;
@@ -2462,7 +2613,7 @@ namespace Oxide.Plugins
             }
         }
 
-        bool IsFriend(ulong playerid, ulong ownerid)
+        private bool IsFriend(ulong playerid, ulong ownerid)
         {
             if (configData.Options.useFriends && Friends != null)
             {
@@ -2499,18 +2650,6 @@ namespace Oxide.Plugins
         #endregion
 
         #region classes
-        public class RealPVERuleSet
-        {
-            public bool damage;
-            public List<string> except;
-            public List<string> src_exclude;
-            public List<string> tgt_exclude;
-            public string zone;
-            public string schedule;
-            public bool enabled;
-            public bool automated = false;
-        }
-
         public class RealPVERule
         {
             public string description;
@@ -2518,6 +2657,17 @@ namespace Oxide.Plugins
             public bool custom = true;
             public List<string> source;
             public List<string> target;
+        }
+
+        public class RealPVESchedule
+        {
+            public List<int> day;
+            public List<string> dayName;
+            public string starthour;
+            public string startminute;
+            public string endhour;
+            public string endminute;
+            public bool enabled = true;
         }
 
         public class RealPVEEntities
