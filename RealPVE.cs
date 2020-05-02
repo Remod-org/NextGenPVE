@@ -14,7 +14,6 @@ using System.IO;
 // Add the actual schedule handling...
 // Finish work on custom rule editor gui (src/target)
 // Sanity checking for overlapping rule/zone combinations.  Schedule may have impact.
-// Add setting global flags (config)
 
 namespace Oxide.Plugins
 {
@@ -144,6 +143,7 @@ namespace Oxide.Plugins
                 ["AutoTurretTargetsNPCs"] = "AutoTurret Targets NPCs",
                 ["TrapsIgnorePlayers"] = "Traps Ignore Players",
                 ["HonorBuildingPrivilege"] = "Honor Building Privilege",
+                ["UnprotectedBuildingDamage"] = "Unprotected Building Damage",
                 ["HonorRelationships"] = "Honor Relationships"
             }, this);
         }
@@ -228,11 +228,7 @@ namespace Oxide.Plugins
             var cantraptrigger = Interface.CallHook("CanEntityTrapTrigger", new object[] { trap, player });
             if (cantraptrigger != null && cantraptrigger is bool && (bool)cantraptrigger) return null;
 
-            if (configData.Options.TrapsIgnorePlayers) return null;
-
-            string stype;
-            string ttype;
-            if (EvaluateRulesets(trap, player, out stype, out ttype)) return true;
+            if (configData.Options.TrapsIgnorePlayers) return false;
 
             return null;
         }
@@ -241,14 +237,28 @@ namespace Oxide.Plugins
         {
             if (target == null || turret == null) return null;
             if (!enabled) return null;
-            //Puts($"Checking whether {turret.name} can target {target.displayName}");
+            //DoLog($"Checking whether {turret.name} can target {target.displayName}");
 
-            object canbetargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
-            if (canbetargeted != null && canbetargeted is bool && (bool)canbetargeted) return null;
+            object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
+            if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+            {
+                return null;
+            }
+
+            var aturret = turret as AutoTurret;
+            if (aturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
+            {
+                if (!configData.Options.AutoTurretTargetsNPCs)
+                {
+                    return false;
+                }
+            }
+            else if (aturret != null && !configData.Options.AutoTurretTargetsPlayers)
+            {
+                return false;
+            }
 
             var npcturret = turret as NPCAutoTurret;
-
-            // Check global config options
             if (npcturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
             {
                 if (!configData.Options.NPCAutoTurretTargetsNPCs) return false;
@@ -257,35 +267,16 @@ namespace Oxide.Plugins
             {
                 return false;
             }
-            else if (npcturret == null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
-            {
-                if (!configData.Options.AutoTurretTargetsNPCs) return false;
-            }
-            else if (npcturret == null && !configData.Options.AutoTurretTargetsPlayers)
-            {
-                return false;
-            }
 
-            // Check rulesets - FIXME SERVER CRASH
-            //            string stype;
-            //            string ttype;
-            //            if(npcturret != null)
-            //            {
-            //                if(!EvaluateRulesets(npcturret as BaseEntity, target, out stype, out ttype)) return false;
-            //            }
-            //            else
-            //            {
-            //                if(!EvaluateRulesets(turret as BaseEntity, target, out stype, out ttype)) return false;
-            //            }
-
-            // CanBeTargeted == yes
+            //Puts("CanBeTargeted == yes");
             return null;
         }
 
         object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitInfo)
         {
-            if (entity == null || hitInfo == null) return null;
-            if (!enabled) return null;
+            if (entity == null) return null;
+            if (hitInfo.Initiator == null) return null;
+            if (!this.enabled) return null;
             if (hitInfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
 
             AttackEntity realturret;
@@ -294,9 +285,9 @@ namespace Oxide.Plugins
                 hitInfo.Initiator = realturret as BaseEntity;
             }
 
-            //            Puts($"attacker: {hitInfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}"); return true;
-            string stype;
-            string ttype;
+            //Puts($"attacker: {hitInfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}"); return true;
+            //Puts($"attacker: {hitInfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}");
+            string stype; string ttype;
             bool canhurt = EvaluateRulesets(hitInfo.Initiator, entity as BaseEntity, out stype, out ttype);
 
             if (stype == "BasePlayer")
@@ -313,10 +304,8 @@ namespace Oxide.Plugins
                 DoLog($"DAMAGE ALLOWED for {stype} attacking {ttype}");
                 return null;
             }
-            else
-            {
-                DoLog($"DAMAGE BLOCKED for {stype} attacking {ttype}");
-            }
+
+            DoLog($"DAMAGE BLOCKED for {stype} attacking {ttype}");
             return true;
         }
         #endregion
@@ -448,13 +437,7 @@ namespace Oxide.Plugins
         #region Main
         private bool EvaluateRulesets(BaseEntity source, BaseEntity target, out string stype, out string ttype)
         {
-            if (source == null)
-            {
-                stype = null;
-                ttype = null;
-                return false;
-            }
-            if (target == null)
+            if (source == null || target == null)
             {
                 stype = null;
                 ttype = null;
@@ -604,10 +587,10 @@ namespace Oxide.Plugins
                                         DoLog($"Found exception match for {stype} attacking {ttype}");
                                         string foundsrc = entry.GetValue(0).ToString();
                                         string foundtgt = entry.GetValue(1).ToString();
-                                        if (foundsrc != "" && foundtgt != "")
-                                        {
+                                        //if (foundsrc != "" && foundtgt != "")
+                                        //{
                                             foundexception = true;
-                                        }
+                                        //}
                                         if (foundsrc.Contains(stype))
                                         {
                                             DoLog($"Exclusion for {stype}");
@@ -623,11 +606,12 @@ namespace Oxide.Plugins
                                         else
                                         {
                                             DoLog($"No exclusions for {stype} to {ttype}");
+                                            foundexclusion = false;
                                         }
                                     }
                                 }
                             }
-                            // FIXME/CHECKME
+
                             if (zmatch) // Only match if zone match
                             {
                                 if ((foundexception && !foundexclusion) || !foundexception)
@@ -648,6 +632,7 @@ namespace Oxide.Plugins
 
             if (foundmatch)
             {
+                DoLog($"Sanity check foundexception: {foundexception.ToString()}, foundexclusion: {foundexclusion.ToString()}");
                 if (foundexception && !foundexclusion)
                 {
                     DoLog($"Ruleset '{rulesetname}' exception: Setting damage to {(!damage).ToString()}");
@@ -1231,6 +1216,9 @@ namespace Oxide.Plugins
                             case "HonorBuildingPrivilege":
                                 configData.Options.HonorBuildingPrivilege = val;
                                 break;
+                            case "UnprotectedBuildingDamage":
+                                configData.Options.UnprotectedBuildingDamage = val;
+                                break;
                             case "HonorRelationships":
                                 configData.Options.HonorRelationships = val;
                                 break;
@@ -1325,6 +1313,7 @@ namespace Oxide.Plugins
             public bool AutoTurretTargetsNPCs = false;
             public bool TrapsIgnorePlayers = false;
             public bool HonorBuildingPrivilege = true;
+            public bool UnprotectedBuildingDamage = false;
             public bool HonorRelationships = false;
         }
         protected void LoadDefaultFlags()
@@ -1336,6 +1325,7 @@ namespace Oxide.Plugins
             configData.Options.AutoTurretTargetsNPCs = false;
             configData.Options.TrapsIgnorePlayers = false;
             configData.Options.HonorBuildingPrivilege = true;
+            configData.Options.UnprotectedBuildingDamage = false;
             configData.Options.HonorRelationships = false;
         }
         #endregion
@@ -1372,7 +1362,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT name, automated from rpve_rulesets", c))
+                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT name, automated from rpve_rulesets ORDER BY name", c))
                 {
                     using (SQLiteDataReader rsread = getrs.ExecuteReader())
                     {
@@ -1403,27 +1393,8 @@ namespace Oxide.Plugins
             pb = GetButtonPositionP(row, col);
             UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Lang("flags"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
+            // Global flags
             col = 5;
-            pb = GetButtonPositionZ(row, col);
-            if (configData.Options.NPCAutoTurretTargetsPlayers)
-            {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers false");
-            }
-            else
-            {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers true");
-            }
-            row++;
-            pb = GetButtonPositionZ(row, col);
-            if (configData.Options.NPCAutoTurretTargetsNPCs)
-            {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs false");
-            }
-            else
-            {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
-            }
-            row++;
             pb = GetButtonPositionZ(row, col);
             if(configData.Options.AutoTurretTargetsPlayers)
             {
@@ -1445,6 +1416,26 @@ namespace Oxide.Plugins
             }
             row++;
             pb = GetButtonPositionZ(row, col);
+            if (configData.Options.NPCAutoTurretTargetsPlayers)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if (configData.Options.NPCAutoTurretTargetsNPCs)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
             if(configData.Options.TrapsIgnorePlayers)
             {
                 UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers false");
@@ -1462,6 +1453,16 @@ namespace Oxide.Plugins
             else
             {
                 UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.UnprotectedBuildingDamage)
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage false");
+            }
+            else
+            {
+                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -2350,7 +2351,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private bool IsBaseHeli(HitInfo hitInfo)
+        private bool IsBaseHelicopter(HitInfo hitInfo)
         {
             if (hitInfo.Initiator is BaseHelicopter
                || (hitInfo.Initiator != null && (hitInfo.Initiator.ShortPrefabName.Equals("oilfireballsmall") || hitInfo.Initiator.ShortPrefabName.Equals("napalm"))))
@@ -2393,7 +2394,17 @@ namespace Oxide.Plugins
                 if (building != null)
                 {
                     var privs = building.GetDominatingBuildingPrivilege();
-                    if (privs == null) return false;
+                    if (privs == null)
+                    {
+                        if (configData.Options.UnprotectedBuildingDamage)
+                        {
+                            return true;
+                        }
+                        else
+                        {
+                            return false;
+                        }
+                    }
                     foreach (var auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                     {
                         if (entity.OwnerID == player.userID)
@@ -2406,11 +2417,11 @@ namespace Oxide.Plugins
                             DoLog($"Player has privilege on BuildingBlock", 2);
                             return true;
                         }
-                        //                        else if(configData.Options.HonorRelationships && IsFriend(auth, entity.OwnerID))
-                        //                        {
-                        //                              DoLog($"Player is friends with owner of BuildingBlock", 2);
-                        //                            return true;
-                        //                        }
+                        else if (configData.Options.HonorRelationships && IsFriend(auth, entity.OwnerID))
+                        {
+                            DoLog($"Player is friends with owner of BuildingBlock", 2);
+                            return true;
+                        }
                     }
                 }
             }
@@ -2637,6 +2648,36 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("CREATE TABLE rpve_entities (name varchar(32), type varchar(32), custom INTEGER(1) DEFAULT 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'BaseAnimalNPC', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Boar', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Bear', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Chicken', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Horse', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Stag', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Wolf', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('building', 'BuildingBlock', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'BaseOven', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'FireBall', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('helicopter', 'BaseHelicopter', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('highwall', 'SimpleBuildingBlock', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('highwall', 'wall.external.high.stone', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('highwall', 'wall.external.high.wood', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('minicopter', 'MiniCopter', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
@@ -2655,15 +2696,21 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Zombie', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'ResourceEntity', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npcturret', 'NPCAutoTurret', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'LootContainer', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'DroppedItemContainer', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('player', 'BasePlayer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'BaseCorpse', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'TeslaCoil', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'DroppedItemContainer', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'LootContainer', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'ResourceEntity', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'Barricade', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'BearTrap', 0)", sqlConnection);
             ct.ExecuteNonQuery();
@@ -2675,39 +2722,7 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'ReactiveTarget', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'spikes.floor', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'Landmine', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'BaseAnimalNPC', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Boar', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Bear', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Chicken', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Stag', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Wolf', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Horse', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'BaseOven', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'FireBall', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('player', 'BasePlayer', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('building', 'BuildingBlock', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('helicopter', 'BaseHeli', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('minicopter', 'Minicopter', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npcturret', 'NPCAutoTurret', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'TeslaCoil', 0)", sqlConnection);
             ct.ExecuteNonQuery();
         }
 
@@ -2753,6 +2768,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'scrapcopter_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_building', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'trap_trap', null, null, null)", sqlConnection);
@@ -2760,6 +2777,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_resource', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_building', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
         }
 
@@ -2783,9 +2802,9 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('resource_player', 'Resource can damage Player', 1, 0, 'resource', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('players_traps', 'Player can damage Trap', 1, 0, 'player', 'trap')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_trap', 'Player can damage Trap', 1, 0, 'player', 'trap')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('traps_players', 'Trap can damage Player', 1, 0, 'trap', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('trap_player', 'Trap can damage Player', 1, 0, 'trap', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_animal', 'Player can damage Animal', 1, 0, 'player', 'animal')", sqlConnection);
             ct.ExecuteNonQuery();
@@ -2797,9 +2816,9 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('helicopter_building', 'Helicopter can damage Building', 1, 0, 'helicopter', 'building')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_minicopter', 'Player can damage Minicopter', 1, 0, 'player', 'minicopter')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_minicopter', 'Player can damage MiniCopter', 1, 0, 'player', 'minicopter')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('minicopter_player', 'Minicopter can damage Player', 1, 0, 'minicopter', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('minicopter_player', 'MiniCopter can damage Player', 1, 0, 'minicopter', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_scrapcopter', 'Player can damage Scrapcopter', 1, 0, 'player', 'scrapcopter')", sqlConnection);
             ct.ExecuteNonQuery();
@@ -2807,7 +2826,7 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_helicopter', 'Player can damage Helicopter', 1, 0, 'player', 'helicopter')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('highwalls_player', 'Highwall can damage Player', 1, 0, 'highwall', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('highwall_player', 'Highwall can damage Player', 1, 0, 'highwall', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('npcturret_player', 'NPCAutoTurret can damage Player', 1, 0, 'npcturret', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
