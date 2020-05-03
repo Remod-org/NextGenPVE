@@ -17,7 +17,7 @@ using System.Text.RegularExpressions;
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.18")]
+    [Info("Real PVE", "RFC1920", "1.0.19")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class RealPVE : RustPlugin
     {
@@ -1419,6 +1419,23 @@ namespace Oxide.Plugins
                         ct.ExecuteNonQuery();
                     }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
+            if (configData.Version < new VersionNumber(1, 0, 19))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('helicopter_animal', 'Helicopter can damage Animal', 1, 0, 'helicopter', 'animal')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('helicopter_npc', 'Helicopter can damage NPC', 1, 0, 'helicopter', 'npc')", c))
                     {
                         ct.ExecuteNonQuery();
                     }
