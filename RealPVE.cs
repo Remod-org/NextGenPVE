@@ -17,7 +17,7 @@ using System.Text.RegularExpressions;
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.17")]
+    [Info("Real PVE", "RFC1920", "1.0.18")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class RealPVE : RustPlugin
     {
@@ -59,14 +59,13 @@ namespace Oxide.Plugins
         #region init
         private void Init()
         {
-            LoadConfigVariables();
-
             Puts("Creating database connection for main thread.");
             connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}realpve.db;";
             sqlConnection = new SQLiteConnection(connStr);
             Puts("Opening...");
             sqlConnection.Open();
 
+            LoadConfigVariables();
             LoadData();
 
             AddCovalenceCommand("pverule", "CmdRealPVEGUI");
@@ -663,7 +662,6 @@ namespace Oxide.Plugins
 
         private void RunSchedule(bool refresh = false)
         {
-            Puts("RunSchedule called...");
             TimeSpan ts = configData.Options.useRealtime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
             if (refresh)
             {
@@ -689,26 +687,23 @@ namespace Oxide.Plugins
                 }
             }
 
-            Puts($"{ts.Days.ToString()} {ts.Hours.ToString()}:{ts.Minutes.ToString()}");
             // Actual schedule processing here...
             foreach(KeyValuePair<string,string> scheduleInfo in rpveschedule)
             {
-                Puts($"Checking schedule string {scheduleInfo.Value}");
-                RealPVESchedule parsed;// = new RealPVESchedule();
+                RealPVESchedule parsed;
                 if (ParseSchedule(scheduleInfo.Value, out parsed))
                 {
-                    int i = 0;
                     foreach (var x in parsed.day)
                     {
-                        Puts($"Schedule day == {x.ToString()} {parsed.dayName[i]} {parsed.starthour} to {parsed.endhour}");
+                        DoLog($"Schedule day == {x.ToString()} {parsed.dayName} {parsed.starthour} to {parsed.endhour}");
                         if(ts.Days == x)
                         {
-                            Puts($"Day matched.  Comparing {ts.Hours.ToString()} to start time {parsed.starthour}:{parsed.startminute} and end time {parsed.endhour}:{parsed.endminute}");
+                            DoLog($"Day matched.  Comparing {ts.Hours.ToString()} to start time {parsed.starthour}:{parsed.startminute} and end time {parsed.endhour}:{parsed.endminute}");
                             if (ts.Hours >= Convert.ToInt32(parsed.starthour) && ts.Hours <= Convert.ToInt32(parsed.endhour))
                             {
                                 if(ts.Minutes >= Convert.ToInt32(parsed.endminute))
                                 {
-                                    Puts($"Disabling ruleset {scheduleInfo.Key}");
+                                    DoLog($"Disabling ruleset {scheduleInfo.Key}");
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
@@ -720,7 +715,7 @@ namespace Oxide.Plugins
                                 }
                                 else if(ts.Minutes >= Convert.ToInt32(parsed.startminute))
                                 {
-                                    Puts($"Enabling ruleset {scheduleInfo.Key}");
+                                    DoLog($"Enabling ruleset {scheduleInfo.Key}");
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
@@ -732,7 +727,6 @@ namespace Oxide.Plugins
                                 }
                             }
                         }
-                        i++;
                     }
                 }
             }
@@ -742,22 +736,12 @@ namespace Oxide.Plugins
 
         private bool ParseSchedule(string dbschedule, out RealPVESchedule parsed)
         {
-            Puts($"Parsing schedule... {dbschedule}");
-            // day, dayName, starttime, endtime, second
             int day = 0;
             parsed = new RealPVESchedule();
 
             string[] realschedule = Regex.Split(dbschedule, @"(.*)\;(.*)\:(.*)\;(.*)\:(.*)");
-//            string[] realschedule = dbschedule.Split(';');
-            Puts($"{realschedule.Length.ToString()}");
-            if (realschedule.Length < 5) return false;
-            Puts($"Schedule: {string.Join("#", realschedule)}");
+            if (realschedule.Length < 6) return false;
 
-            Puts($"SCHEDULE DAY {realschedule[1]}");
-            Puts($"START HOUR   {realschedule[2]}");
-            Puts($"START MINUTE {realschedule[3]}");
-            Puts($"END HOUR     {realschedule[4]}");
-            Puts($"END MINUTE   {realschedule[5]}");
             parsed.starthour = realschedule[2];
             parsed.startminute = realschedule[3];
             parsed.endhour = realschedule[4];
@@ -771,7 +755,6 @@ namespace Oxide.Plugins
 
             if (tmp == "*")
             {
-//                parsed.dayName.Add(Lang("all") + "(*)");
                 for (int i = 0; i < 7; i++)
                 {
                     parsed.day.Add(i);
@@ -1425,6 +1408,23 @@ namespace Oxide.Plugins
         private void LoadConfigVariables()
         {
             configData = Config.ReadObject<ConfigData>();
+
+            if (configData.Version < new VersionNumber(1, 0, 18))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_animal', null, null, null)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
             configData.Version = Version;
             SaveConfig(configData);
         }
@@ -2211,7 +2211,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT FROM rpve_rules WHERE name='{rulename}'", c))
+                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT * FROM rpve_rules WHERE name='{rulename}'", c))
                 {
                     using (SQLiteDataReader rd = getrs.ExecuteReader())
                     {
@@ -2918,7 +2918,11 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'scrapcopter_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_animal', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_building', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();

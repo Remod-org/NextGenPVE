@@ -136,6 +136,8 @@ The basic rule evaluation order is:
 
 Ruleset -> Default Damage -> Exception Rule -> Exclusion.
 
+Example 1:
+
 1. Player attacking Bear
 2. Default ruleset damage False.
 3. Exception for player_animal.
@@ -143,12 +145,16 @@ Ruleset -> Default Damage -> Exception Rule -> Exclusion.
 5. No target exclusion for Bear.
 6. DAMAGE ALLOWED.
 
+Example 2:
+
 1. Bear attacking Player
 2. Default ruleset damage False.
 3. Exception for animal_player
 4. No source exclusion for BasePlayer.
 5. No target exclusion for Bear.
 6. DAMAGE ALLOWED.
+
+Example 3:
 
 1. Player attacking Chicken
 2. Default damage False.
