@@ -2863,6 +2863,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('helicopter', 'BaseHelicopter', 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('helicopter', 'HelicopterDebris', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('highwall', 'SimpleBuildingBlock', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('highwall', 'wall.external.high.stone', 0)", sqlConnection);
@@ -2876,6 +2878,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'BradleyAPC', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'HelicopterDebris', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'HumanNPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
