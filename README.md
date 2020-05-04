@@ -21,27 +21,27 @@ The default ruleset (out of the box) has the following settings:
 
 - Default damage false
 - Exceptions:
-	- animal can damage animal
+    - animal can damage animal
     - animal can damage player
-	- fire can damage building
-	- fire can damage player
-	- fire can damage resource
-	- helicopter can damage building
-	- helicopter can damage player
-	- npc can damage player
-	- npc turret can damage animal
-	- npc turret can damage npc
-	- npc turret can damage player
-	- player can damage animal
-	- player can damage building (their own or a friend's)
-	- player can damage helicopter
-	- player can damage minicopter
-	- player can damage npc
-	- player can damage resource
-	- player can damage scrapcopter
-	- resource can damage player
-	- scrapcopter can damage player
-	- trap can damage trap
+    - fire can damage building
+    - fire can damage player
+    - fire can damage resource
+    - helicopter can damage building
+    - helicopter can damage player
+    - npc can damage player
+    - npc turret can damage animal
+    - npc turret can damage npc
+    - npc turret can damage player
+    - player can damage animal
+    - player can damage building (their own or a friend's)
+    - player can damage helicopter
+    - player can damage minicopter
+    - player can damage npc
+    - player can damage resource
+    - player can damage scrapcopter
+    - resource can damage player
+    - scrapcopter can damage player
+    - trap can damage trap
 
 - Exclusions: NONE (Could be chicken, bear, HumanNPC, etc.)
 
@@ -67,8 +67,8 @@ There is in integrated GUI for the admin to use to:
 The following commands have been implemented:
 
     - `/pverule` - Starts the GUI for editing, creating, and deleting rulesets
-	- `/pveenable` - Toggles the enabled status of the plugin
-	- `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
+    - `/pveenable` - Toggles the enabled status of the plugin
+    - `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
 
 The above commands can also be run from console or RCON.
 

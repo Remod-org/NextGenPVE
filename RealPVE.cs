@@ -60,13 +60,13 @@ namespace Oxide.Plugins
         #region init
         private void Init()
         {
-            Puts("Creating database connection for main thread.");
+            //Puts("Creating database connection for main thread.");
             DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/realpve");
             dataFile.Save();
 
             connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}realpve.db;";
             sqlConnection = new SQLiteConnection(connStr);
-            Puts("Opening...");
+            //Puts("Opening...");
             sqlConnection.Open();
 
             LoadConfigVariables();
@@ -403,7 +403,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                Puts($"SELECT name FROM rpve_rulesets WHERE zone='{key}'");
+                //Puts($"SELECT name FROM rpve_rulesets WHERE zone='{key}'");
                 using (SQLiteCommand rm = new SQLiteCommand($"SELECT name FROM rpve_rulesets WHERE zone='{key}'", c))
                 {
                     using (SQLiteDataReader rd = rm.ExecuteReader())
@@ -829,8 +829,7 @@ namespace Oxide.Plugins
 
             if (args.Length > 0)
             {
-                string debug = string.Join(",", args); Puts($"{debug}");
-
+                //string debug = string.Join(",", args); Puts($"{debug}");
                 switch (args[0])
                 {
                     case "editruleset":
@@ -945,7 +944,7 @@ namespace Oxide.Plugins
                                     switch (args[4])
                                     {
                                         case "add":
-                                            Puts($"SELECT damage, exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'");
+                                            //Puts($"SELECT damage, exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'");
                                             bool isNew = true;
                                             bool damage = false;
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
@@ -978,7 +977,7 @@ namespace Oxide.Plugins
                                             }
                                             if (isNew)
                                             {
-                                                Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
+                                                //Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
                                                 string dmg = damage ? "1" : "0";
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
@@ -1020,7 +1019,7 @@ namespace Oxide.Plugins
                                                         while (aed.Read())
                                                         {
                                                             etype = aed.GetString(0) ?? "";
-                                                            Puts($"Found type {etype} of {newval}");
+                                                            //Puts($"Found type {etype} of {newval}");
                                                         }
                                                     }
                                                 }
@@ -1039,7 +1038,7 @@ namespace Oxide.Plugins
                                                         {
                                                             exception = rex.GetValue(0).ToString();
                                                             oldsrc = rex.GetValue(1).ToString();
-                                                            Puts($"Found existing exception '{exception}' and src_exclude of '{oldsrc}'");
+                                                            //Puts($"Found existing exception '{exception}' and src_exclude of '{oldsrc}'");
                                                         }
                                                     }
                                                 }
@@ -1048,11 +1047,11 @@ namespace Oxide.Plugins
                                                     if (!oldsrc.Contains(newval))
                                                     {
                                                         string newsrc = string.Join(",", oldsrc, newval);
-                                                        Puts($"Adding src_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}, oldsrc = '{oldsrc}'");
+                                                        //Puts($"Adding src_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}, oldsrc = '{oldsrc}'");
                                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                         {
                                                             c.Open();
-                                                            Puts($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
+                                                            //Puts($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
                                                             using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
                                                             {
                                                                 aes.ExecuteNonQuery();
@@ -1064,11 +1063,11 @@ namespace Oxide.Plugins
                                                 {
                                                     if (!oldsrc.Contains(newval))
                                                     {
-                                                        Puts($"Updating src_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}, oldsrc = '{oldsrc}'");
+                                                        //Puts($"Updating src_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}, oldsrc = '{oldsrc}'");
                                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                         {
                                                             c.Open();
-                                                            Puts($"UPDATE rpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
+                                                            //Puts($"UPDATE rpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
                                                             using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
                                                             {
                                                                 aes.ExecuteNonQuery();
@@ -1092,7 +1091,7 @@ namespace Oxide.Plugins
                                                         {
                                                             foundSrc = true;
                                                             src_excl = fs.GetString(0) ?? "";
-                                                            Puts($"Found src_exclude {src_excl}");
+                                                            //Puts($"Found src_exclude {src_excl}");
                                                         }
                                                     }
                                                 }
@@ -1106,7 +1105,7 @@ namespace Oxide.Plugins
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    Puts($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'");
+                                                    //Puts($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'");
                                                     using (SQLiteCommand ads = new SQLiteCommand($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'", c))
                                                     {
                                                         ads.ExecuteNonQuery();
@@ -1134,7 +1133,7 @@ namespace Oxide.Plugins
                                                         while (aed.Read())
                                                         {
                                                             etype = aed.GetString(0) ?? "";
-                                                            Puts($"Found type {etype} of {newval}");
+                                                            //Puts($"Found type {etype} of {newval}");
                                                         }
                                                     }
                                                 }
@@ -1153,7 +1152,7 @@ namespace Oxide.Plugins
                                                         {
                                                             exception = rex.GetValue(0).ToString();
                                                             oldtgt = rex.GetValue(1).ToString();
-                                                            Puts($"Found existing exception {exception} and tgt_exclude of {oldtgt}");
+                                                            //Puts($"Found existing exception {exception} and tgt_exclude of {oldtgt}");
                                                         }
                                                     }
                                                 }
@@ -1162,11 +1161,11 @@ namespace Oxide.Plugins
                                                     if (!oldtgt.Contains(newval))
                                                     {
                                                         string newtgt = string.Join(",", oldtgt, newval);
-                                                        Puts($"Adding tgt_exclude of '{newtgt}' to ruleset: '{rs}', type: '{etype}' - Input was {newval}");
+                                                        //Puts($"Adding tgt_exclude of '{newtgt}' to ruleset: '{rs}', type: '{etype}' - Input was {newval}");
                                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                         {
                                                             c.Open();
-                                                            Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
+                                                            //Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
                                                             using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
                                                             {
                                                                 aes.ExecuteNonQuery();
@@ -1178,11 +1177,11 @@ namespace Oxide.Plugins
                                                 {
                                                     if (!oldtgt.Contains(newval))
                                                     {
-                                                        Puts($"Updating tgt_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}");
+                                                        //Puts($"Updating tgt_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}");
                                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                         {
                                                             c.Open();
-                                                            Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
+                                                            //Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
                                                             using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
                                                             {
                                                                 aes.ExecuteNonQuery();
@@ -1206,7 +1205,7 @@ namespace Oxide.Plugins
                                                         {
                                                             foundTgt = true;
                                                             tgt_excl = ft.GetString(0) ?? "";
-                                                            Puts($"Found tgt_exclude {tgt_excl}");
+                                                            //Puts($"Found tgt_exclude {tgt_excl}");
                                                         }
                                                     }
                                                 }
@@ -1220,7 +1219,7 @@ namespace Oxide.Plugins
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'");
+                                                    //Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'");
                                                     using (SQLiteCommand ads = new SQLiteCommand($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'", c))
                                                     {
                                                         ads.ExecuteNonQuery();
@@ -1292,7 +1291,7 @@ namespace Oxide.Plugins
                                         }
                                         break;
                                     }
-                                    Puts($"Creating clone {clone}");
+                                    //Puts($"Creating clone {clone}");
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
@@ -1334,7 +1333,7 @@ namespace Oxide.Plugins
                                     }
                                     break;
                                 }
-                                Puts($"Creating new ruleset {newname}");
+                                //Puts($"Creating new ruleset {newname}");
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
@@ -1510,7 +1509,7 @@ namespace Oxide.Plugins
         }
         protected void LoadDefaultFlags()
         {
-            Puts("Creating new config file.");
+            Puts("Creating new config defaults.");
             configData.Options.NPCAutoTurretTargetsPlayers = true;
             configData.Options.NPCAutoTurretTargetsNPCs = true;
             configData.Options.AutoTurretTargetsPlayers = false;
@@ -1778,7 +1777,7 @@ namespace Oxide.Plugins
             col = 1;
             int numExceptions = 0;
 
-            Puts($"SELECT DISTINCT exception FROM rpve_rulesets WHERE name='{rulesetname}' ORDER BY exception");
+            //Puts($"SELECT DISTINCT exception FROM rpve_rulesets WHERE name='{rulesetname}' ORDER BY exception");
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
@@ -1789,7 +1788,7 @@ namespace Oxide.Plugins
                         while (rsread.Read())
                         {
                             string except = rsread.GetValue(0).ToString() ?? null;
-                            Puts($"Found exception: {except}");
+                            //Puts($"Found exception: {except}");
                             if (except == "") continue;
                             if (row > 11)
                             {
@@ -1832,7 +1831,7 @@ namespace Oxide.Plugins
             bool noExclusions = true;
             if (numExceptions > 0) // Cannot exclude from exceptions that do not exist
             {
-                Puts($"SELECT DISTINCT src_exclude FROM rpve_rulesets WHERE name='{rulesetname}'");
+                //Puts($"SELECT DISTINCT src_exclude FROM rpve_rulesets WHERE name='{rulesetname}'");
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
@@ -1856,7 +1855,7 @@ namespace Oxide.Plugins
                                 {
                                     foreach (string ex in excl)
                                     {
-                                        Puts($"Adding button for existing src_exclude of {ex}");
+                                        //Puts($"Adding button for existing src_exclude of {ex}");
                                         pb = GetButtonPositionP(row, col);
                                         UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), ex, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
                                         row++;
@@ -1864,7 +1863,7 @@ namespace Oxide.Plugins
                                 }
                                 else
                                 {
-                                    Puts($"Adding button for existing src_exclude of {exclude}");
+                                    //Puts($"Adding button for existing src_exclude of {exclude}");
                                     pb = GetButtonPositionP(row, col);
                                     UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
                                     row++;
@@ -1909,7 +1908,7 @@ namespace Oxide.Plugins
                                 {
                                     foreach (string ex in excl)
                                     {
-                                        Puts($"Adding button for existing tgt_exclude of {ex}");
+                                        //Puts($"Adding button for existing tgt_exclude of {ex}");
                                         pb = GetButtonPositionP(row, col);
                                         UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), ex, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
                                         row++;
@@ -1917,7 +1916,7 @@ namespace Oxide.Plugins
                                 }
                                 else
                                 {
-                                    Puts($"Adding button for existing tgt_exclude of {exclude}");
+                                    //Puts($"Adding button for existing tgt_exclude of {exclude}");
                                     pb = GetButtonPositionP(row, col);
                                     UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
                                 }
@@ -2049,7 +2048,7 @@ namespace Oxide.Plugins
 
         private void GUISelectExclusion(BasePlayer player, string rulesetname, string srctgt)
         {
-            Puts($"GUISelectExclusion called for {rulesetname}");
+            //Puts($"GUISelectExclusion called for {rulesetname}");
             CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
             string t = Lang("source"); if (srctgt == "tgt_exclude") t = Lang("target");
 
@@ -2067,7 +2066,7 @@ namespace Oxide.Plugins
             string tgt_exclude = "";
 
             // Get ruleset src and tgt exclusions
-            Puts($"SELECT src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}'");
+            //Puts($"SELECT src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}'");
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
@@ -2080,13 +2079,13 @@ namespace Oxide.Plugins
                             string a = rsd.GetValue(0).ToString();
                             if (a != "")
                             {
-                                Puts($"Adding {a} to src_exclude");
+                                //Puts($"Adding {a} to src_exclude");
                                 src_exclude += a;
                             }
                             string b = rsd.GetValue(1).ToString();
                             if (b != "")
                             {
-                                Puts($"Adding {b} to tgt_exclude");
+                                //Puts($"Adding {b} to tgt_exclude");
                                 tgt_exclude += b;
                             }
                         }
@@ -2155,7 +2154,7 @@ namespace Oxide.Plugins
                                     if (src == null || !rpveentities.ContainsKey(src)) break;
                                     foreach (string type in rpveentities[src].types)
                                     {
-                                        Puts($"Checking for '{type}'");
+                                        //Puts($"Checking for '{type}'");
                                         if (type == "") continue;
                                         if (foundsrc.Contains(type)) continue;
                                         foundsrc.Add(type);
@@ -2167,7 +2166,7 @@ namespace Oxide.Plugins
                                         pb = GetButtonPositionP(row, col);
                                         string eColor = "#d85540";
 
-                                        Puts($"  Creating button for {type}, src_exclude='{src_exclude}'");
+                                        //Puts($"  Creating button for {type}, src_exclude='{src_exclude}'");
                                         if (!src_exclude.Contains(type))
                                         {
                                             UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} add");
@@ -2184,7 +2183,7 @@ namespace Oxide.Plugins
                                     if (tgt == null || !rpveentities.ContainsKey(tgt)) break;
                                     foreach (var type in rpveentities[tgt].types)
                                     {
-                                        Puts($"Checking for '{type}'");
+                                        //Puts($"Checking for '{type}'");
                                         if (type == "") continue;
                                         if (foundtgt.Contains(type)) continue;
                                         foundtgt.Add(type);
@@ -2196,7 +2195,7 @@ namespace Oxide.Plugins
                                         pb = GetButtonPositionP(row, col);
                                         string eColor = "#d85540";
 
-                                        Puts($"  Creating button for {type}, tgt_exclude='{tgt_exclude}'");
+                                        //Puts($"  Creating button for {type}, tgt_exclude='{tgt_exclude}'");
                                         if (!tgt_exclude.Contains(type))
                                         {
                                             UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} add");
@@ -2450,7 +2449,7 @@ namespace Oxide.Plugins
                 try
                 {
                     string[] realschedule = schedule.Split(';');//.ToArray();
-                    Puts($"Schedule: {realschedule[0]} {realschedule[1]} {realschedule[2]}");
+                    //Puts($"Schedule: {realschedule[0]} {realschedule[1]} {realschedule[2]}");
                     // WTF?
                     int day = 0;
                     string dayName = Lang("all") + "(*)";
