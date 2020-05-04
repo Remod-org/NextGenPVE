@@ -10,6 +10,7 @@ using UnityEngine;
 using System.Data.SQLite;
 using System.IO;
 using System.Text.RegularExpressions;
+using Oxide.Core.Configuration;
 
 // TODO
 // Finish work on custom rule editor gui (src/target)
@@ -17,7 +18,7 @@ using System.Text.RegularExpressions;
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.19")]
+    [Info("Real PVE", "RFC1920", "1.0.20")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class RealPVE : RustPlugin
     {
@@ -53,13 +54,16 @@ namespace Oxide.Plugins
 
         #region Message
         private string Lang(string key, string id = null, params object[] args) => string.Format(lang.GetMessage(key, this, id), args);
-        private void Message(IPlayer player, string key, params object[] args) => player.Reply(Lang(key, player.Id, args));
+        private void Message(IPlayer player, string key, params object[] args) => player.Message(Lang(key, player.Id, args));
         #endregion
 
         #region init
         private void Init()
         {
             Puts("Creating database connection for main thread.");
+            DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/realpve");
+            dataFile.Save();
+
             connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}realpve.db;";
             sqlConnection = new SQLiteConnection(connStr);
             Puts("Opening...");
@@ -169,7 +173,7 @@ namespace Oxide.Plugins
         {
             bool found = false;
             using (SQLiteConnection c = new SQLiteConnection(connStr))
-                {
+            {
                 c.Open();
                 using (SQLiteCommand r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='rpve_entities'", c))
                 {
@@ -472,9 +476,10 @@ namespace Oxide.Plugins
                     {
                         if (targetzone.Contains(z))
                         {
-                            string zName = (string)ZoneManager?.Call("GetZoneName", z);
-                            if (zName != null) zone = zName;
-                            else zone = z;
+                            //string zName = (string)ZoneManager?.Call("GetZoneName", z);
+                            //if (zName != null) zone = zName;
+                            //else zone = z;
+                            zone = z;
                             DoLog($"Found zone {zone}", 1);
                             break;
                         }
@@ -552,39 +557,42 @@ namespace Oxide.Plugins
                     {
                         if (foundmatch) break; // Breaking due to match found in previously checked ruleset
                         enabled = readMe.GetBoolean(3);
+                        rulesetname = readMe.GetString(0);
+                        rulesetzone = readMe.GetString(1);
+
                         if (enabled != true)
                         {
                             DoLog($"Skipping ruleset {rulesetname}, which is disabled");
                             continue;
                         }
 
-                        bool zmatch = false;
+                        bool zmatch = true;
                         foundexception = false;
                         foundexclusion = false;
 
-                        rulesetname = readMe.GetString(0);
-                        rulesetzone = readMe.GetString(1);
                         damage = readMe.GetBoolean(2);
 
                         if (zone == rulesetzone || (zone == "default" && (rulesetzone == "" || rulesetzone == "0")))
                         {
                             DoLog($"Zone match for ruleset {rulesetname}, zone {rulesetzone}");
-                            zmatch = true;
                         }
                         else if (rulesetzone == "lookup" && rpvezonemaps.ContainsKey(rulesetname))
                         {
                             if (!rpvezonemaps[rulesetname].map.Contains(zone))
                             {
-                                DoLog($"Skipping ruleset due to zone {zone} lookup mismatch");
+                                DoLog($"Skipping ruleset {rulesetname} due to zone mismatch with current zone, {zone}");
+                                zmatch = false;
                                 continue;
                             }
                         }
                         else if (zone != "default" && rulesetzone != "" && zone != rulesetzone && foundZone)
                         {
-                            DoLog($"Skipping ruleset due to zone {zone} mismatch with ruleset {rulesetname}:{rulesetzone}");
+                            DoLog($"Skipping ruleset {rulesetname} due to zone mismatch with current zone, {zone}");
+                            zmatch = false;
                             continue;
                         }
 
+                        DoLog($"Checking ruleset {rulesetname}");
                         //Puts($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='1' AND exception='{src}_{tgt}'");
                         if (src != null && tgt != null)
                         {
@@ -599,10 +607,8 @@ namespace Oxide.Plugins
                                         DoLog($"Found exception match for {stype} attacking {ttype}");
                                         string foundsrc = entry.GetValue(0).ToString();
                                         string foundtgt = entry.GetValue(1).ToString();
-                                        //if (foundsrc != "" && foundtgt != "")
-                                        //{
-                                            foundexception = true;
-                                        //}
+                                        foundexception = true;
+
                                         if (foundsrc.Contains(stype))
                                         {
                                             DoLog($"Exclusion for {stype}");
@@ -624,13 +630,15 @@ namespace Oxide.Plugins
                                 }
                             }
 
-                            if (zmatch) // Only match if zone match
+                            if (zmatch && (foundexception && !foundexclusion))
                             {
-                                if ((foundexception && !foundexclusion) || !foundexception)
-                                {
-                                    // allow break on current ruleset and zone match with no exceptions, etc.
-                                    foundmatch = true;
-                                }
+                                // allow break on current ruleset and zone match with no exclustions
+                                foundmatch = true;
+                            }
+                            else if(zmatch && !foundexception)
+                            {
+                                // allow break on current ruleset and zone match with no exceptions
+                                foundmatch = true;
                             }
                         }
                     }
@@ -937,8 +945,23 @@ namespace Oxide.Plugins
                                     switch (args[4])
                                     {
                                         case "add":
-                                            Puts($"SELECT exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'");
+                                            Puts($"SELECT damage, exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'");
                                             bool isNew = true;
+                                            bool damage = false;
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                            {
+                                                c.Open();
+                                                using (SQLiteCommand ce = new SQLiteCommand($"SELECT DISTINCT damage FROM rpve_rulesets WHERE name='{rs}'", c))
+                                                {
+                                                    using (SQLiteDataReader re = ce.ExecuteReader())
+                                                    {
+                                                        while (re.Read())
+                                                        {
+                                                            damage = re.GetBoolean(0);
+                                                        }
+                                                    }
+                                                }
+                                            }
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
@@ -956,10 +979,11 @@ namespace Oxide.Plugins
                                             if (isNew)
                                             {
                                                 Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
+                                                string dmg = damage ? "1" : "0";
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    using (SQLiteCommand ae = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '', 0)", c))
+                                                    using (SQLiteCommand ae = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', {dmg}, 1, 0, '', '{args[3]}', '', '', 0)", c))
                                                     {
                                                         ae.ExecuteNonQuery();
                                                     }
@@ -1794,6 +1818,8 @@ namespace Oxide.Plugins
 
             hdrcol += 2; row = 0;
             if (numExceptions> 11) hdrcol++;
+            if (numExceptions> 22) hdrcol++;
+            if (numExceptions> 33) hdrcol++;
             pb = GetButtonPositionP(row, hdrcol);
             UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude") + " " + Lang("source"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
