@@ -59,9 +59,9 @@ There is an integrated GUI for the admin to use to:
  9. Edit custom rules (WORK IN PROGRESS)
 10. Set global flags.
 
-![](https://i.imgur.com/dWiSvOB.jpg)
+![](https://i.imgur.com/NbnonRb.jpg)
 
-![](https://i.imgur.com/a6O9Aaf.jpg)
+![](https://i.imgur.com/OgQ5nRt.jpg)
 
 ## Commands
 
