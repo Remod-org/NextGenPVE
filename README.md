@@ -1,9 +1,9 @@
-# NextGenPVE - WORK IN PROGRESS
+## NextGenPVE - WORK IN PROGRESS
 Prevent damage to players and objects in a PVE environment
 
 Uses ZoneManager/LiteZones, Friends, Clans, RustIO, HumanNPC
 
-## Overview
+### Overview
 NextGenPVE is a new plugin and not a fork of TruePVE, et al.  It includes an integrated GUI for ruleset management.
 
 NextGenPVE is organized into entity collections, rules that use those collections, and rulesets that include a set of rules.
@@ -63,7 +63,7 @@ There is an integrated GUI for the admin to use to:
 
 ![](https://i.imgur.com/OgQ5nRt.jpg)
 
-## Commands
+### Commands
 
 The following commands have been implemented:
 
@@ -71,15 +71,15 @@ The following commands have been implemented:
     - `/pveenable` - Toggles the enabled status of the plugin
     - `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
 
-The above commands can also be run from console or RCON.
+The above commands can also be run from console or RCON (without /).  Much more documentation to come if you don't like GUIs.
 
-## Permissions
+### Permissions
 
 - nextgenpve.use   -- Currently unused
 - nextgenpve.admin -- Required for access to GUI and other functions
 - nextgenpve.god   -- Override PVE, killall
 
-## Configuration
+### Configuration
 
 ```json
 {
@@ -120,7 +120,7 @@ If a player is trying to damage a building, "HonorBuildingPrivilege" determines 
 
 Note that friends support can include Friends, Clans, or Teams.
 
-## Details
+### Details
 
 NextGenPVE uses SQLite for most of its data storage.  The database file is named nextgenpve.db.
 
@@ -164,3 +164,7 @@ Example 3:
 5. Target exclusion for Chicken.
 6. DAMAGE BLOCKED.
 
+### TODO
+1. Document all of the commands typically used only by the GUI but potentially used programmatically.  All of these feed off of /pverule or pverule.
+2. Improve the schedule editor.
+3. Fix as found to be broken as this is still somewhat of a WORK IN PROGRESS.
