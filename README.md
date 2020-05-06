@@ -1,12 +1,12 @@
-# RemodPVE - WORK IN PROGRESS
+# NextGenPVE - WORK IN PROGRESS
 Prevent damage to players and objects in a PVE environment
 
 Uses ZoneManager/LiteZones, Friends, Clans, RustIO, HumanNPC
 
 ## Overview
-RemodPVE is a new plugin and not a fork of TruePVE, et al.  It includes an integrated GUI for ruleset management.
+NextGenPVE is a new plugin and not a fork of TruePVE, et al.  It includes an integrated GUI for ruleset management.
 
-RemodPVE is organized into entity collections, rules that use those collections, and rulesets that include a set of rules.
+NextGenPVE is organized into entity collections, rules that use those collections, and rulesets that include a set of rules.
 
 Each ruleset has a default damage value of true or false.
 
@@ -48,7 +48,7 @@ The default ruleset (out of the box) has the following settings:
 
 There is an integrated GUI for the admin to use to:
 
- 1. Enable/disable RemodPVE
+ 1. Enable/disable NextGenPVE
  2. Create or delete rulesets
  3. Enable or disable rulesets
  4. Set the default damage for a ruleset
@@ -75,9 +75,9 @@ The above commands can also be run from console or RCON.
 
 ## Permissions
 
-- remodpve.use   -- Currently unused
-- remodpve.admin -- Required for access to GUI and other functions
-- remodpve.god   -- Override PVE, killall
+- nextgenpve.use   -- Currently unused
+- nextgenpve.admin -- Required for access to GUI and other functions
+- nextgenpve.god   -- Override PVE, killall
 
 ## Configuration
 
@@ -122,9 +122,9 @@ Note that friends support can include Friends, Clans, or Teams.
 
 ## Details
 
-RemodPVE uses SQLite for most of its data storage.  The database file is named remodpve.db.
+NextGenPVE uses SQLite for most of its data storage.  The database file is named nextgenpve.db.
 
-The only other data file is rpve_zonemaps.json.  This is currently used by third party plugins that create their own PVP ruleset and zones.
+The only other data file is ngpve_zonemaps.json.  This is currently used by third party plugins that create their own PVP ruleset and zones.
 
 Each rule includes a source and target listing all of the types that will be matched for the rule.  The player is simply BasePlayer, whereas NPCs include several different types.
 

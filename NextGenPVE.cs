@@ -18,20 +18,20 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("Remod PVE", "RFC1920", "1.0.20")]
+    [Info("NextGen PVE", "RFC1920", "1.0.21")]
     [Description("Prevent damage to players and objects in a PVE environment")]
-    internal class RemodPVE : RustPlugin
+    internal class NextGenPVE : RustPlugin
     {
         #region vars
-        private Dictionary<string, RemodPVERule> custom_rules = new Dictionary<string, RemodPVERule>();
+        private Dictionary<string, NextGenPVERule> custom_rules = new Dictionary<string, NextGenPVERule>();
 
         // Ruleset to multiple zones
-        private Dictionary<string, RemodPVEZoneMap> rpvezonemaps = new Dictionary<string, RemodPVEZoneMap>();
-        private Dictionary<string, string> rpveschedule = new Dictionary<string, string>();
+        private Dictionary<string, NextGenPVEZoneMap> ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
+        private Dictionary<string, string> ngpveschedule = new Dictionary<string, string>();
 
-        private const string permRemodPVEUse = "remodpve.use";
-        private const string permRemodPVEAdmin = "remodpve.admin";
-        private const string permRemodPVEGod = "remodpve.god";
+        private const string permNextGenPVEUse = "nextgenpve.use";
+        private const string permNextGenPVEAdmin = "nextgenpve.admin";
+        private const string permNextGenPVEGod = "nextgenpve.god";
         private ConfigData configData;
         private SQLiteConnection sqlConnection;
         private string connStr;
@@ -43,13 +43,13 @@ namespace Oxide.Plugins
         private bool dolog = false;
         private bool enabled = true;
         private Timer scheduleTimer;
-        private const string RPVERULELIST = "remodpve.rulelist";
-        private const string RPVEEDITRULESET = "remodpve.ruleseteditor";
-        private const string RPVERULEEDIT = "remodpve.ruleeditor";
-        private const string RPVEVALUEEDIT = "remodpve.value";
-        private const string RPVESCHEDULEEDIT = "remodpve.schedule";
-        private const string RPVERULESELECT = "remodpve.selectrule";
-        private const string RPVERULEEXCLUSIONS = "remodpve.exclusions";
+        private const string NGPVERULELIST = "nextgenpve.rulelist";
+        private const string NGPVEEDITRULESET = "nextgenpve.ruleseteditor";
+        private const string NGPVERULEEDIT = "nextgenpve.ruleeditor";
+        private const string NGPVEVALUEEDIT = "nextgenpve.value";
+        private const string NGPVESCHEDULEEDIT = "nextgenpve.schedule";
+        private const string NGPVERULESELECT = "nextgenpve.selectrule";
+        private const string NGPVERULEEXCLUSIONS = "nextgenpve.exclusions";
         #endregion
 
         #region Message
@@ -61,10 +61,10 @@ namespace Oxide.Plugins
         private void Init()
         {
             //Puts("Creating database connection for main thread.");
-            DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/remodpve");
+            DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/nextgenpve");
             dataFile.Save();
 
-            connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}remodpve.db;";
+            connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nextgenpve.db;";
             sqlConnection = new SQLiteConnection(connStr);
             //Puts("Opening...");
             sqlConnection.Open();
@@ -72,13 +72,13 @@ namespace Oxide.Plugins
             LoadConfigVariables();
             LoadData();
 
-            AddCovalenceCommand("pverule", "CmdRemodPVEGUI");
-            AddCovalenceCommand("pveenable", "CmdRemodPVEenable");
-            AddCovalenceCommand("pvelog", "CmdRemodPVElog");
+            AddCovalenceCommand("pverule", "CmdNextGenPVEGUI");
+            AddCovalenceCommand("pveenable", "CmdNextGenPVEenable");
+            AddCovalenceCommand("pvelog", "CmdNextGenPVElog");
 
-            permission.RegisterPermission(permRemodPVEUse, this);
-            permission.RegisterPermission(permRemodPVEAdmin, this);
-            permission.RegisterPermission(permRemodPVEGod, this);
+            permission.RegisterPermission(permNextGenPVEUse, this);
+            permission.RegisterPermission(permNextGenPVEAdmin, this);
+            permission.RegisterPermission(permNextGenPVEGod, this);
             enabled = true;
 
             RunSchedule(true);
@@ -89,18 +89,17 @@ namespace Oxide.Plugins
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 ["notauthorized"] = "You don't have permission to use this command.",
-                ["remodpverulesets"] = "RemodPVE Rulesets",
+                ["nextgenpverulesets"] = "NextGenPVE Rulesets",
                 ["rulesets"] = "Rulesets",
-                ["remodpveruleset"] = "RemodPVE Ruleset",
-                ["remodpverule"] = "RemodPVE Rule",
-                ["remodpveruleselect"] = "RemodPVE Rule Select",
-                ["remodpvevalue"] = "RemodPVE Ruleset Value",
-                ["remodpveexclusions"] = "RemodPVE Ruleset Exclusions",
-                ["remodpveschedule"] = "RemodPVE Ruleset Schedule",
+                ["nextgenpveruleset"] = "NextGenPVE Ruleset",
+                ["nextgenpverule"] = "NextGenPVE Rule",
+                ["nextgenpveruleselect"] = "NextGenPVE Rule Select",
+                ["nextgenpvevalue"] = "NextGenPVE Ruleset Value",
+                ["nextgenpveexclusions"] = "NextGenPVE Ruleset Exclusions",
+                ["nextgenpveschedule"] = "NextGenPVE Ruleset Schedule",
                 ["scheduling"] = "Schedules should be in the format of 'day(s);starttime;endtime'.  Use * for all days.  Enter 0 to clear.",
                 ["current2chedule"] = "Currently scheduled for day: {0} from {1} until {2}",
                 ["noschedule"] = "Not currently scheduled",
-                ["schedulenotworking"] = "Scheduling is not yet working...",
                 ["flags"] = "Global Flags",
                 ["defload"] = "RESET",
                 ["default"] = "default",
@@ -156,13 +155,13 @@ namespace Oxide.Plugins
         {
             foreach (BasePlayer player in BasePlayer.activePlayerList)
             {
-                CuiHelper.DestroyUi(player, RPVERULELIST);
-                CuiHelper.DestroyUi(player, RPVERULEEDIT);
-                CuiHelper.DestroyUi(player, RPVEVALUEEDIT);
-                CuiHelper.DestroyUi(player, RPVESCHEDULEEDIT);
-                CuiHelper.DestroyUi(player, RPVEEDITRULESET);
-                CuiHelper.DestroyUi(player, RPVERULESELECT);
-                CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
+                CuiHelper.DestroyUi(player, NGPVERULELIST);
+                CuiHelper.DestroyUi(player, NGPVERULEEDIT);
+                CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
+                CuiHelper.DestroyUi(player, NGPVESCHEDULEEDIT);
+                CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
+                CuiHelper.DestroyUi(player, NGPVERULESELECT);
+                CuiHelper.DestroyUi(player, NGPVERULEEXCLUSIONS);
             }
 
             if (scheduleTimer != null) scheduleTimer.Destroy();
@@ -175,7 +174,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='rpve_entities'", c))
+                using (SQLiteCommand r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_entities'", c))
                 {
                     using (SQLiteDataReader rentry = r.ExecuteReader())
                     {
@@ -189,7 +188,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='rpve_rules'", c))
+                using (SQLiteCommand r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_rules'", c))
                 {
                     using (SQLiteDataReader rentry = r.ExecuteReader())
                     {
@@ -203,7 +202,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='rpve_rulesets'", c))
+                using (SQLiteCommand r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_rulesets'", c))
                 {
                     using (SQLiteDataReader rentry = r.ExecuteReader())
                     {
@@ -213,12 +212,12 @@ namespace Oxide.Plugins
             }
             if (!found) LoadDefaultRuleset();
 
-            rpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RemodPVEZoneMap>>(this.Name + "/rpve_zonemaps");
+            ngpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, NextGenPVEZoneMap>>(this.Name + "/ngpve_zonemaps");
         }
 
         private void SaveData()
         {
-            Interface.Oxide.DataFileSystem.WriteObject(Name + "/rpve_zonemaps", rpvezonemaps);
+            Interface.Oxide.DataFileSystem.WriteObject(Name + "/ngpve_zonemaps", ngpvezonemaps);
         }
         #endregion
 
@@ -283,10 +282,10 @@ namespace Oxide.Plugins
             if (!this.enabled) return null;
             if (hitInfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
 
-            AttackEntity remodturret;
-            if (IsAutoTurret(hitInfo, out remodturret))
+            AttackEntity nextgenturret;
+            if (IsAutoTurret(hitInfo, out nextgenturret))
             {
-                hitInfo.Initiator = remodturret as BaseEntity;
+                hitInfo.Initiator = nextgenturret as BaseEntity;
             }
 
             //Puts($"attacker: {hitInfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}"); return true;
@@ -296,7 +295,7 @@ namespace Oxide.Plugins
 
             if (stype == "BasePlayer")
             {
-                if ((hitInfo.Initiator as BasePlayer).IPlayer.HasPermission(permRemodPVEGod))
+                if ((hitInfo.Initiator as BasePlayer).IPlayer.HasPermission(permNextGenPVEGod))
                 {
                     Puts("Admin god!");
                     return null;
@@ -324,7 +323,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='{enable}", c))
+                using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='{enable}", c))
                 {
                     cmd.ExecuteNonQuery();
                 }
@@ -342,7 +341,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand au = new SQLiteCommand($"SELECT DISTINCT enabled FROM rpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand au = new SQLiteCommand($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
                 {
                     using (SQLiteDataReader ar = au.ExecuteReader())
                     {
@@ -355,20 +354,20 @@ namespace Oxide.Plugins
             }
             if(foundrs)
             {
-                if (rpvezonemaps.ContainsKey(rulesetname) && !rpvezonemaps[rulesetname].map.Contains(key))
+                if (ngpvezonemaps.ContainsKey(rulesetname) && !ngpvezonemaps[rulesetname].map.Contains(key))
                 {
-                    rpvezonemaps[rulesetname].map.Add(key);
+                    ngpvezonemaps[rulesetname].map.Add(key);
                 }
                 else
                 {
-                    rpvezonemaps.Add(rulesetname, new RemodPVEZoneMap() { map = new List<string>() { key } });
+                    ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap() { map = new List<string>() { key } });
                 }
                 SaveData();
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    DoLog($"UPDATE rpve_rulesets SET zone='lookup' WHERE rulesetname='{rulesetname}'");
-                    using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='lookup' WHERE name='{rulesetname}'", c))
+                    DoLog($"UPDATE ngpve_rulesets SET zone='lookup' WHERE rulesetname='{rulesetname}'");
+                    using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='lookup' WHERE name='{rulesetname}'", c))
                     {
                         cmd.ExecuteNonQuery();
                     }
@@ -380,14 +379,14 @@ namespace Oxide.Plugins
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    DoLog($"INSERT INTO rpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '')");
-                    using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '')", c))
+                    DoLog($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '')");
+                    using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '')", c))
                     {
                         cmd.ExecuteNonQuery();
                     }
                 }
-                if (rpvezonemaps.ContainsKey(rulesetname)) rpvezonemaps.Remove(rulesetname);
-                rpvezonemaps.Add(rulesetname, new RemodPVEZoneMap() { map = new List<string>() { key } });
+                if (ngpvezonemaps.ContainsKey(rulesetname)) ngpvezonemaps.Remove(rulesetname);
+                ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap() { map = new List<string>() { key } });
                 SaveData();
                 return true;
             }
@@ -403,8 +402,8 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                //Puts($"SELECT name FROM rpve_rulesets WHERE zone='{key}'");
-                using (SQLiteCommand rm = new SQLiteCommand($"SELECT name FROM rpve_rulesets WHERE zone='{key}'", c))
+                //Puts($"SELECT name FROM ngpve_rulesets WHERE zone='{key}'");
+                using (SQLiteCommand rm = new SQLiteCommand($"SELECT name FROM ngpve_rulesets WHERE zone='{key}'", c))
                 {
                     using (SQLiteDataReader rd = rm.ExecuteReader())
                     {
@@ -412,7 +411,7 @@ namespace Oxide.Plugins
                         {
                             string rn = rd.GetString(0);
                             foundrs.Add(rn);
-                            rpvezonemaps.Remove(rn);
+                            ngpvezonemaps.Remove(rn);
                             SaveData();
                         }
                     }
@@ -426,7 +425,7 @@ namespace Oxide.Plugins
                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                     {
                         c.Open();
-                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='0' WHERE name='{found}'", c))
+                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='0' WHERE name='{found}'", c))
                         {
                             cmd.ExecuteNonQuery();
                         }
@@ -511,8 +510,8 @@ namespace Oxide.Plugins
             string rulesetname = null;
 
             string src = null; string tgt = null;
-            //Puts($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection);
-            using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{stype}'", sqlConnection))
+            //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection);
+            using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection))
                 {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
                 {
@@ -524,8 +523,8 @@ namespace Oxide.Plugins
                 }
             }
 
-            //Puts($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection);
-            using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{ttype}'", sqlConnection))
+            //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'", sqlConnection);
+            using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'", sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
                 {
@@ -539,7 +538,7 @@ namespace Oxide.Plugins
 
             bool foundZone = false;
             // Are there any rulesets with this zone defined?
-            using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT zone FROM rpve_rulesets WHERE zone='{zone}'", sqlConnection))
+            using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT zone FROM ngpve_rulesets WHERE zone='{zone}'", sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
                 {
@@ -549,7 +548,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM rpve_rulesets", sqlConnection))
+            using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets", sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
                 {
@@ -576,9 +575,9 @@ namespace Oxide.Plugins
                         {
                             DoLog($"Zone match for ruleset {rulesetname}, zone {rulesetzone}");
                         }
-                        else if (rulesetzone == "lookup" && rpvezonemaps.ContainsKey(rulesetname))
+                        else if (rulesetzone == "lookup" && ngpvezonemaps.ContainsKey(rulesetname))
                         {
-                            if (!rpvezonemaps[rulesetname].map.Contains(zone))
+                            if (!ngpvezonemaps[rulesetname].map.Contains(zone))
                             {
                                 DoLog($"Skipping ruleset {rulesetname} due to zone mismatch with current zone, {zone}");
                                 zmatch = false;
@@ -593,11 +592,11 @@ namespace Oxide.Plugins
                         }
 
                         DoLog($"Checking ruleset {rulesetname}");
-                        //Puts($"SELECT enabled, src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND enabled='1' AND exception='{src}_{tgt}'");
+                        //Puts($"SELECT enabled, src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' AND enabled='1' AND exception='{src}_{tgt}'");
                         if (src != null && tgt != null)
                         {
                             DoLog($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}, zone {rulesetzone}");
-                            using (SQLiteCommand rq = new SQLiteCommand($"SELECT src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}' AND exception='{src}_{tgt}'", sqlConnection))
+                            using (SQLiteCommand rq = new SQLiteCommand($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' AND exception='{src}_{tgt}'", sqlConnection))
                             {
                                 using (SQLiteDataReader entry = rq.ExecuteReader())
                                 {
@@ -670,14 +669,14 @@ namespace Oxide.Plugins
 
         private void RunSchedule(bool refresh = false)
         {
-            TimeSpan ts = configData.Options.useRemodtime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
+            TimeSpan ts = configData.Options.useNextGentime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
             if (refresh)
             {
-                rpveschedule = new Dictionary<string, string>();
+                ngpveschedule = new Dictionary<string, string>();
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    using (SQLiteCommand use = new SQLiteCommand($"SELECT name, schedule FROM rpve_rulesets WHERE schedule != '0'", c))
+                    using (SQLiteCommand use = new SQLiteCommand($"SELECT name, schedule FROM ngpve_rulesets WHERE schedule != '0'", c))
                     {
                         using (SQLiteDataReader schedule = use.ExecuteReader())
                         {
@@ -687,7 +686,7 @@ namespace Oxide.Plugins
                                 string sc = schedule.GetValue(1).ToString();
                                 if (nm != "" && sc != "")
                                 {
-                                    rpveschedule.Add(nm, sc);
+                                    ngpveschedule.Add(nm, sc);
                                 }
                             }
                         }
@@ -696,9 +695,9 @@ namespace Oxide.Plugins
             }
 
             // Actual schedule processing here...
-            foreach(KeyValuePair<string,string> scheduleInfo in rpveschedule)
+            foreach(KeyValuePair<string,string> scheduleInfo in ngpveschedule)
             {
-                RemodPVESchedule parsed;
+                NextGenPVESchedule parsed;
                 if (ParseSchedule(scheduleInfo.Value, out parsed))
                 {
                     foreach (var x in parsed.day)
@@ -715,7 +714,7 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='0' WHERE name='{scheduleInfo.Key}'", c))
+                                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='0' WHERE name='{scheduleInfo.Key}'", c))
                                         {
                                             cmd.ExecuteNonQuery();
                                         }
@@ -727,7 +726,7 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='1' WHERE name='{scheduleInfo.Key}'", c))
+                                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='1' WHERE name='{scheduleInfo.Key}'", c))
                                         {
                                             cmd.ExecuteNonQuery();
                                         }
@@ -739,26 +738,26 @@ namespace Oxide.Plugins
                 }
             }
 
-            scheduleTimer = timer.Once(configData.Options.useRemodtime ? 30f : 3f, () => RunSchedule());
+            scheduleTimer = timer.Once(configData.Options.useNextGentime ? 30f : 3f, () => RunSchedule());
         }
 
-        private bool ParseSchedule(string dbschedule, out RemodPVESchedule parsed)
+        private bool ParseSchedule(string dbschedule, out NextGenPVESchedule parsed)
         {
             int day = 0;
-            parsed = new RemodPVESchedule();
+            parsed = new NextGenPVESchedule();
 
-            string[] remodschedule = Regex.Split(dbschedule, @"(.*)\;(.*)\:(.*)\;(.*)\:(.*)");
-            if (remodschedule.Length < 6) return false;
+            string[] nextgenschedule = Regex.Split(dbschedule, @"(.*)\;(.*)\:(.*)\;(.*)\:(.*)");
+            if (nextgenschedule.Length < 6) return false;
 
-            parsed.starthour = remodschedule[2];
-            parsed.startminute = remodschedule[3];
-            parsed.endhour = remodschedule[4];
-            parsed.endminute = remodschedule[5];
+            parsed.starthour = nextgenschedule[2];
+            parsed.startminute = nextgenschedule[3];
+            parsed.endhour = nextgenschedule[4];
+            parsed.endminute = nextgenschedule[5];
 
             parsed.day = new List<int>();
             parsed.dayName = new List<string>();
 
-            string tmp = remodschedule[1];
+            string tmp = nextgenschedule[1];
             string[] days = tmp.Split(',');
 
             if (tmp == "*")
@@ -797,9 +796,9 @@ namespace Oxide.Plugins
 
         #region Commands
         [Command("pveenable")]
-        private void CmdRemodPVEenable(IPlayer player, string command, string[] args)
+        private void CmdNextGenPVEenable(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(permRemodPVEAdmin)) { Message(player, "notauthorized"); return; }
+            if (!player.HasPermission(permNextGenPVEAdmin)) { Message(player, "notauthorized"); return; }
 
             enabled = !enabled;
             if (args.Length > 0)
@@ -813,18 +812,18 @@ namespace Oxide.Plugins
         }
 
         [Command("pvelog")]
-        private void CmdRemodPVElog(IPlayer player, string command, string[] args)
+        private void CmdNextGenPVElog(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(permRemodPVEAdmin)) { Message(player, "notauthorized"); return; }
+            if (!player.HasPermission(permNextGenPVEAdmin)) { Message(player, "notauthorized"); return; }
 
             dolog = !dolog;
             Message(player, "logging", dolog.ToString());
         }
 
         [Command("pverule")]
-        private void CmdRemodPVEGUI(IPlayer iplayer, string command, string[] args)
+        private void CmdNextGenPVEGUI(IPlayer iplayer, string command, string[] args)
         {
-            if (!iplayer.HasPermission(permRemodPVEAdmin)) { Message(iplayer, "notauthorized"); return; }
+            if (!iplayer.HasPermission(permNextGenPVEAdmin)) { Message(iplayer, "notauthorized"); return; }
             var player = iplayer.Object as BasePlayer;
 
             if (args.Length > 0)
@@ -842,7 +841,7 @@ namespace Oxide.Plugins
                             string rs = args[1];
                             string setting = args[2];
                             string newval = args[3];
-                            CuiHelper.DestroyUi(player, RPVEVALUEEDIT);
+                            CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
                             switch (setting)
                             {
                                 case "defload":
@@ -850,7 +849,7 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand defload = new SQLiteCommand("DELETE FROM rpve_rulesets WHERE name='default'", c))
+                                        using (SQLiteCommand defload = new SQLiteCommand("DELETE FROM ngpve_rulesets WHERE name='default'", c))
                                         {
                                             defload.ExecuteNonQuery();
                                         }
@@ -861,7 +860,7 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand en = new SQLiteCommand($"UPDATE rpve_rulesets SET enabled='{newval}' WHERE name='{rs}'", c))
+                                        using (SQLiteCommand en = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='{newval}' WHERE name='{rs}'", c))
                                         {
                                             en.ExecuteNonQuery();
                                         }
@@ -871,7 +870,7 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand dm = new SQLiteCommand($"UPDATE rpve_rulesets SET damage='{newval}' WHERE name='{rs}'", c))
+                                        using (SQLiteCommand dm = new SQLiteCommand($"UPDATE ngpve_rulesets SET damage='{newval}' WHERE name='{rs}'", c))
                                         {
                                             dm.ExecuteNonQuery();
                                         }
@@ -881,7 +880,7 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand nm = new SQLiteCommand($"UPDATE rpve_rulesets SET name='{newval}' WHERE name='{rs}'", c))
+                                        using (SQLiteCommand nm = new SQLiteCommand($"UPDATE ngpve_rulesets SET name='{newval}' WHERE name='{rs}'", c))
                                         {
                                             nm.ExecuteNonQuery();
                                             rs = newval;
@@ -894,7 +893,7 @@ namespace Oxide.Plugins
                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                         {
                                             c.Open();
-                                            using (SQLiteCommand zup = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='' WHERE name='{rs}'", c))
+                                            using (SQLiteCommand zup = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='' WHERE name='{rs}'", c))
                                             {
                                                 zup.ExecuteNonQuery();
                                             }
@@ -905,7 +904,7 @@ namespace Oxide.Plugins
                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                         {
                                             c.Open();
-                                            using (SQLiteCommand zu = new SQLiteCommand($"UPDATE rpve_rulesets SET zone='{newval}' WHERE name='{rs}'", c))
+                                            using (SQLiteCommand zu = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='{newval}' WHERE name='{rs}'", c))
                                             {
                                                 zu.ExecuteNonQuery();
                                             }
@@ -918,7 +917,7 @@ namespace Oxide.Plugins
                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                         {
                                             c.Open();
-                                            using (SQLiteCommand use = new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='' WHERE name='{rs}'", c))
+                                            using (SQLiteCommand use = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='' WHERE name='{rs}'", c))
                                             {
                                                 use.ExecuteNonQuery();
                                             }
@@ -929,7 +928,7 @@ namespace Oxide.Plugins
                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                         {
                                             c.Open();
-                                            using (SQLiteCommand us = new SQLiteCommand($"UPDATE rpve_rulesets SET schedule='{newval}' WHERE name='{rs}'", c))
+                                            using (SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{newval}' WHERE name='{rs}'", c))
                                             {
                                                 us.ExecuteNonQuery();
                                             }
@@ -944,13 +943,13 @@ namespace Oxide.Plugins
                                     switch (args[4])
                                     {
                                         case "add":
-                                            //Puts($"SELECT damage, exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'");
+                                            //Puts($"SELECT damage, exception FROM ngpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'");
                                             bool isNew = true;
                                             bool damage = false;
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using (SQLiteCommand ce = new SQLiteCommand($"SELECT DISTINCT damage FROM rpve_rulesets WHERE name='{rs}'", c))
+                                                using (SQLiteCommand ce = new SQLiteCommand($"SELECT DISTINCT damage FROM ngpve_rulesets WHERE name='{rs}'", c))
                                                 {
                                                     using (SQLiteDataReader re = ce.ExecuteReader())
                                                     {
@@ -964,7 +963,7 @@ namespace Oxide.Plugins
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using (SQLiteCommand ce = new SQLiteCommand($"SELECT exception FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", c))
+                                                using (SQLiteCommand ce = new SQLiteCommand($"SELECT exception FROM ngpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", c))
                                                 {
                                                     using (SQLiteDataReader re = ce.ExecuteReader())
                                                     {
@@ -977,12 +976,12 @@ namespace Oxide.Plugins
                                             }
                                             if (isNew)
                                             {
-                                                //Puts($"INSERT INTO rpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
+                                                //Puts($"INSERT INTO ngpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
                                                 string dmg = damage ? "1" : "0";
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    using (SQLiteCommand ae = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES('{rs}', {dmg}, 1, 0, '', '{args[3]}', '', '', 0)", c))
+                                                    using (SQLiteCommand ae = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rs}', {dmg}, 1, 0, '', '{args[3]}', '', '', 0)", c))
                                                     {
                                                         ae.ExecuteNonQuery();
                                                     }
@@ -993,7 +992,7 @@ namespace Oxide.Plugins
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using (SQLiteCommand ad = new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", c))
+                                                using (SQLiteCommand ad = new SQLiteCommand($"DELETE FROM ngpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", c))
                                                 {
                                                     ad.ExecuteNonQuery();
                                                 }
@@ -1003,7 +1002,7 @@ namespace Oxide.Plugins
                                     break;
                                 case "src_exclude":
                                     if (args.Length < 5) return;
-                                    CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
+                                    CuiHelper.DestroyUi(player, NGPVERULEEXCLUSIONS);
                                     //pverule editruleset {rulesetname} src_exclude Horse add
                                     switch (args[4])
                                     {
@@ -1012,7 +1011,7 @@ namespace Oxide.Plugins
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using (SQLiteCommand aee = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{newval}'", c))
+                                                using (SQLiteCommand aee = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{newval}'", c))
                                                 {
                                                     using (SQLiteDataReader aed = aee.ExecuteReader())
                                                     {
@@ -1031,7 +1030,7 @@ namespace Oxide.Plugins
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    using (SQLiteCommand cex = new SQLiteCommand($"SELECT exception, src_exclude FROM rpve_rulesets WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
+                                                    using (SQLiteCommand cex = new SQLiteCommand($"SELECT exception, src_exclude FROM ngpve_rulesets WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
                                                     {
                                                         SQLiteDataReader rex = cex.ExecuteReader();
                                                         while (rex.Read())
@@ -1051,8 +1050,8 @@ namespace Oxide.Plugins
                                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                         {
                                                             c.Open();
-                                                            //Puts($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
-                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
+                                                            //Puts($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
+                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
                                                             {
                                                                 aes.ExecuteNonQuery();
                                                             }
@@ -1067,8 +1066,8 @@ namespace Oxide.Plugins
                                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                         {
                                                             c.Open();
-                                                            //Puts($"UPDATE rpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
-                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
+                                                            //Puts($"UPDATE ngpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
+                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE ngpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c))
                                                             {
                                                                 aes.ExecuteNonQuery();
                                                             }
@@ -1083,7 +1082,7 @@ namespace Oxide.Plugins
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using (SQLiteCommand findSrc = new SQLiteCommand($"SELECT DISTINCT src_exclude FROM rpve_rulesets WHERE src_exclude LIKE '%{newval}%'", c))
+                                                using (SQLiteCommand findSrc = new SQLiteCommand($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE src_exclude LIKE '%{newval}%'", c))
                                                 {
                                                     using (SQLiteDataReader fs = findSrc.ExecuteReader())
                                                     {
@@ -1105,8 +1104,8 @@ namespace Oxide.Plugins
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    //Puts($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'");
-                                                    using (SQLiteCommand ads = new SQLiteCommand($"UPDATE rpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'", c))
+                                                    //Puts($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'");
+                                                    using (SQLiteCommand ads = new SQLiteCommand($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'", c))
                                                     {
                                                         ads.ExecuteNonQuery();
                                                     }
@@ -1117,7 +1116,7 @@ namespace Oxide.Plugins
                                     break;
                                 case "tgt_exclude":
                                     if (args.Length < 5) return;
-                                    CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
+                                    CuiHelper.DestroyUi(player, NGPVERULEEXCLUSIONS);
                                     //pverule editruleset {rulesetname} tgt_exclude Horse delete
                                     switch (args[4])
                                     {
@@ -1126,7 +1125,7 @@ namespace Oxide.Plugins
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using (SQLiteCommand aee = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_entities WHERE type='{newval}'", c))
+                                                using (SQLiteCommand aee = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{newval}'", c))
                                                 {
                                                     using (SQLiteDataReader aed = aee.ExecuteReader())
                                                     {
@@ -1145,7 +1144,7 @@ namespace Oxide.Plugins
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    using (SQLiteCommand cex = new SQLiteCommand($"SELECT exception, tgt_exclude FROM rpve_rulesets WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
+                                                    using (SQLiteCommand cex = new SQLiteCommand($"SELECT exception, tgt_exclude FROM ngpve_rulesets WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
                                                     {
                                                         SQLiteDataReader rex = cex.ExecuteReader();
                                                         while (rex.Read())
@@ -1165,8 +1164,8 @@ namespace Oxide.Plugins
                                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                         {
                                                             c.Open();
-                                                            //Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
-                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
+                                                            //Puts($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
+                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
                                                             {
                                                                 aes.ExecuteNonQuery();
                                                             }
@@ -1181,8 +1180,8 @@ namespace Oxide.Plugins
                                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                         {
                                                             c.Open();
-                                                            //Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
-                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE rpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
+                                                            //Puts($"UPDATE ngpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
+                                                            using (SQLiteCommand aes = new SQLiteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c))
                                                             {
                                                                 aes.ExecuteNonQuery();
                                                             }
@@ -1197,7 +1196,7 @@ namespace Oxide.Plugins
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using (SQLiteCommand findTgt = new SQLiteCommand($"SELECT DISTINCT tgt_exclude FROM rpve_rulesets WHERE tgt_exclude LIKE '%{newval}%'", c))
+                                                using (SQLiteCommand findTgt = new SQLiteCommand($"SELECT DISTINCT tgt_exclude FROM ngpve_rulesets WHERE tgt_exclude LIKE '%{newval}%'", c))
                                                 {
                                                     using (SQLiteDataReader ft = findTgt.ExecuteReader())
                                                     {
@@ -1219,8 +1218,8 @@ namespace Oxide.Plugins
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    //Puts($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'");
-                                                    using (SQLiteCommand ads = new SQLiteCommand($"UPDATE rpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'", c))
+                                                    //Puts($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'");
+                                                    using (SQLiteCommand ads = new SQLiteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'", c))
                                                     {
                                                         ads.ExecuteNonQuery();
                                                     }
@@ -1245,12 +1244,12 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand drs = new SQLiteCommand($"DELETE FROM rpve_rulesets WHERE name='{args[1]}'", c))
+                                        using (SQLiteCommand drs = new SQLiteCommand($"DELETE FROM ngpve_rulesets WHERE name='{args[1]}'", c))
                                         {
                                             drs.ExecuteNonQuery();
                                         }
                                     }
-                                    CuiHelper.DestroyUi(player, RPVEEDITRULESET);
+                                    CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
                                     GUIRuleSets(player);
                                     break;
                                 case "name":
@@ -1276,7 +1275,7 @@ namespace Oxide.Plugins
                                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                                         {
                                             c.Open();
-                                            using (SQLiteCommand checkrs = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_rulesets WHERE name='{clone}'", c))
+                                            using (SQLiteCommand checkrs = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_rulesets WHERE name='{clone}'", c))
                                             {
                                                 using (SQLiteDataReader crs = checkrs.ExecuteReader())
                                                 {
@@ -1295,7 +1294,7 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets (name, damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) SELECT '{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule FROM rpve_rulesets WHERE name='{oldname}'", c))
+                                        using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets (name, damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) SELECT '{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule FROM ngpve_rulesets WHERE name='{oldname}'", c))
                                         {
                                             newrs.ExecuteNonQuery();
                                         }
@@ -1318,7 +1317,7 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand addrs = new SQLiteCommand($"SELECT DISTINCT name FROM rpve_rulesets WHERE name='{newname}'", c))
+                                        using (SQLiteCommand addrs = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_rulesets WHERE name='{newname}'", c))
                                         {
                                             using (SQLiteDataReader addcrsd = addrs.ExecuteReader())
                                             {
@@ -1337,7 +1336,7 @@ namespace Oxide.Plugins
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
-                                    using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO rpve_rulesets VALUES ('{newname}', 0, 1, 0, 0, '', '', '', 0)", c))
+                                    using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES ('{newname}', 0, 1, 0, 0, '', '', '', 0)", c))
                                     {
                                         newrs.ExecuteNonQuery();
                                     }
@@ -1390,30 +1389,30 @@ namespace Oxide.Plugins
                         GUIRuleEditor(player, rn);
                         break;
                     case "close":
-                        CuiHelper.DestroyUi(player, RPVERULELIST);
-                        CuiHelper.DestroyUi(player, RPVERULEEDIT);
-                        CuiHelper.DestroyUi(player, RPVEVALUEEDIT);
-                        CuiHelper.DestroyUi(player, RPVESCHEDULEEDIT);
-                        CuiHelper.DestroyUi(player, RPVEEDITRULESET);
-                        CuiHelper.DestroyUi(player, RPVERULESELECT);
+                        CuiHelper.DestroyUi(player, NGPVERULELIST);
+                        CuiHelper.DestroyUi(player, NGPVERULEEDIT);
+                        CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
+                        CuiHelper.DestroyUi(player, NGPVESCHEDULEEDIT);
+                        CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
+                        CuiHelper.DestroyUi(player, NGPVERULESELECT);
                         break;
                     case "closeexclusions":
-                        CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
+                        CuiHelper.DestroyUi(player, NGPVERULEEXCLUSIONS);
                         break;
                     case "closeruleselect":
-                        CuiHelper.DestroyUi(player, RPVERULESELECT);
+                        CuiHelper.DestroyUi(player, NGPVERULESELECT);
                         break;
                     case "closeruleset":
-                        CuiHelper.DestroyUi(player, RPVEEDITRULESET);
+                        CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
                         break;
                     case "closerule":
-                        CuiHelper.DestroyUi(player, RPVERULEEDIT);
+                        CuiHelper.DestroyUi(player, NGPVERULEEDIT);
                         break;
                     case "closerulevalue":
-                        CuiHelper.DestroyUi(player, RPVEVALUEEDIT);
+                        CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
                         break;
                     case "closeruleschedule":
-                        CuiHelper.DestroyUi(player, RPVESCHEDULEEDIT);
+                        CuiHelper.DestroyUi(player, NGPVESCHEDULEEDIT);
                         break;
                     default:
                         GUIRuleSets(player);
@@ -1437,11 +1436,11 @@ namespace Oxide.Plugins
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_animal', null, null, null)", c))
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_animal', null, null, null)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
-                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null)", c))
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -1454,11 +1453,11 @@ namespace Oxide.Plugins
                 {
                     c.Open();
 
-                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('helicopter_animal', 'Helicopter can damage Animal', 1, 0, 'helicopter', 'animal')", c))
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_animal', 'Helicopter can damage Animal', 1, 0, 'helicopter', 'animal')", c))
                     {
                         ct.ExecuteNonQuery();
                     }
-                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('helicopter_npc', 'Helicopter can damage NPC', 1, 0, 'helicopter', 'npc')", c))
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_npc', 'Helicopter can damage NPC', 1, 0, 'helicopter', 'npc')", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -1493,7 +1492,7 @@ namespace Oxide.Plugins
             public bool useZoneManager = true;
             public bool useLiteZones = false;
             public bool useSchedule = false;
-            public bool useRemodtime = true;
+            public bool useNextGentime = true;
             public bool useFriends = false;
             public bool useClans = false;
             public bool useTeams = false;
@@ -1524,36 +1523,36 @@ namespace Oxide.Plugins
         #region GUI
         private void GUIRuleSets(BasePlayer player)
         {
-            CuiHelper.DestroyUi(player, RPVERULELIST);
+            CuiHelper.DestroyUi(player, NGPVERULELIST);
 
-            CuiElementContainer container = UI.Container(RPVERULELIST, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Lang("remodpverulesets"), 24, "0.2 0.92", "0.65 1");
-            UI.Label(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("standard"), 12, "0.66 0.95", "0.72 0.98");
-            UI.Label(ref container, RPVERULELIST, UI.Color("#5540d8", 1f), Lang("automated"), 12, "0.73 0.95", "0.79 0.98");
-            UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
+            CuiElementContainer container = UI.Container(NGPVERULELIST, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("nextgenpverulesets"), 24, "0.2 0.92", "0.65 1");
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("standard"), 12, "0.66 0.95", "0.72 0.98");
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#5540d8", 1f), Lang("automated"), 12, "0.73 0.95", "0.79 0.98");
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             if (enabled)
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("genabled"), 12, "0.8 0.95", "0.92 0.98", $"pveenable gui");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("genabled"), 12, "0.8 0.95", "0.92 0.98", $"pveenable gui");
             }
             else
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#ff2222", 1f), Lang("gdisabled"), 12, "0.8 0.95", "0.92 0.98", $"pveenable gui");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#ff2222", 1f), Lang("gdisabled"), 12, "0.8 0.95", "0.92 0.98", $"pveenable gui");
             }
-            UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule close");
+            UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule close");
 
             int col = 0;
             int row = 0;
             float[] pb;
 
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Lang("rulesets"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("rulesets"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             row++;
 
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT name, automated from rpve_rulesets ORDER BY name", c))
+                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT name, automated from ngpve_rulesets ORDER BY name", c))
                 {
                     using (SQLiteDataReader rsread = getrs.ExecuteReader())
                     {
@@ -1570,7 +1569,7 @@ namespace Oxide.Plugins
                             string rColor = "#d85540";
                             if (automated) rColor = "#5540d8";
 
-                            UI.Button(ref container, RPVERULELIST, UI.Color(rColor, 1f), rsname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rsname}");
+                            UI.Button(ref container, NGPVERULELIST, UI.Color(rColor, 1f), rsname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rsname}");
                             row++;
                         }
                     }
@@ -1578,104 +1577,104 @@ namespace Oxide.Plugins
             }
 
             pb = GetButtonPositionP(row, col);
-            UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset add");
+            UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset add");
 
             row = 0;col = 6;
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Lang("flags"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("flags"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             // Global flags
             col = 5;
             pb = GetButtonPositionZ(row, col);
             if(configData.Options.AutoTurretTargetsPlayers)
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers false");
             }
             else
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
             if(configData.Options.AutoTurretTargetsNPCs)
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs false");
             }
             else
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
             if (configData.Options.NPCAutoTurretTargetsPlayers)
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers false");
             }
             else
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
             if (configData.Options.NPCAutoTurretTargetsNPCs)
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs false");
             }
             else
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
             if(configData.Options.TrapsIgnorePlayers)
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers false");
             }
             else
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
             if(configData.Options.HonorBuildingPrivilege)
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege false");
             }
             else
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
             if(configData.Options.UnprotectedBuildingDamage)
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage false");
             }
             else
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
             if(configData.Options.HonorRelationships)
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships false");
             }
             else
             {
-                UI.Button(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships true");
             }
 
             row++;
             pb = GetButtonPositionZ(row, col);
-            UI.Button(ref container, RPVERULELIST, UI.Color("#d82222", 1f), Lang("defload"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig RESET true");
+            UI.Button(ref container, NGPVERULELIST, UI.Color("#d82222", 1f), Lang("defload"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig RESET true");
 
             CuiHelper.AddUi(player, container);
         }
 
         private void GUIRulesetEditor(BasePlayer player, string rulesetname)
         {
-            CuiHelper.DestroyUi(player, RPVEEDITRULESET);
+            CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
             string rulename = rulesetname;
             bool isEnabled = false;
             bool damage = false;
@@ -1685,7 +1684,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT automated, enabled, damage, schedule, zone from rpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT automated, enabled, damage, schedule, zone from ngpve_rulesets WHERE name='{rulesetname}'", c))
                 {
                     using (SQLiteDataReader rsread = getrs.ExecuteReader())
                     {
@@ -1708,31 +1707,30 @@ namespace Oxide.Plugins
                 }
             }
 
-            CuiElementContainer container = UI.Container(RPVEEDITRULESET, UI.Color("3b3b3b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("remodpveruleset") + ": " + rulename, 24, "0.15 0.92", "0.7 1");
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedulenotworking"), 12, "0.3 0.05", "0.7 0.08");
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
+            CuiElementContainer container = UI.Container(NGPVEEDITRULESET, UI.Color("3b3b3b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("nextgenpveruleset") + ": " + rulename, 24, "0.15 0.92", "0.7 1");
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
-            UI.Button(ref container, RPVEEDITRULESET, UI.Color("#2222ff", 1f), Lang("clone"), 12, "0.63 0.95", "0.69 0.98", $"pverule editruleset {rulesetname} clone");
+            UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#2222ff", 1f), Lang("clone"), 12, "0.63 0.95", "0.69 0.98", $"pverule editruleset {rulesetname} clone");
             if (isEnabled)
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("enabled"), 12, "0.78 0.95", "0.84 0.98", $"pverule editruleset {rulesetname} enable 0");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("enabled"), 12, "0.78 0.95", "0.84 0.98", $"pverule editruleset {rulesetname} enable 0");
             }
             else
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("disabled"), 12, "0.78 0.95", "0.84 0.98", $"pverule editruleset {rulesetname} enable 1");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("disabled"), 12, "0.78 0.95", "0.84 0.98", $"pverule editruleset {rulesetname} enable 1");
             }
 
             if (rulesetname == "default")
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("defload"), 12, "0.85 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} defload YES");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("defload"), 12, "0.85 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} defload YES");
             }
             else
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#2222ff", 1f), Lang("editname"), 12, "0.7 0.95", "0.76 0.98", $"pverule editruleset {rulesetname} name");
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("delete"), 12, "0.86 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} delete");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#2222ff", 1f), Lang("editname"), 12, "0.7 0.95", "0.76 0.98", $"pverule editruleset {rulesetname} name");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#ff2222", 1f), Lang("delete"), 12, "0.86 0.95", "0.92 0.98", $"pverule editruleset {rulesetname} delete");
             }
-            UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleset");
+            UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleset");
 
             string dicolor = "#333333";
             string encolor = "#ff3333";
@@ -1741,20 +1739,20 @@ namespace Oxide.Plugins
             int row = 0;
 
             float[] pb = GetButtonPositionP(row, hdrcol);
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("defaultdamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("defaultdamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             row += 2;
             pb = GetButtonPositionP(row, hdrcol);
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("zone"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("zone"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             row += 2;
             pb = GetButtonPositionP(row, hdrcol);
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedule"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedule"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             row = 0; hdrcol++;
             pb = GetButtonPositionP(row, hdrcol);
             string de = Lang("block"); if (!damage) de = Lang("allow");
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), de, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), de, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             row++;
             hdrcol = 0;
@@ -1762,26 +1760,26 @@ namespace Oxide.Plugins
             pb = GetButtonPositionP(row, hdrcol);
             if (rulesetname == "default")
             {
-                UI.Label(ref container, RPVEEDITRULESET, UI.Color(encolor, 1f), Lang("false"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                UI.Label(ref container, NGPVEEDITRULESET, UI.Color(encolor, 1f), Lang("false"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
             else if (damage)
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color(encolor, 1f), Lang("true"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 0");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color(encolor, 1f), Lang("true"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 0");
             }
             else
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color(dicolor, 1f), Lang("false"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 1");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color(dicolor, 1f), Lang("false"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} damage 1");
             }
 
             // Exceptions (block/allow)
             col = 1;
             int numExceptions = 0;
 
-            //Puts($"SELECT DISTINCT exception FROM rpve_rulesets WHERE name='{rulesetname}' ORDER BY exception");
+            //Puts($"SELECT DISTINCT exception FROM ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception");
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT exception FROM rpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c))
+                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT exception FROM ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c))
                 {
                     using (SQLiteDataReader rsread = getrs.ExecuteReader())
                     {
@@ -1797,7 +1795,7 @@ namespace Oxide.Plugins
                             }
                             numExceptions++;
                             pb = GetButtonPositionP(row, col);
-                            UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
+                            UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), except, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
                             row++;
                         }
                     }
@@ -1807,12 +1805,12 @@ namespace Oxide.Plugins
             if (numExceptions < 1)
             {
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except");
             }
             else
             {
                 pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
 
             hdrcol += 2; row = 0;
@@ -1820,22 +1818,22 @@ namespace Oxide.Plugins
             if (numExceptions> 22) hdrcol++;
             if (numExceptions> 33) hdrcol++;
             pb = GetButtonPositionP(row, hdrcol);
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude") + " " + Lang("source"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude") + " " + Lang("source"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             hdrcol++;
             pb = GetButtonPositionP(row, hdrcol);
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude") + " " + Lang("target"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("exclude") + " " + Lang("target"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             // Source exclusions from exceptions above
             col++; row = 1;
             bool noExclusions = true;
             if (numExceptions > 0) // Cannot exclude from exceptions that do not exist
             {
-                //Puts($"SELECT DISTINCT src_exclude FROM rpve_rulesets WHERE name='{rulesetname}'");
+                //Puts($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'");
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT src_exclude FROM rpve_rulesets WHERE name='{rulesetname}'", c))
+                    using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
                     {
                         using (SQLiteDataReader rsread = getrs.ExecuteReader())
                         {
@@ -1857,7 +1855,7 @@ namespace Oxide.Plugins
                                     {
                                         //Puts($"Adding button for existing src_exclude of {ex}");
                                         pb = GetButtonPositionP(row, col);
-                                        UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), ex, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
+                                        UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), ex, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
                                         row++;
                                     }
                                 }
@@ -1865,7 +1863,7 @@ namespace Oxide.Plugins
                                 {
                                     //Puts($"Adding button for existing src_exclude of {exclude}");
                                     pb = GetButtonPositionP(row, col);
-                                    UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
+                                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
                                     row++;
                                 }
                             }
@@ -1877,7 +1875,7 @@ namespace Oxide.Plugins
             {
                 row = 1;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude");
             }
 
             // Target exclusions from exceptions above
@@ -1888,7 +1886,7 @@ namespace Oxide.Plugins
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}'", c))
+                    using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
                     {
                         using (SQLiteDataReader rsread = getrs.ExecuteReader())
                         {
@@ -1910,7 +1908,7 @@ namespace Oxide.Plugins
                                     {
                                         //Puts($"Adding button for existing tgt_exclude of {ex}");
                                         pb = GetButtonPositionP(row, col);
-                                        UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), ex, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
+                                        UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), ex, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
                                         row++;
                                     }
                                 }
@@ -1918,7 +1916,7 @@ namespace Oxide.Plugins
                                 {
                                     //Puts($"Adding button for existing tgt_exclude of {exclude}");
                                     pb = GetButtonPositionP(row, col);
-                                    UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
+                                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), exclude, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
                                 }
                                 row++;
                             }
@@ -1931,46 +1929,46 @@ namespace Oxide.Plugins
             {
                 row = 1;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12,  $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude");
             }
 
             col = 0; row = 3;
             pb = GetButtonPositionP(row, col);
             if (rulesetname == "default")
             {
-                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
             else if (zone == "lookup")
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("lookup"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("lookup"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
             else if (zone != null)
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), zone, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), zone, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
             else
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
             if (rulesetname != "default")
             {
 //                row++;
 //                pb = GetButtonPositionP(row, col);
-//                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+//                UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
 
             col = 0; row = 5;
             pb = GetButtonPositionP(row, col);
             if (schedule != null)
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#d85540", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
 //                row++;
 //                pb = GetButtonPositionP(row, col);
-//                UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+//                UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
             else
             {
-                UI.Button(ref container, RPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
             }
 
             CuiHelper.AddUi(player, container);
@@ -1979,16 +1977,16 @@ namespace Oxide.Plugins
         // Select rule to add to ruleset
         private void GUISelectRule(BasePlayer player, string rulesetname)
         {
-            CuiHelper.DestroyUi(player, RPVERULESELECT);
+            CuiHelper.DestroyUi(player, NGPVERULESELECT);
 
-            CuiElementContainer container = UI.Container(RPVERULESELECT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Label(ref container, RPVERULESELECT, UI.Color("#ffffff", 1f), Lang("remodpveruleselect"), 24, "0.2 0.92", "0.7 1");
-            UI.Label(ref container, RPVERULESELECT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
+            CuiElementContainer container = UI.Container(NGPVERULESELECT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Label(ref container, NGPVERULESELECT, UI.Color("#ffffff", 1f), Lang("nextgenpveruleselect"), 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, NGPVERULESELECT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
-            UI.Label(ref container, RPVERULESELECT, UI.Color("#5555cc", 1f), Lang("stock"), 12, "0.72 0.95", "0.78 0.98");
-            UI.Label(ref container, RPVERULESELECT, UI.Color("#55d840", 1f), Lang("enabled"), 12, "0.79 0.95", "0.85 0.98");
-            UI.Label(ref container, RPVERULESELECT, UI.Color("#d85540", 1f), Lang("custom"), 12, "0.86 0.95", "0.92 0.98");
-            UI.Button(ref container, RPVERULESELECT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleselect");
+            UI.Label(ref container, NGPVERULESELECT, UI.Color("#5555cc", 1f), Lang("stock"), 12, "0.72 0.95", "0.78 0.98");
+            UI.Label(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), Lang("enabled"), 12, "0.79 0.95", "0.85 0.98");
+            UI.Label(ref container, NGPVERULESELECT, UI.Color("#d85540", 1f), Lang("custom"), 12, "0.86 0.95", "0.92 0.98");
+            UI.Button(ref container, NGPVERULESELECT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleselect");
 
             int col = 0;
             int row = 0;
@@ -1997,7 +1995,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand crs = new SQLiteCommand($"SELECT exception from rpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c))
+                using (SQLiteCommand crs = new SQLiteCommand($"SELECT exception from ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c))
                 {
                     using (SQLiteDataReader crd = crs.ExecuteReader())
                     {
@@ -2012,7 +2010,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand sr = new SQLiteCommand($"SELECT DISTINCT name, custom from rpve_rules ORDER BY name", c))
+                using (SQLiteCommand sr = new SQLiteCommand($"SELECT DISTINCT name, custom from ngpve_rules ORDER BY name", c))
                 {
                     using (SQLiteDataReader rr = sr.ExecuteReader())
                     {
@@ -2029,13 +2027,13 @@ namespace Oxide.Plugins
                             pb = GetButtonPositionP(row, col);
                             if (exc.Contains(rulename))
                             {
-                                UI.Button(ref container, RPVERULESELECT, UI.Color("#55d840", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {rulename} delete");
+                                UI.Button(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {rulename} delete");
                             }
                             else
                             {
                                 string ruleColor = "#5555cc";
                                 if (custom) ruleColor = "#d85540";
-                                UI.Button(ref container, RPVERULESELECT, UI.Color(ruleColor, 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {rulename} add");
+                                UI.Button(ref container, NGPVERULESELECT, UI.Color(ruleColor, 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {rulename} add");
                             }
                             row++;
                         }
@@ -2049,13 +2047,13 @@ namespace Oxide.Plugins
         private void GUISelectExclusion(BasePlayer player, string rulesetname, string srctgt)
         {
             //Puts($"GUISelectExclusion called for {rulesetname}");
-            CuiHelper.DestroyUi(player, RPVERULEEXCLUSIONS);
+            CuiHelper.DestroyUi(player, NGPVERULEEXCLUSIONS);
             string t = Lang("source"); if (srctgt == "tgt_exclude") t = Lang("target");
 
-            CuiElementContainer container = UI.Container(RPVERULEEXCLUSIONS, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeexclusions");
-            UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color("#ffffff", 1f), Lang("remodpveexclusions") + " " + t, 24, "0.2 0.92", "0.7 1");
-            UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
+            CuiElementContainer container = UI.Container(NGPVERULEEXCLUSIONS, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeexclusions");
+            UI.Label(ref container, NGPVERULEEXCLUSIONS, UI.Color("#ffffff", 1f), Lang("nextgenpveexclusions") + " " + t, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, NGPVERULEEXCLUSIONS, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             int col = 0;
             int row = 0;
@@ -2066,11 +2064,11 @@ namespace Oxide.Plugins
             string tgt_exclude = "";
 
             // Get ruleset src and tgt exclusions
-            //Puts($"SELECT src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}'");
+            //Puts($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'");
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand rs = new SQLiteCommand($"SELECT src_exclude, tgt_exclude FROM rpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand rs = new SQLiteCommand($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
                 {
                     using (SQLiteDataReader rsd = rs.ExecuteReader())
                     {
@@ -2094,11 +2092,11 @@ namespace Oxide.Plugins
             }
 
             // Get organized entities list
-            Dictionary<string, RemodPVEEntities> rpveentities = new Dictionary<string, RemodPVEEntities>();
+            Dictionary<string, NextGenPVEEntities> ngpveentities = new Dictionary<string, NextGenPVEEntities>();
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand ent = new SQLiteCommand("SELECT name,type,custom FROM rpve_entities ORDER BY name", c))
+                using (SQLiteCommand ent = new SQLiteCommand("SELECT name,type,custom FROM ngpve_entities ORDER BY name", c))
                 {
                     using (SQLiteDataReader ntd = ent.ExecuteReader())
                     {
@@ -2111,13 +2109,13 @@ namespace Oxide.Plugins
                             //Puts($"Adding {nm} {tp} to entities list");
                             if (nm != "" && tp != "")
                             {
-                                if (!rpveentities.ContainsKey(nm))
+                                if (!ngpveentities.ContainsKey(nm))
                                 {
-                                    rpveentities[nm] = new RemodPVEEntities() { types = new List<string> { tp }, custom = cs };
+                                    ngpveentities[nm] = new NextGenPVEEntities() { types = new List<string> { tp }, custom = cs };
                                 }
                                 else
                                 {
-                                    rpveentities[nm].types.Add(tp);
+                                    ngpveentities[nm].types.Add(tp);
                                 }
                             }
                         }
@@ -2129,7 +2127,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand crs = new SQLiteCommand($"SELECT exception from rpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c))
+                using (SQLiteCommand crs = new SQLiteCommand($"SELECT exception from ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c))
                 {
                     using (SQLiteDataReader crd = crs.ExecuteReader())
                     {
@@ -2151,8 +2149,8 @@ namespace Oxide.Plugins
                             switch (srctgt)
                             {
                                 case "src_exclude":
-                                    if (src == null || !rpveentities.ContainsKey(src)) break;
-                                    foreach (string type in rpveentities[src].types)
+                                    if (src == null || !ngpveentities.ContainsKey(src)) break;
+                                    foreach (string type in ngpveentities[src].types)
                                     {
                                         //Puts($"Checking for '{type}'");
                                         if (type == "") continue;
@@ -2169,19 +2167,19 @@ namespace Oxide.Plugins
                                         //Puts($"  Creating button for {type}, src_exclude='{src_exclude}'");
                                         if (!src_exclude.Contains(type))
                                         {
-                                            UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} add");
+                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} add");
                                         }
                                         else
                                         {
                                             eColor = "#55d840";
-                                            UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} delete");
+                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} delete");
                                         }
                                         row++;
                                     }
                                     break;
                                 case "tgt_exclude":
-                                    if (tgt == null || !rpveentities.ContainsKey(tgt)) break;
-                                    foreach (var type in rpveentities[tgt].types)
+                                    if (tgt == null || !ngpveentities.ContainsKey(tgt)) break;
+                                    foreach (var type in ngpveentities[tgt].types)
                                     {
                                         //Puts($"Checking for '{type}'");
                                         if (type == "") continue;
@@ -2198,12 +2196,12 @@ namespace Oxide.Plugins
                                         //Puts($"  Creating button for {type}, tgt_exclude='{tgt_exclude}'");
                                         if (!tgt_exclude.Contains(type))
                                         {
-                                            UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} add");
+                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} add");
                                         }
                                         else
                                         {
                                             eColor = "#55d840";
-                                            UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} delete");
+                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} delete");
                                         }
                                         row++;
                                     }
@@ -2220,30 +2218,30 @@ namespace Oxide.Plugins
 
         private void GUIRuleEditor(BasePlayer player, string rulename)
         {
-            CuiHelper.DestroyUi(player, RPVERULEEDIT);
+            CuiHelper.DestroyUi(player, NGPVERULEEDIT);
 
-            CuiElementContainer container = UI.Container(RPVERULEEDIT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Button(ref container, RPVERULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
-            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Lang("remodpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
-            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
+            CuiElementContainer container = UI.Container(NGPVERULEEDIT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Button(ref container, NGPVERULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
+            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), Lang("nextgenpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             int col = 0;
             int row = 0;
 
             float[] pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Name", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Name", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             row++;
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Description", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Description", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             row++;
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Damage", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Damage", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             row++;
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Source", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Source", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             row++;
             pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), "Target", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Target", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             string description = "";
             string source = "";
@@ -2253,7 +2251,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT * FROM rpve_rules WHERE name='{rulename}'", c))
+                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT * FROM ngpve_rules WHERE name='{rulename}'", c))
                 {
                     using (SQLiteDataReader rd = getrs.ExecuteReader())
                     {
@@ -2276,35 +2274,35 @@ namespace Oxide.Plugins
             pb = GetButtonPositionP(row, col);
             if (!custom)
             {
-                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
             else
             {
-                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} name");
+                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} name");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} description");
+                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} description");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} damage");
+                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} damage");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} source");
+                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} source");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, RPVERULEEDIT, UI.Color("#2b2b2b", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target");
+                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target");
             }
 
             CuiHelper.AddUi(player, container);
@@ -2312,12 +2310,12 @@ namespace Oxide.Plugins
 
         private void GUIEditValue(BasePlayer player, string rulesetname, string key = null)
         {
-            CuiHelper.DestroyUi(player, RPVEVALUEEDIT);
+            CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
 
-            CuiElementContainer container = UI.Container(RPVEVALUEEDIT, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
-            UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerulevalue");
-            UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#ffffff", 1f), Lang("remodpvevalue") + ": " + rulesetname + " " + key, 24, "0.2 0.92", "0.7 1");
-            UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
+            CuiElementContainer container = UI.Container(NGPVEVALUEEDIT, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
+            UI.Button(ref container, NGPVEVALUEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerulevalue");
+            UI.Label(ref container, NGPVEVALUEEDIT, UI.Color("#ffffff", 1f), Lang("nextgenpvevalue") + ": " + rulesetname + " " + key, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, NGPVEVALUEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             int col = 0;
             int row = 0;
@@ -2327,7 +2325,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand rs = new SQLiteCommand($"SELECT DISTINCT zone FROM rpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand rs = new SQLiteCommand($"SELECT DISTINCT zone FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
                 {
                     using (SQLiteDataReader rsd = rs.ExecuteReader())
                     {
@@ -2343,40 +2341,40 @@ namespace Oxide.Plugins
             {
                 case "name":
                     pb = GetButtonPositionZ(row, col);
-                    UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#ffffff", 1f), Lang("editname") + ":", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    UI.Label(ref container, NGPVEVALUEEDIT, UI.Color("#ffffff", 1f), Lang("editname") + ":", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                     col++;
                     pb = GetButtonPositionZ(row, col);
-                    UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#535353", 1f), rulesetname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-                    UI.Input(ref container, RPVEVALUEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} name ");
+                    UI.Label(ref container, NGPVEVALUEEDIT, UI.Color("#535353", 1f), rulesetname, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    UI.Input(ref container, NGPVEVALUEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} name ");
                     break;
                 case "zone":
                     string[] zoneIDs = (string[])ZoneManager?.Call("GetZoneIDs");
                     if (zone == "lookup")
                     {
-                        UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                        UI.Label(ref container, NGPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                     }
                     else if (zone == null && rulesetname != "default")
                     {
-                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
+                        UI.Button(ref container, NGPVEVALUEEDIT, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
                     }
                     else
                     {
-                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
+                        UI.Button(ref container, NGPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
                     }
 
                     row++;
                     pb = GetButtonPositionZ(row, col);
                     if (zone == "lookup")
                     {
-                        UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                        UI.Label(ref container, NGPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                     }
                     else if (zone == "default")
                     {
-                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#55d840", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
+                        UI.Button(ref container, NGPVEVALUEEDIT, UI.Color("#55d840", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
                     }
                     else
                     {
-                        UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
+                        UI.Button(ref container, NGPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("default"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone default");
                     }
 
                     row++;
@@ -2391,9 +2389,9 @@ namespace Oxide.Plugins
                         string zColor = "#222222";
                         bool labelonly = false;
                         if (zName == zone) zColor = "#55d840";
-                        if (zone == "lookup" && rpvezonemaps.ContainsKey(rulesetname))
+                        if (zone == "lookup" && ngpvezonemaps.ContainsKey(rulesetname))
                         {
-                            if (rpvezonemaps[rulesetname].map.Contains(zoneID)) zColor = "#55d840";
+                            if (ngpvezonemaps[rulesetname].map.Contains(zoneID)) zColor = "#55d840";
                             labelonly = true;
                         }
                         if (zoneID.ToString() == zone) zColor = "#55d840";
@@ -2401,17 +2399,17 @@ namespace Oxide.Plugins
                         pb = GetButtonPositionZ(row, col);
                         if (labelonly)
                         {
-                            UI.Label(ref container, RPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                            UI.Label(ref container, NGPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                         }
                         else
                         {
-                            UI.Button(ref container, RPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zName}");
+                            UI.Button(ref container, NGPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zName}");
                         }
                         row++;
                     }
                     break;
                 default:
-                    CuiHelper.DestroyUi(player, RPVEVALUEEDIT);
+                    CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
                     break;
             }
 
@@ -2420,13 +2418,13 @@ namespace Oxide.Plugins
 
         private void GUIEditSchedule(BasePlayer player, string rulesetname)
         {
-            CuiHelper.DestroyUi(player, RPVESCHEDULEEDIT);
+            CuiHelper.DestroyUi(player, NGPVESCHEDULEEDIT);
 
             string schedule = null;
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand rs = new SQLiteCommand("SELECT DISTINCT schedule FROM rpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand rs = new SQLiteCommand("SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
                 {
                     using (SQLiteDataReader rsd = rs.ExecuteReader())
                     {
@@ -2438,26 +2436,26 @@ namespace Oxide.Plugins
                 }
             }
 
-            CuiElementContainer container = UI.Container(RPVESCHEDULEEDIT, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
-            UI.Button(ref container, RPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleschedule");
-            UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("remodpveschedule") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
-            UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
+            CuiElementContainer container = UI.Container(NGPVESCHEDULEEDIT, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
+            UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleschedule");
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("nextgenpveschedule") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             string fmtschedule = null;
             if (schedule != null)
             {
                 try
                 {
-                    string[] remodschedule = schedule.Split(';');//.ToArray();
-                    //Puts($"Schedule: {remodschedule[0]} {remodschedule[1]} {remodschedule[2]}");
+                    string[] nextgenschedule = schedule.Split(';');//.ToArray();
+                    //Puts($"Schedule: {nextgenschedule[0]} {nextgenschedule[1]} {nextgenschedule[2]}");
                     // WTF?
                     int day = 0;
                     string dayName = Lang("all") + "(*)";
-                    if (int.TryParse(remodschedule[0], out day))
+                    if (int.TryParse(nextgenschedule[0], out day))
                     {
-                        dayName = Enum.GetName(typeof(DayOfWeek), day) + "(" + remodschedule[0] + ")";
+                        dayName = Enum.GetName(typeof(DayOfWeek), day) + "(" + nextgenschedule[0] + ")";
                     }
-                    fmtschedule = Lang("currentschedule", null, dayName, remodschedule[1], remodschedule[2]);
+                    fmtschedule = Lang("currentschedule", null, dayName, nextgenschedule[1], nextgenschedule[2]);
                 }
                 catch
                 {
@@ -2474,16 +2472,16 @@ namespace Oxide.Plugins
             int row = 0;
 
             float[] pb = GetButtonPositionP(row, col, 5f);
-            UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("scheduling"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("scheduling"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             row++;
             pb = GetButtonPositionP(row, col, 3f);
-            UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), fmtschedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), fmtschedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             col++;
             pb = GetButtonPositionP(row, 4);
-            UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#665353", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-            UI.Input(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule ");
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#665353", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Input(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule ");
 
             CuiHelper.AddUi(player, container);
         }
@@ -2692,7 +2690,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region classes
-        public class RemodPVERule
+        public class NextGenPVERule
         {
             public string description;
             public bool damage;
@@ -2701,7 +2699,7 @@ namespace Oxide.Plugins
             public List<string> target;
         }
 
-        public class RemodPVESchedule
+        public class NextGenPVESchedule
         {
             public List<int> day;
             public List<string> dayName;
@@ -2712,13 +2710,13 @@ namespace Oxide.Plugins
             public bool enabled = true;
         }
 
-        public class RemodPVEEntities
+        public class NextGenPVEEntities
         {
             public List<string> types;
             public bool custom = false;
         }
 
-        private class RemodPVEZoneMap
+        private class NextGenPVEZoneMap
         {
             public List<string> map;
         }
@@ -2836,91 +2834,91 @@ namespace Oxide.Plugins
         private void LoadDefaultEntities()
         {
             Puts("Trying to recreate entities data...");
-            SQLiteCommand ct = new SQLiteCommand("DROP TABLE IF EXISTS rpve_entities", sqlConnection);
+            SQLiteCommand ct = new SQLiteCommand("DROP TABLE IF EXISTS ngpve_entities", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("CREATE TABLE rpve_entities (name varchar(32), type varchar(32), custom INTEGER(1) DEFAULT 0)", sqlConnection);
+            ct = new SQLiteCommand("CREATE TABLE ngpve_entities (name varchar(32), type varchar(32), custom INTEGER(1) DEFAULT 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'BaseAnimalNPC', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'BaseAnimalNPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Boar', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'Boar', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Bear', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'Bear', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Chicken', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'Chicken', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Horse', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'Horse', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Stag', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'Stag', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('animal', 'Wolf', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'Wolf', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('building', 'BuildingBlock', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('building', 'BuildingBlock', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'BaseOven', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('fire', 'BaseOven', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('fire', 'FireBall', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('fire', 'FireBall', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('helicopter', 'BaseHelicopter', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('helicopter', 'BaseHelicopter', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('helicopter', 'HelicopterDebris', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('helicopter', 'HelicopterDebris', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('highwall', 'SimpleBuildingBlock', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('highwall', 'SimpleBuildingBlock', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('highwall', 'wall.external.high.stone', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.stone', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('highwall', 'wall.external.high.wood', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.wood', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('minicopter', 'MiniCopter', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('minicopter', 'MiniCopter', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'BradleyAPC', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'BradleyAPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'HelicopterDebris', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'HelicopterDebris', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'HumanNPC', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'HumanNPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'BaseNpc', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'BaseNpc', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'HTNPlayer', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'HTNPlayer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Murderer', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Murderer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Scientist', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Scientist', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npc', 'Zombie', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Zombie', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('npcturret', 'NPCAutoTurret', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npcturret', 'NPCAutoTurret', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('player', 'BasePlayer', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('player', 'BasePlayer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'BaseCorpse', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'BaseCorpse', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'DroppedItemContainer', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'DroppedItemContainer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'LockedByEntCrate', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'LockedByEntCrate', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'LootContainer', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'LootContainer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('resource', 'ResourceEntity', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'ResourceEntity', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'Barricade', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'Barricade', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'BearTrap', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'BearTrap', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'FlameTurret', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'FlameTurret', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'Landmine', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'Landmine', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'GunTrap', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'GunTrap', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'ReactiveTarget', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'ReactiveTarget', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_entities VALUES('trap', 'TeslaCoil', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'TeslaCoil', 0)", sqlConnection);
             ct.ExecuteNonQuery();
         }
 
@@ -2929,58 +2927,58 @@ namespace Oxide.Plugins
             Puts("Trying to recreate ruleset data...");
             if (drop)
             {
-                SQLiteCommand cd = new SQLiteCommand("DROP TABLE IF EXISTS rpve_rulesets", sqlConnection);
+                SQLiteCommand cd = new SQLiteCommand("DROP TABLE IF EXISTS ngpve_rulesets", sqlConnection);
                 cd.ExecuteNonQuery();
-                cd = new SQLiteCommand("CREATE TABLE rpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255))", sqlConnection);
+                cd = new SQLiteCommand("CREATE TABLE ngpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255))", sqlConnection);
                 cd.ExecuteNonQuery();
             }
-            SQLiteCommand ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_player', null, null, null)", sqlConnection);
+            SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_animal', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_animal', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_animal', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_animal', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_helicopter', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_helicopter', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_minicopter', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_minicopter', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_npc', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_npc', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_player', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_building', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_building', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_resource', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_resource', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'resource_player', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'resource_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_player', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_animal', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_animal', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_npc', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_npc', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'scrapcopter_player', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'scrapcopter_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_animal', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_animal', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_building', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_building', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_player', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'trap_trap', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'trap_trap', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_player', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_resource', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_resource', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_building', null, null, null)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_building', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
         }
 
@@ -2988,57 +2986,57 @@ namespace Oxide.Plugins
         private void LoadDefaultRules()
         {
             Puts("Trying to recreate rules data...");
-            SQLiteCommand ct = new SQLiteCommand("DROP TABLE IF EXISTS rpve_rules", sqlConnection);
+            SQLiteCommand ct = new SQLiteCommand("DROP TABLE IF EXISTS ngpve_rules", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("CREATE TABLE rpve_rules (name varchar(32),description varchar(255),damage INTEGER(1) DEFAULT 1,custom INTEGER(1) DEFAULT 0,source VARCHAR(32),target VARCHAR(32));", sqlConnection);
+            ct = new SQLiteCommand("CREATE TABLE ngpve_rules (name varchar(32),description varchar(255),damage INTEGER(1) DEFAULT 1,custom INTEGER(1) DEFAULT 0,source VARCHAR(32),target VARCHAR(32));", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('npc_player', 'NPC can damage player', 1, 0, 'npc', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('npc_player', 'NPC can damage player', 1, 0, 'npc', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_npc', 'Player can damage NPC', 1, 0, 'player', 'npc')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_npc', 'Player can damage NPC', 1, 0, 'player', 'npc')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_player', 'Player can damage Player', 1, 0, 'player', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_player', 'Player can damage Player', 1, 0, 'player', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_building', 'Player can damage Building', 1, 0, 'player', 'building')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_building', 'Player can damage Building', 1, 0, 'player', 'building')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_resource', 'Player can damage Resource', 1, 0, 'player', 'resource')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_resource', 'Player can damage Resource', 1, 0, 'player', 'resource')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('resource_player', 'Resource can damage Player', 1, 0, 'resource', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('resource_player', 'Resource can damage Player', 1, 0, 'resource', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_trap', 'Player can damage Trap', 1, 0, 'player', 'trap')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_trap', 'Player can damage Trap', 1, 0, 'player', 'trap')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('trap_player', 'Trap can damage Player', 1, 0, 'trap', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_player', 'Trap can damage Player', 1, 0, 'trap', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_animal', 'Player can damage Animal', 1, 0, 'player', 'animal')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_animal', 'Player can damage Animal', 1, 0, 'player', 'animal')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('animal_player', 'Animal can damage Player', 1, 0, 'animal', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('animal_player', 'Animal can damage Player', 1, 0, 'animal', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('animal_animal', 'Animal can damage Animal', 1, 0, 'animal', 'animal')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('animal_animal', 'Animal can damage Animal', 1, 0, 'animal', 'animal')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('helicopter_player', 'Helicopter can damage Player', 1, 0, 'helicopter', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_player', 'Helicopter can damage Player', 1, 0, 'helicopter', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('helicopter_building', 'Helicopter can damage Building', 1, 0, 'helicopter', 'building')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_building', 'Helicopter can damage Building', 1, 0, 'helicopter', 'building')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_minicopter', 'Player can damage MiniCopter', 1, 0, 'player', 'minicopter')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_minicopter', 'Player can damage MiniCopter', 1, 0, 'player', 'minicopter')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('minicopter_player', 'MiniCopter can damage Player', 1, 0, 'minicopter', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('minicopter_player', 'MiniCopter can damage Player', 1, 0, 'minicopter', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_scrapcopter', 'Player can damage Scrapcopter', 1, 0, 'player', 'scrapcopter')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_scrapcopter', 'Player can damage Scrapcopter', 1, 0, 'player', 'scrapcopter')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('scrapcopter_player', 'Scrapcopter can damage Player', 1, 0, 'scrapcopter', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('scrapcopter_player', 'Scrapcopter can damage Player', 1, 0, 'scrapcopter', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('player_helicopter', 'Player can damage Helicopter', 1, 0, 'player', 'helicopter')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_helicopter', 'Player can damage Helicopter', 1, 0, 'player', 'helicopter')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('highwall_player', 'Highwall can damage Player', 1, 0, 'highwall', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('highwall_player', 'Highwall can damage Player', 1, 0, 'highwall', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('npcturret_player', 'NPCAutoTurret can damage Player', 1, 0, 'npcturret', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('npcturret_player', 'NPCAutoTurret can damage Player', 1, 0, 'npcturret', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('npcturret_animal', 'NPCAutoTurret can damage Animal', 1, 0, 'npcturret', 'animal')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('npcturret_animal', 'NPCAutoTurret can damage Animal', 1, 0, 'npcturret', 'animal')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('npcturret_npc', 'NPCAutoTurret can damage NPC', 1, 0, 'npcturret', 'npc')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('npcturret_npc', 'NPCAutoTurret can damage NPC', 1, 0, 'npcturret', 'npc')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('fire_player', 'Fire can damage Player', 1, 0, 'fire', 'player')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('fire_player', 'Fire can damage Player', 1, 0, 'fire', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO rpve_rules VALUES('fire_resource', 'Fire can damage Resource', 1, 0, 'fire', 'resource')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('fire_resource', 'Fire can damage Resource', 1, 0, 'fire', 'resource')", sqlConnection);
             ct.ExecuteNonQuery();
         }
         #endregion
