@@ -4,6 +4,7 @@ Prevent damage to players and objects in a PVE environment
 Uses ZoneManager/LiteZones, Friends, Clans, RustIO, HumanNPC
 
 ## Overview
+RemodPVE is a new plugin and not a fork of TruePVE, et al.  It includes an integrated GUI for ruleset management.
 
 RemodPVE is organized into entity collections, rules that use those collections, and rulesets that include a set of rules.
 
@@ -45,7 +46,7 @@ The default ruleset (out of the box) has the following settings:
 
 - Exclusions: NONE (Could be chicken, bear, HumanNPC, etc.)
 
-There is in integrated GUI for the admin to use to:
+There is an integrated GUI for the admin to use to:
 
  1. Enable/disable RemodPVE
  2. Create or delete rulesets
