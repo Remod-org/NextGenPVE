@@ -18,20 +18,20 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("Real PVE", "RFC1920", "1.0.20")]
+    [Info("Remod PVE", "RFC1920", "1.0.20")]
     [Description("Prevent damage to players and objects in a PVE environment")]
-    internal class RealPVE : RustPlugin
+    internal class RemodPVE : RustPlugin
     {
         #region vars
-        private Dictionary<string, RealPVERule> custom_rules = new Dictionary<string, RealPVERule>();
+        private Dictionary<string, RemodPVERule> custom_rules = new Dictionary<string, RemodPVERule>();
 
         // Ruleset to multiple zones
-        private Dictionary<string, RealPVEZoneMap> rpvezonemaps = new Dictionary<string, RealPVEZoneMap>();
+        private Dictionary<string, RemodPVEZoneMap> rpvezonemaps = new Dictionary<string, RemodPVEZoneMap>();
         private Dictionary<string, string> rpveschedule = new Dictionary<string, string>();
 
-        private const string permRealPVEUse = "realpve.use";
-        private const string permRealPVEAdmin = "realpve.admin";
-        private const string permRealPVEGod = "realpve.god";
+        private const string permRemodPVEUse = "remodpve.use";
+        private const string permRemodPVEAdmin = "remodpve.admin";
+        private const string permRemodPVEGod = "remodpve.god";
         private ConfigData configData;
         private SQLiteConnection sqlConnection;
         private string connStr;
@@ -43,13 +43,13 @@ namespace Oxide.Plugins
         private bool dolog = false;
         private bool enabled = true;
         private Timer scheduleTimer;
-        private const string RPVERULELIST = "realpve.rulelist";
-        private const string RPVEEDITRULESET = "realpve.ruleseteditor";
-        private const string RPVERULEEDIT = "realpve.ruleeditor";
-        private const string RPVEVALUEEDIT = "realpve.value";
-        private const string RPVESCHEDULEEDIT = "realpve.schedule";
-        private const string RPVERULESELECT = "realpve.selectrule";
-        private const string RPVERULEEXCLUSIONS = "realpve.exclusions";
+        private const string RPVERULELIST = "remodpve.rulelist";
+        private const string RPVEEDITRULESET = "remodpve.ruleseteditor";
+        private const string RPVERULEEDIT = "remodpve.ruleeditor";
+        private const string RPVEVALUEEDIT = "remodpve.value";
+        private const string RPVESCHEDULEEDIT = "remodpve.schedule";
+        private const string RPVERULESELECT = "remodpve.selectrule";
+        private const string RPVERULEEXCLUSIONS = "remodpve.exclusions";
         #endregion
 
         #region Message
@@ -61,10 +61,10 @@ namespace Oxide.Plugins
         private void Init()
         {
             //Puts("Creating database connection for main thread.");
-            DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/realpve");
+            DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/remodpve");
             dataFile.Save();
 
-            connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}realpve.db;";
+            connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}remodpve.db;";
             sqlConnection = new SQLiteConnection(connStr);
             //Puts("Opening...");
             sqlConnection.Open();
@@ -72,13 +72,13 @@ namespace Oxide.Plugins
             LoadConfigVariables();
             LoadData();
 
-            AddCovalenceCommand("pverule", "CmdRealPVEGUI");
-            AddCovalenceCommand("pveenable", "CmdRealPVEenable");
-            AddCovalenceCommand("pvelog", "CmdRealPVElog");
+            AddCovalenceCommand("pverule", "CmdRemodPVEGUI");
+            AddCovalenceCommand("pveenable", "CmdRemodPVEenable");
+            AddCovalenceCommand("pvelog", "CmdRemodPVElog");
 
-            permission.RegisterPermission(permRealPVEUse, this);
-            permission.RegisterPermission(permRealPVEAdmin, this);
-            permission.RegisterPermission(permRealPVEGod, this);
+            permission.RegisterPermission(permRemodPVEUse, this);
+            permission.RegisterPermission(permRemodPVEAdmin, this);
+            permission.RegisterPermission(permRemodPVEGod, this);
             enabled = true;
 
             RunSchedule(true);
@@ -89,14 +89,14 @@ namespace Oxide.Plugins
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 ["notauthorized"] = "You don't have permission to use this command.",
-                ["realpverulesets"] = "RealPVE Rulesets",
+                ["remodpverulesets"] = "RemodPVE Rulesets",
                 ["rulesets"] = "Rulesets",
-                ["realpveruleset"] = "RealPVE Ruleset",
-                ["realpverule"] = "RealPVE Rule",
-                ["realpveruleselect"] = "RealPVE Rule Select",
-                ["realpvevalue"] = "RealPVE Ruleset Value",
-                ["realpveexclusions"] = "RealPVE Ruleset Exclusions",
-                ["realpveschedule"] = "RealPVE Ruleset Schedule",
+                ["remodpveruleset"] = "RemodPVE Ruleset",
+                ["remodpverule"] = "RemodPVE Rule",
+                ["remodpveruleselect"] = "RemodPVE Rule Select",
+                ["remodpvevalue"] = "RemodPVE Ruleset Value",
+                ["remodpveexclusions"] = "RemodPVE Ruleset Exclusions",
+                ["remodpveschedule"] = "RemodPVE Ruleset Schedule",
                 ["scheduling"] = "Schedules should be in the format of 'day(s);starttime;endtime'.  Use * for all days.  Enter 0 to clear.",
                 ["current2chedule"] = "Currently scheduled for day: {0} from {1} until {2}",
                 ["noschedule"] = "Not currently scheduled",
@@ -213,7 +213,7 @@ namespace Oxide.Plugins
             }
             if (!found) LoadDefaultRuleset();
 
-            rpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RealPVEZoneMap>>(this.Name + "/rpve_zonemaps");
+            rpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, RemodPVEZoneMap>>(this.Name + "/rpve_zonemaps");
         }
 
         private void SaveData()
@@ -283,10 +283,10 @@ namespace Oxide.Plugins
             if (!this.enabled) return null;
             if (hitInfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
 
-            AttackEntity realturret;
-            if (IsAutoTurret(hitInfo, out realturret))
+            AttackEntity remodturret;
+            if (IsAutoTurret(hitInfo, out remodturret))
             {
-                hitInfo.Initiator = realturret as BaseEntity;
+                hitInfo.Initiator = remodturret as BaseEntity;
             }
 
             //Puts($"attacker: {hitInfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}"); return true;
@@ -296,7 +296,7 @@ namespace Oxide.Plugins
 
             if (stype == "BasePlayer")
             {
-                if ((hitInfo.Initiator as BasePlayer).IPlayer.HasPermission(permRealPVEGod))
+                if ((hitInfo.Initiator as BasePlayer).IPlayer.HasPermission(permRemodPVEGod))
                 {
                     Puts("Admin god!");
                     return null;
@@ -361,7 +361,7 @@ namespace Oxide.Plugins
                 }
                 else
                 {
-                    rpvezonemaps.Add(rulesetname, new RealPVEZoneMap() { map = new List<string>() { key } });
+                    rpvezonemaps.Add(rulesetname, new RemodPVEZoneMap() { map = new List<string>() { key } });
                 }
                 SaveData();
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
@@ -387,7 +387,7 @@ namespace Oxide.Plugins
                     }
                 }
                 if (rpvezonemaps.ContainsKey(rulesetname)) rpvezonemaps.Remove(rulesetname);
-                rpvezonemaps.Add(rulesetname, new RealPVEZoneMap() { map = new List<string>() { key } });
+                rpvezonemaps.Add(rulesetname, new RemodPVEZoneMap() { map = new List<string>() { key } });
                 SaveData();
                 return true;
             }
@@ -670,7 +670,7 @@ namespace Oxide.Plugins
 
         private void RunSchedule(bool refresh = false)
         {
-            TimeSpan ts = configData.Options.useRealtime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
+            TimeSpan ts = configData.Options.useRemodtime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
             if (refresh)
             {
                 rpveschedule = new Dictionary<string, string>();
@@ -698,7 +698,7 @@ namespace Oxide.Plugins
             // Actual schedule processing here...
             foreach(KeyValuePair<string,string> scheduleInfo in rpveschedule)
             {
-                RealPVESchedule parsed;
+                RemodPVESchedule parsed;
                 if (ParseSchedule(scheduleInfo.Value, out parsed))
                 {
                     foreach (var x in parsed.day)
@@ -739,26 +739,26 @@ namespace Oxide.Plugins
                 }
             }
 
-            scheduleTimer = timer.Once(configData.Options.useRealtime ? 30f : 3f, () => RunSchedule());
+            scheduleTimer = timer.Once(configData.Options.useRemodtime ? 30f : 3f, () => RunSchedule());
         }
 
-        private bool ParseSchedule(string dbschedule, out RealPVESchedule parsed)
+        private bool ParseSchedule(string dbschedule, out RemodPVESchedule parsed)
         {
             int day = 0;
-            parsed = new RealPVESchedule();
+            parsed = new RemodPVESchedule();
 
-            string[] realschedule = Regex.Split(dbschedule, @"(.*)\;(.*)\:(.*)\;(.*)\:(.*)");
-            if (realschedule.Length < 6) return false;
+            string[] remodschedule = Regex.Split(dbschedule, @"(.*)\;(.*)\:(.*)\;(.*)\:(.*)");
+            if (remodschedule.Length < 6) return false;
 
-            parsed.starthour = realschedule[2];
-            parsed.startminute = realschedule[3];
-            parsed.endhour = realschedule[4];
-            parsed.endminute = realschedule[5];
+            parsed.starthour = remodschedule[2];
+            parsed.startminute = remodschedule[3];
+            parsed.endhour = remodschedule[4];
+            parsed.endminute = remodschedule[5];
 
             parsed.day = new List<int>();
             parsed.dayName = new List<string>();
 
-            string tmp = realschedule[1];
+            string tmp = remodschedule[1];
             string[] days = tmp.Split(',');
 
             if (tmp == "*")
@@ -797,9 +797,9 @@ namespace Oxide.Plugins
 
         #region Commands
         [Command("pveenable")]
-        private void CmdRealPVEenable(IPlayer player, string command, string[] args)
+        private void CmdRemodPVEenable(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(permRealPVEAdmin)) { Message(player, "notauthorized"); return; }
+            if (!player.HasPermission(permRemodPVEAdmin)) { Message(player, "notauthorized"); return; }
 
             enabled = !enabled;
             if (args.Length > 0)
@@ -813,18 +813,18 @@ namespace Oxide.Plugins
         }
 
         [Command("pvelog")]
-        private void CmdRealPVElog(IPlayer player, string command, string[] args)
+        private void CmdRemodPVElog(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(permRealPVEAdmin)) { Message(player, "notauthorized"); return; }
+            if (!player.HasPermission(permRemodPVEAdmin)) { Message(player, "notauthorized"); return; }
 
             dolog = !dolog;
             Message(player, "logging", dolog.ToString());
         }
 
         [Command("pverule")]
-        private void CmdRealPVEGUI(IPlayer iplayer, string command, string[] args)
+        private void CmdRemodPVEGUI(IPlayer iplayer, string command, string[] args)
         {
-            if (!iplayer.HasPermission(permRealPVEAdmin)) { Message(iplayer, "notauthorized"); return; }
+            if (!iplayer.HasPermission(permRemodPVEAdmin)) { Message(iplayer, "notauthorized"); return; }
             var player = iplayer.Object as BasePlayer;
 
             if (args.Length > 0)
@@ -1493,7 +1493,7 @@ namespace Oxide.Plugins
             public bool useZoneManager = true;
             public bool useLiteZones = false;
             public bool useSchedule = false;
-            public bool useRealtime = true;
+            public bool useRemodtime = true;
             public bool useFriends = false;
             public bool useClans = false;
             public bool useTeams = false;
@@ -1527,7 +1527,7 @@ namespace Oxide.Plugins
             CuiHelper.DestroyUi(player, RPVERULELIST);
 
             CuiElementContainer container = UI.Container(RPVERULELIST, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Lang("realpverulesets"), 24, "0.2 0.92", "0.65 1");
+            UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Lang("remodpverulesets"), 24, "0.2 0.92", "0.65 1");
             UI.Label(ref container, RPVERULELIST, UI.Color("#d85540", 1f), Lang("standard"), 12, "0.66 0.95", "0.72 0.98");
             UI.Label(ref container, RPVERULELIST, UI.Color("#5540d8", 1f), Lang("automated"), 12, "0.73 0.95", "0.79 0.98");
             UI.Label(ref container, RPVERULELIST, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
@@ -1709,7 +1709,7 @@ namespace Oxide.Plugins
             }
 
             CuiElementContainer container = UI.Container(RPVEEDITRULESET, UI.Color("3b3b3b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("realpveruleset") + ": " + rulename, 24, "0.15 0.92", "0.7 1");
+            UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("remodpveruleset") + ": " + rulename, 24, "0.15 0.92", "0.7 1");
             UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedulenotworking"), 12, "0.3 0.05", "0.7 0.08");
             UI.Label(ref container, RPVEEDITRULESET, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
@@ -1982,7 +1982,7 @@ namespace Oxide.Plugins
             CuiHelper.DestroyUi(player, RPVERULESELECT);
 
             CuiElementContainer container = UI.Container(RPVERULESELECT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Label(ref container, RPVERULESELECT, UI.Color("#ffffff", 1f), Lang("realpveruleselect"), 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, RPVERULESELECT, UI.Color("#ffffff", 1f), Lang("remodpveruleselect"), 24, "0.2 0.92", "0.7 1");
             UI.Label(ref container, RPVERULESELECT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             UI.Label(ref container, RPVERULESELECT, UI.Color("#5555cc", 1f), Lang("stock"), 12, "0.72 0.95", "0.78 0.98");
@@ -2054,7 +2054,7 @@ namespace Oxide.Plugins
 
             CuiElementContainer container = UI.Container(RPVERULEEXCLUSIONS, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
             UI.Button(ref container, RPVERULEEXCLUSIONS, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeexclusions");
-            UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color("#ffffff", 1f), Lang("realpveexclusions") + " " + t, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color("#ffffff", 1f), Lang("remodpveexclusions") + " " + t, 24, "0.2 0.92", "0.7 1");
             UI.Label(ref container, RPVERULEEXCLUSIONS, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             int col = 0;
@@ -2094,7 +2094,7 @@ namespace Oxide.Plugins
             }
 
             // Get organized entities list
-            Dictionary<string, RealPVEEntities> rpveentities = new Dictionary<string, RealPVEEntities>();
+            Dictionary<string, RemodPVEEntities> rpveentities = new Dictionary<string, RemodPVEEntities>();
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
@@ -2113,7 +2113,7 @@ namespace Oxide.Plugins
                             {
                                 if (!rpveentities.ContainsKey(nm))
                                 {
-                                    rpveentities[nm] = new RealPVEEntities() { types = new List<string> { tp }, custom = cs };
+                                    rpveentities[nm] = new RemodPVEEntities() { types = new List<string> { tp }, custom = cs };
                                 }
                                 else
                                 {
@@ -2224,7 +2224,7 @@ namespace Oxide.Plugins
 
             CuiElementContainer container = UI.Container(RPVERULEEDIT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
             UI.Button(ref container, RPVERULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
-            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Lang("realpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Lang("remodpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
             UI.Label(ref container, RPVERULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             int col = 0;
@@ -2316,7 +2316,7 @@ namespace Oxide.Plugins
 
             CuiElementContainer container = UI.Container(RPVEVALUEEDIT, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
             UI.Button(ref container, RPVEVALUEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerulevalue");
-            UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#ffffff", 1f), Lang("realpvevalue") + ": " + rulesetname + " " + key, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#ffffff", 1f), Lang("remodpvevalue") + ": " + rulesetname + " " + key, 24, "0.2 0.92", "0.7 1");
             UI.Label(ref container, RPVEVALUEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             int col = 0;
@@ -2440,7 +2440,7 @@ namespace Oxide.Plugins
 
             CuiElementContainer container = UI.Container(RPVESCHEDULEEDIT, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
             UI.Button(ref container, RPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleschedule");
-            UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("realpveschedule") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
+            UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("remodpveschedule") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
             UI.Label(ref container, RPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             string fmtschedule = null;
@@ -2448,16 +2448,16 @@ namespace Oxide.Plugins
             {
                 try
                 {
-                    string[] realschedule = schedule.Split(';');//.ToArray();
-                    //Puts($"Schedule: {realschedule[0]} {realschedule[1]} {realschedule[2]}");
+                    string[] remodschedule = schedule.Split(';');//.ToArray();
+                    //Puts($"Schedule: {remodschedule[0]} {remodschedule[1]} {remodschedule[2]}");
                     // WTF?
                     int day = 0;
                     string dayName = Lang("all") + "(*)";
-                    if (int.TryParse(realschedule[0], out day))
+                    if (int.TryParse(remodschedule[0], out day))
                     {
-                        dayName = Enum.GetName(typeof(DayOfWeek), day) + "(" + realschedule[0] + ")";
+                        dayName = Enum.GetName(typeof(DayOfWeek), day) + "(" + remodschedule[0] + ")";
                     }
-                    fmtschedule = Lang("currentschedule", null, dayName, realschedule[1], realschedule[2]);
+                    fmtschedule = Lang("currentschedule", null, dayName, remodschedule[1], remodschedule[2]);
                 }
                 catch
                 {
@@ -2692,7 +2692,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region classes
-        public class RealPVERule
+        public class RemodPVERule
         {
             public string description;
             public bool damage;
@@ -2701,7 +2701,7 @@ namespace Oxide.Plugins
             public List<string> target;
         }
 
-        public class RealPVESchedule
+        public class RemodPVESchedule
         {
             public List<int> day;
             public List<string> dayName;
@@ -2712,13 +2712,13 @@ namespace Oxide.Plugins
             public bool enabled = true;
         }
 
-        public class RealPVEEntities
+        public class RemodPVEEntities
         {
             public List<string> types;
             public bool custom = false;
         }
 
-        private class RealPVEZoneMap
+        private class RemodPVEZoneMap
         {
             public List<string> map;
         }

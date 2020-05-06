@@ -1,11 +1,11 @@
-# RealPVE - WORK IN PROGRESS
+# RemodPVE - WORK IN PROGRESS
 Prevent damage to players and objects in a PVE environment
 
 Uses ZoneManager/LiteZones, Friends, Clans, RustIO, HumanNPC
 
 ## Overview
 
-RealPVE is organized into entity collections, rules that use those collections, and rulesets that include a set of rules.
+RemodPVE is organized into entity collections, rules that use those collections, and rulesets that include a set of rules.
 
 Each ruleset has a default damage value of true or false.
 
@@ -47,7 +47,7 @@ The default ruleset (out of the box) has the following settings:
 
 There is in integrated GUI for the admin to use to:
 
- 1. Enable/disable RealPVE
+ 1. Enable/disable RemodPVE
  2. Create or delete rulesets
  3. Enable or disable rulesets
  4. Set the default damage for a ruleset
@@ -74,9 +74,9 @@ The above commands can also be run from console or RCON.
 
 ## Permissions
 
-- realpve.use   -- Currently unused
-- realpve.admin -- Required for access to GUI and other functions
-- realpve.god   -- Override PVE, killall
+- remodpve.use   -- Currently unused
+- remodpve.admin -- Required for access to GUI and other functions
+- remodpve.god   -- Override PVE, killall
 
 ## Configuration
 
@@ -121,7 +121,7 @@ Note that friends support can include Friends, Clans, or Teams.
 
 ## Details
 
-RealPVE uses SQLite for most of its data storage.  The database file is named realpve.db.
+RemodPVE uses SQLite for most of its data storage.  The database file is named remodpve.db.
 
 The only other data file is rpve_zonemaps.json.  This is currently used by third party plugins that create their own PVP ruleset and zones.
 
