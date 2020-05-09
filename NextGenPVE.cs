@@ -18,7 +18,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.22")]
+    [Info("NextGen PVE", "RFC1920", "1.0.23")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1475,6 +1475,18 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if(configData.Version < new VersionNumber(1, 0, 23))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'ScientistNPC', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
 
             configData.Version = Version;
             SaveConfig(configData);
@@ -2899,6 +2911,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Murderer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Scientist', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'ScientistNPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Zombie', 0)", sqlConnection);
             ct.ExecuteNonQuery();
