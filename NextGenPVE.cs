@@ -18,7 +18,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.24")]
+    [Info("NextGen PVE", "RFC1920", "1.0.25")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -275,27 +275,32 @@ namespace Oxide.Plugins
             return null;
         }
 
-        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitInfo)
+        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
             if (entity == null) return null;
-            if (hitInfo.Initiator == null) return null;
-            if (!this.enabled) return null;
-            if (hitInfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
-
-            AttackEntity nextgenturret;
-            if (IsAutoTurret(hitInfo, out nextgenturret))
+            if (hitinfo.Initiator == null)
             {
-                hitInfo.Initiator = nextgenturret as BaseEntity;
+                AttackEntity turret;
+                if (IsAutoTurret(hitinfo, out turret))
+                {
+                    hitinfo.Initiator = turret as BaseEntity;
+                }
+                else
+                {
+                    return null;
+                }
             }
+            if (!enabled) return null;
+            if (hitinfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
 
-            //Puts($"attacker: {hitInfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}"); return true;
-            //Puts($"attacker: {hitInfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}");
+            //Puts($"attacker: {hitinfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}"); return true;
+            //Puts($"attacker: {hitinfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}");
             string stype; string ttype;
-            bool canhurt = EvaluateRulesets(hitInfo.Initiator, entity as BaseEntity, out stype, out ttype);
+            bool canhurt = EvaluateRulesets(hitinfo.Initiator, entity as BaseEntity, out stype, out ttype);
 
             if (stype == "BasePlayer")
             {
-                if ((hitInfo.Initiator as BasePlayer).IPlayer.HasPermission(permNextGenPVEGod))
+                if ((hitinfo.Initiator as BasePlayer).IPlayer.HasPermission(permNextGenPVEGod))
                 {
                     Puts("Admin god!");
                     return null;
@@ -448,6 +453,7 @@ namespace Oxide.Plugins
             }
             stype = source.GetType().Name;
             ttype = target.GetType().Name;
+            //Puts($"{stype} attacking {ttype}");
             string zone = "default";
             string rulesetzone = "";
             bool hasBP = false;
@@ -1381,7 +1387,7 @@ namespace Oxide.Plugins
                                 LoadConfigVariables();
                                 break;
                         }
-                        SaveConfig();
+                        SaveConfig(configData);
                         GUIRuleSets(player);
                         break;
                     case "editrule":
@@ -1494,6 +1500,18 @@ namespace Oxide.Plugins
                     c.Open();
 
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'NPCPlayerCorpse', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 0, 25))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'BaseProjectile', 0)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -2578,17 +2596,17 @@ namespace Oxide.Plugins
             }
         }
 
-        private bool IsBaseHelicopter(HitInfo hitInfo)
+        private bool IsBaseHelicopter(HitInfo hitinfo)
         {
-            if (hitInfo.Initiator is BaseHelicopter
-               || (hitInfo.Initiator != null && (hitInfo.Initiator.ShortPrefabName.Equals("oilfireballsmall") || hitInfo.Initiator.ShortPrefabName.Equals("napalm"))))
+            if (hitinfo.Initiator is BaseHelicopter
+               || (hitinfo.Initiator != null && (hitinfo.Initiator.ShortPrefabName.Equals("oilfireballsmall") || hitinfo.Initiator.ShortPrefabName.Equals("napalm"))))
             {
                 return true;
             }
 
-            else if (hitInfo.WeaponPrefab != null)
+            else if (hitinfo.WeaponPrefab != null)
             {
-                if (hitInfo.WeaponPrefab.ShortPrefabName.Equals("rocket_heli") || hitInfo.WeaponPrefab.ShortPrefabName.Equals("rocket_heli_napalm"))
+                if (hitinfo.WeaponPrefab.ShortPrefabName.Equals("rocket_heli") || hitinfo.WeaponPrefab.ShortPrefabName.Equals("rocket_heli_napalm"))
                 {
                     return true;
                 }
@@ -2596,13 +2614,14 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private bool IsAutoTurret(HitInfo hitInfo, out AttackEntity weapon)
+        private bool IsAutoTurret(HitInfo hitinfo, out AttackEntity weapon)
         {
             // Check for turret initiator
-            var turret = hitInfo.Weapon?.GetComponentInParent<AutoTurret>();
+            var turret = hitinfo.Weapon?.GetComponentInParent<AutoTurret>();
             if (turret != null)
             {
-                weapon = hitInfo.Weapon;
+                DoLog($"Turret weapon '{hitinfo.Weapon?.ShortPrefabName}' is initiator");
+                weapon = hitinfo.Weapon;
                 return true;
             }
 
@@ -2945,6 +2964,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'ResourceEntity', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'BaseProjectile', 0)", sqlConnection); // AutoTurret weapon
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'Barricade', 0)", sqlConnection);
             ct.ExecuteNonQuery();
