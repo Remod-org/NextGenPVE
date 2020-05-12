@@ -18,7 +18,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.26")]
+    [Info("NextGen PVE", "RFC1920", "1.0.27")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1758,6 +1758,7 @@ namespace Oxide.Plugins
             bool damage = false;
             string schedule = null;
             string zone = null;
+            string zName = null;
 
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
@@ -1772,6 +1773,7 @@ namespace Oxide.Plugins
                             isEnabled = rsread.GetBoolean(1);
                             damage = rsread.GetBoolean(2);
                             zone = rsread.GetString(4);
+                            zName = (string)ZoneManager?.Call("GetZoneName", zone);
                             try
                             {
                                 schedule = rsread.GetString(3) ?? "0";
@@ -2022,7 +2024,7 @@ namespace Oxide.Plugins
             }
             else if (zone != null)
             {
-                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), zone, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
+                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), zName + "(" + zone + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
             else
             {
@@ -2466,7 +2468,7 @@ namespace Oxide.Plugins
                         string zName = (string)ZoneManager?.Call("GetZoneName", zoneID);
                         string zColor = "#222222";
                         bool labelonly = false;
-                        if (zName == zone) zColor = "#55d840";
+                        if (zoneID == zone) zColor = "#55d840";
                         if (zone == "lookup" && ngpvezonemaps.ContainsKey(rulesetname))
                         {
                             if (ngpvezonemaps[rulesetname].map.Contains(zoneID)) zColor = "#55d840";
@@ -2481,7 +2483,7 @@ namespace Oxide.Plugins
                         }
                         else
                         {
-                            UI.Button(ref container, NGPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zName}");
+                            UI.Button(ref container, NGPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zoneID}");
                         }
                         row++;
                     }
