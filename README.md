@@ -67,11 +67,34 @@ There is an integrated GUI for the admin to use to:
 
 The following commands have been implemented:
 
-    - `/pverule` - Starts the GUI for editing, creating, and deleting rulesets
     - `/pveenable` - Toggles the enabled status of the plugin
     - `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
+    - `/pverule` - Starts the GUI for editing, creating, and deleting rulesets
 
-The above commands can also be run from console or RCON (without /).  Much more documentation to come if you don't like GUIs.
+#### Commands called by GUI
+
+    - `/pverule editconfig {CONFIG} true/false` - Set any of the global flags below to true/false
+    - `/pverule editconfig RESET true` - Reset all of the global flags to default
+
+    - `/pverule editruleset default defload YES` - Reset the default ruleset to defaults.
+    - `/pverule editruleset {RULESETNAME} delete` - Delete the named ruleset.
+
+    - `/pverule editruleset {RULESETNAME} name {NEWNAME}` - Change the name of a ruleset.
+    - `/pverule editruleset {RULESETNAME} schedule {SCHEDULE}` - Set schedule for a ruleset.  Format is day;starthour:startminute;endhour:endminute, e.g. 1;1:00;9:00, 2;15:00;21:00.  Use '*' for every day
+    - `/pverule editruleset {RULESETNAME} clone ` - Clone a ruleset.  The new name wil be {RULESETNAME}1 or {RULESETNAME}2, etc. if 1 exists.
+    - `/pverule editruleset {RULESETNAME} damage 0/1` - Set default damage for the named ruleset.
+    - `/pverule editruleset {RULESETNAME} enable 0/1` - Enable or disable the named ruleset.
+    - `/pverule editruleset {RULESETNAME} except {RULENAME} add` - Add a named exception RULENAME to the named ruleset.
+    - `/pverule editruleset {RULESETNAME} except {RULENAME} delete` - Delete a named exception RULENAME from the named ruleset.
+    - `/pverule editruleset {RULESETNAME} src_exclude {TYPE} add` - Add a source exclusion, e.g. NPCMurderer.
+    - `/pverule editruleset {RULESETNAME} src_exclude {TYPE} delete` - Delete a source exclusion, e.g. HumanNPC.
+    - `/pverule editruleset {RULESETNAME} tgt_exclude {TYPE} add` - Add a target exclusion, e.g. NPCMurderer.
+    - `/pverule editruleset {RULESETNAME} tgt_exclude {TYPE} delete` - Delete a target exclusion, e.g. HumanNPC.
+    - `/pverule editruleset {RULESETNAME} zone default` - Set a ruleset zone to default.
+    - `/pverule editruleset {RULESETNAME} zone delete` - Delete zone from a ruleset.
+    - `/pverule editruleset {RULESETNAME} zone {zoneID}` - Set zone for ruleset.
+
+The above commands can also be run from console or RCON (without /).
 
 ### Permissions
 
