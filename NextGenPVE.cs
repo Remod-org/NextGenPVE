@@ -1573,6 +1573,10 @@ namespace Oxide.Plugins
                 {
                     c.Open();
 
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'ModularCar', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'ModularVehicle', 0)", c))
                     {
                         ct.ExecuteNonQuery();
@@ -1590,10 +1594,6 @@ namespace Oxide.Plugins
                         ct.ExecuteNonQuery();
                     }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_vehicle', null, null, null)", c))
-                    {
-                        ct.ExecuteNonQuery();
-                    }
-                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'vehicle_player', null, null, null)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -3136,8 +3136,6 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_building', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_vehicle', null, null, null)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'vehicle_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
         }
 
