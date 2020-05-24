@@ -18,7 +18,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.32")]
+    [Info("NextGen PVE", "RFC1920", "1.0.33")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -457,21 +457,24 @@ namespace Oxide.Plugins
             //Puts($"{stype} attacking {ttype}");
             string zone = "default";
             string rulesetzone = "";
-            bool hasBP = false;
+            bool hasBP = true;
+            bool isBuilding = false;
 
             // Special case since HumanNPC contains a BasePlayer object
             if (stype == "BasePlayer" && HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
             if (ttype == "BasePlayer" && HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
 
-            //var turret = source.Weapon?.GetComponentInParent<AutoTurret>();
-
-            if (stype == "BasePlayer" && ttype == "BuildingBlock")
+            // Special case for building damage requiring owner or auth access
+            if (stype == "BasePlayer" && (ttype == "BuildingBlock" || ttype == "Door"))
             {
-                if (PlayerOwnsItem(source as BasePlayer, target)) hasBP = true;
+                isBuilding = true;
+                if (!PlayerOwnsItem(source as BasePlayer, target))
+                {
+                    hasBP = false;
+                }
             }
 
-            //bool zmatch = false;
-            if (configData.Options.useZoneManager)
+            if (configData.Options.useZoneManager || configData.Options.useLiteZones)
             {
                 string[] sourcezone = GetEntityZones(source);
                 string[] targetzone = GetEntityZones(target);
@@ -482,27 +485,8 @@ namespace Oxide.Plugins
                     {
                         if (targetzone.Contains(z))
                         {
-                            //string zName = (string)ZoneManager?.Call("GetZoneName", z);
-                            //if (zName != null) zone = zName;
-                            //else zone = z;
                             zone = z;
                             DoLog($"Found zone {zone}", 1);
-                            break;
-                        }
-                    }
-                }
-            }
-            else if (configData.Options.useLiteZones)
-            {
-                List<string> sz = (List<string>)LiteZones?.Call("GetEntityZones", new object[] { source });
-                List<string> tz = (List<string>)LiteZones?.Call("GetEntityZones", new object[] { target });
-                if (sz != null && sz.Count > 0 && tz != null && tz.Count > 0)
-                {
-                    foreach (string z in sz)
-                    {
-                        if (tz.Contains(z))
-                        {
-                            zone = z;
                             break;
                         }
                     }
@@ -650,10 +634,15 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            if (hasBP)
+            if (hasBP && isBuilding)
             {
                 DoLog($"Player has building privilege and is attacking a BuildingBlock");
                 return true;
+            }
+            else if(!hasBP && isBuilding)
+            {
+                DoLog("Player does NOT have building privilege and is attacking a BuildingBlock");
+                return false;
             }
 
             if (foundmatch)
@@ -2646,7 +2635,7 @@ namespace Oxide.Plugins
         #region Specialized_checks
         private string[] GetEntityZones(BaseEntity entity)
         {
-            if (configData.Options.useZoneManager)
+            if (ZoneManager && configData.Options.useZoneManager)
             {
                 if (entity is BasePlayer)
                 {
@@ -2657,7 +2646,7 @@ namespace Oxide.Plugins
                     return (string[])ZoneManager?.Call("GetEntityZoneIDs", new object[] { entity });
                 }
             }
-            else if (configData.Options.useLiteZones)
+            else if (LiteZones && configData.Options.useLiteZones)
             {
                 if (entity.IsValid())
                 {
@@ -2724,6 +2713,7 @@ namespace Oxide.Plugins
 
         private bool PlayerOwnsItem(BasePlayer player, BaseEntity entity)
         {
+            DoLog($"Does player {player.displayName} own {entity.ShortPrefabName}?");
             if (entity is BuildingBlock)
             {
                 if (!configData.Options.HonorBuildingPrivilege) return true;
@@ -2780,6 +2770,7 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
+            DoLog("Player does not own or have access to this entity");
             return false;
         }
 
