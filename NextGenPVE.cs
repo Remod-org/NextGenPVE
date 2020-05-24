@@ -18,7 +18,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.30")]
+    [Info("NextGen PVE", "RFC1920", "1.0.32")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -38,6 +38,7 @@ namespace Oxide.Plugins
 
         [PluginReference]
         private readonly Plugin ZoneManager, LiteZones, HumanNPC, Friends, Clans, RustIO;
+        private bool ValidHumanNPC = false;
 
         private readonly string logfilename = "log";
         private bool dolog = false;
@@ -675,7 +676,7 @@ namespace Oxide.Plugins
 
         private void RunSchedule(bool refresh = false)
         {
-            TimeSpan ts = configData.Options.useNextGentime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
+            TimeSpan ts = configData.Options.useRealTime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
             if (refresh)
             {
                 ngpveschedule = new Dictionary<string, string>();
@@ -744,7 +745,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            scheduleTimer = timer.Once(configData.Options.useNextGentime ? 30f : 3f, () => RunSchedule());
+            scheduleTimer = timer.Once(configData.Options.useRealTime ? 30f : 3f, () => RunSchedule());
         }
 
         private bool ParseSchedule(string dbschedule, out NextGenPVESchedule parsed)
@@ -1625,10 +1626,10 @@ namespace Oxide.Plugins
 
         private class Options
         {
-            public bool useZoneManager = true;
+            public bool useZoneManager = false;
             public bool useLiteZones = false;
             public bool useSchedule = false;
-            public bool useNextGentime = true;
+            public bool useRealTime = true;
             public bool useFriends = false;
             public bool useClans = false;
             public bool useTeams = false;
@@ -1728,7 +1729,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -1738,7 +1739,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -1748,7 +1749,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -1758,7 +1759,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -1768,7 +1769,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -1778,7 +1779,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -1788,7 +1789,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -1798,7 +1799,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships true");
             }
 
             row++;
@@ -2671,7 +2672,15 @@ namespace Oxide.Plugins
         {
             if (HumanNPC)
             {
-                return (bool)HumanNPC?.Call("IsHumanNPC", player as BasePlayer);
+                try
+                {
+                    return (bool)HumanNPC?.Call("IsHumanNPC", player as BasePlayer);
+                }
+                catch
+                {
+                    // HumanNPC version does not have the above call.
+                    return false;
+                }
             }
             else
             {
