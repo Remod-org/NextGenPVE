@@ -18,7 +18,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.33")]
+    [Info("NextGen PVE", "RFC1920", "1.0.34")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -527,18 +527,6 @@ namespace Oxide.Plugins
                 }
             }
 
-            bool foundZone = false;
-            // Are there any rulesets with this zone defined?
-            using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT zone FROM ngpve_rulesets WHERE zone='{zone}'", sqlConnection))
-            {
-                using (SQLiteDataReader readMe = findIt.ExecuteReader())
-                {
-                    while(readMe.Read())
-                    {
-                        if (zone != "") foundZone = true;
-                    }
-                }
-            }
             using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets", sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
@@ -556,30 +544,31 @@ namespace Oxide.Plugins
                             continue;
                         }
 
-                        bool zmatch = true;
                         foundexception = false;
                         foundexclusion = false;
 
                         damage = readMe.GetBoolean(2);
 
-                        if (zone == rulesetzone || (zone == "default" && (rulesetzone == "" || rulesetzone == "0")))
+                        // ZONE CHECKS
+                        // First: If we are in a matching zone, use it
+                        if(zone == rulesetzone)
                         {
                             DoLog($"Zone match for ruleset {rulesetname}, zone {rulesetzone}");
                         }
+                        // Second: If we are in the default zone, and this rulesetzone is not, skip it
+                        if(zone == "default" && rulesetzone != "default" && rulesetzone != "" && rulesetzone != "0")
+                        {
+                            DoLog($"Skipping ruleset {rulesetname} due to zone mismatch with current zone, {zone}");
+                            continue;
+                        }
+                        // Third: rulesetzone == "lookup" but zonemaps does not contain this zone, skip it
                         else if (rulesetzone == "lookup" && ngpvezonemaps.ContainsKey(rulesetname))
                         {
                             if (!ngpvezonemaps[rulesetname].map.Contains(zone))
                             {
                                 DoLog($"Skipping ruleset {rulesetname} due to zone mismatch with current zone, {zone}");
-                                zmatch = false;
                                 continue;
                             }
-                        }
-                        else if (zone != "default" && rulesetzone != "" && zone != rulesetzone && foundZone)
-                        {
-                            DoLog($"Skipping ruleset {rulesetname} due to zone mismatch with current zone, {zone}");
-                            zmatch = false;
-                            continue;
                         }
 
                         DoLog($"Checking ruleset {rulesetname}");
@@ -620,12 +609,12 @@ namespace Oxide.Plugins
                                 }
                             }
 
-                            if (zmatch && (foundexception && !foundexclusion))
+                            if (foundexception && !foundexclusion)
                             {
                                 // allow break on current ruleset and zone match with no exclustions
                                 foundmatch = true;
                             }
-                            else if(zmatch && !foundexception)
+                            else if(!foundexception)
                             {
                                 // allow break on current ruleset and zone match with no exceptions
                                 foundmatch = true;
@@ -1078,7 +1067,7 @@ namespace Oxide.Plugins
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using (SQLiteCommand findSrc = new SQLiteCommand($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE src_exclude LIKE '%{newval}%'", c))
+                                                using (SQLiteCommand findSrc = new SQLiteCommand($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE src_exclude = '{newval}'", c))
                                                 {
                                                     using (SQLiteDataReader fs = findSrc.ExecuteReader())
                                                     {
@@ -1192,7 +1181,7 @@ namespace Oxide.Plugins
                                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using (SQLiteCommand findTgt = new SQLiteCommand($"SELECT DISTINCT tgt_exclude FROM ngpve_rulesets WHERE tgt_exclude LIKE '%{newval}%'", c))
+                                                using (SQLiteCommand findTgt = new SQLiteCommand($"SELECT DISTINCT tgt_exclude FROM ngpve_rulesets WHERE tgt_exclude = '{newval}'", c))
                                                 {
                                                     using (SQLiteDataReader ft = findTgt.ExecuteReader())
                                                     {
@@ -1584,6 +1573,22 @@ namespace Oxide.Plugins
                         ct.ExecuteNonQuery();
                     }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_vehicle', null, null, null)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 0, 34))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('building', 'Door', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_highwall', 'Player can damage Highwall', 1, 0, 'player', 'highwall')", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -2188,8 +2193,8 @@ namespace Oxide.Plugins
 
             List<string> foundsrc = new List<string>();
             List<string> foundtgt = new List<string>();
-            string src_exclude = "";
-            string tgt_exclude = "";
+            List<string> src_exclude = new List<string>();
+            List<string> tgt_exclude = new List<string>();
 
             // Get ruleset src and tgt exclusions
             //Puts($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'");
@@ -2206,13 +2211,13 @@ namespace Oxide.Plugins
                             if (a != "")
                             {
                                 //Puts($"Adding {a} to src_exclude");
-                                src_exclude += a;
+                                src_exclude.Add(a);
                             }
                             string b = rsd.GetValue(1).ToString();
                             if (b != "")
                             {
                                 //Puts($"Adding {b} to tgt_exclude");
-                                tgt_exclude += b;
+                                tgt_exclude.Add(b);
                             }
                         }
                     }
@@ -2224,7 +2229,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand ent = new SQLiteCommand("SELECT name,type,custom FROM ngpve_entities ORDER BY name", c))
+                using (SQLiteCommand ent = new SQLiteCommand("SELECT name,type,custom FROM ngpve_entities ORDER BY type", c))
                 {
                     using (SQLiteDataReader ntd = ent.ExecuteReader())
                     {
@@ -2993,6 +2998,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('building', 'BuildingBlock', 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('building', 'Door', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('fire', 'BaseOven', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('fire', 'FireBall', 0)", sqlConnection);
@@ -3186,6 +3193,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_helicopter', 'Player can damage Helicopter', 1, 0, 'player', 'helicopter')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('highwall_player', 'Highwall can damage Player', 1, 0, 'highwall', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_highwall', 'Player can damage Highwall', 1, 0, 'player', 'highwall')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('npcturret_player', 'NPCAutoTurret can damage Player', 1, 0, 'npcturret', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
