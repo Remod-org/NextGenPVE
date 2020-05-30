@@ -56,6 +56,7 @@ namespace Oxide.Plugins
         #region Message
         private string Lang(string key, string id = null, params object[] args) => string.Format(lang.GetMessage(key, this, id), args);
         private void Message(IPlayer player, string key, params object[] args) => player.Message(Lang(key, player.Id, args));
+        private void LMessage(IPlayer player, string key, params object[] args) => player.Reply(Lang(key, player.Id, args));
         #endregion
 
         #region init
@@ -73,6 +74,7 @@ namespace Oxide.Plugins
             LoadConfigVariables();
             LoadData();
 
+            AddCovalenceCommand("pvebackup", "CmdNextGenPVEbackup");
             AddCovalenceCommand("pverule", "CmdNextGenPVEGUI");
             AddCovalenceCommand("pveenable", "CmdNextGenPVEenable");
             AddCovalenceCommand("pvelog", "CmdNextGenPVElog");
@@ -790,7 +792,7 @@ namespace Oxide.Plugins
         {
             if (!player.HasPermission(permNextGenPVEAdmin)) { Message(player, "notauthorized"); return; }
 
-            string backupfile = "nextgenpve_" + DateTime.Now.ToString("yyyy-MM-dd_HH:mm:ss") + ".db";
+            string backupfile = "nextgenpve_" + DateTime.Now.ToString("yyyy-MM-dd_HHmmss") + ".db";
             if (args.Length > 1)
             {
                 backupfile = args[1] + ".db";
@@ -799,13 +801,14 @@ namespace Oxide.Plugins
             {
                 c.Open();
                 string bkup = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
+                //Puts($"Using new db connection '{bkup}'");
                 using (SQLiteConnection d = new SQLiteConnection(bkup))
                 {
                     d.Open();
                     c.BackupDatabase(d, "main", "main", -1, null, -1);
                 }
-                SendReply(player.Object as BasePlayer, "BackupDone", backupfile);
             }
+            LMessage(player, "BackupDone", backupfile);
         }
 
         [Command("pveenable")]
@@ -845,7 +848,7 @@ namespace Oxide.Plugins
                 switch (args[0])
                 {
                     case "backup":
-                        string backupfile = "nextgenpve_" + DateTime.Now.ToString("yyyy-MM-dd_HH:mm:ss") + ".db";
+                        string backupfile = "nextgenpve_" + DateTime.Now.ToString("yyyy-MM-dd_HHmmss") + ".db";
                         if(args.Length > 1)
                         {
                             backupfile = args[1] + ".db";
@@ -863,7 +866,7 @@ namespace Oxide.Plugins
                         }
                         break;
                     case "restore":
-                        var files = Interface.Oxide.DataFileSystem.GetFiles($"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}");
+                        var files = Interface.Oxide.DataFileSystem.GetFiles($"{Interface.Oxide.DataDirectory}/{Name}");
                         files = Array.FindAll(files, x => x.EndsWith(".db"));
                         files = Array.FindAll(files, x => !x.EndsWith("nextgenpve.db"));
 
@@ -875,7 +878,7 @@ namespace Oxide.Plugins
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
-                                    string target = $"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nexgenpve.db";
+                                    string target = $"{Interface.Oxide.DataDirectory}/{Name}/nexgenpve.db";
                                     string restore = $"Data Source={restorefile}";
                                     using (SQLiteConnection d = new SQLiteConnection(restore))
                                     {
@@ -902,7 +905,7 @@ namespace Oxide.Plugins
                         else
                         {
                             Message(iplayer, "RestoreFilename");
-                            Message(iplayer, "RestoreAvailable", string.Join("\n\t", files.Select(x => x.Replace($"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}", ""))));
+                            Message(iplayer, "RestoreAvailable", string.Join("\n\t", files.Select(x => x.Replace($"{Interface.Oxide.DataDirectory}/{Name}/", ""))));
                         }
                         break;
                     case "editruleset":
