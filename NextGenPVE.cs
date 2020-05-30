@@ -18,7 +18,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.36")]
+    [Info("NextGen PVE", "RFC1920", "1.0.37")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -148,7 +148,13 @@ namespace Oxide.Plugins
                 ["TrapsIgnorePlayers"] = "Traps Ignore Players",
                 ["HonorBuildingPrivilege"] = "Honor Building Privilege",
                 ["UnprotectedBuildingDamage"] = "Unprotected Building Damage",
-                ["HonorRelationships"] = "Honor Relationships"
+                ["HonorRelationships"] = "Honor Relationships",
+                ["backup"] = "Backup Database",
+                ["BackupDone"] = "NextGenPVE database has been backed up to {0}",
+                ["RestoreDone"] = "NextGenPVE database has been restored from {0}",
+                ["RestoreFailed"] = "Unable to restore from {0}!  Verify presence of file.",
+                ["RestoreFilename"] = "Restore requires source filename ending in '.db'!",
+                ["RestoreAvailable"] = "Available files:\n\t{0}"
             }, this);
         }
 
@@ -779,6 +785,29 @@ namespace Oxide.Plugins
         #endregion
 
         #region Commands
+        [Command("pvebackup")]
+        private void CmdNextGenPVEbackup(IPlayer player, string command, string[] args)
+        {
+            if (!player.HasPermission(permNextGenPVEAdmin)) { Message(player, "notauthorized"); return; }
+
+            string backupfile = "nextgenpve_" + DateTime.Now.ToString("yyyy-MM-dd_HH:mm:ss") + ".db";
+            if (args.Length > 1)
+            {
+                backupfile = args[1] + ".db";
+            }
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                string bkup = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
+                using (SQLiteConnection d = new SQLiteConnection(bkup))
+                {
+                    d.Open();
+                    c.BackupDatabase(d, "main", "main", -1, null, -1);
+                }
+                SendReply(player.Object as BasePlayer, "BackupDone", backupfile);
+            }
+        }
+
         [Command("pveenable")]
         private void CmdNextGenPVEenable(IPlayer player, string command, string[] args)
         {
@@ -815,6 +844,67 @@ namespace Oxide.Plugins
                 //string debug = string.Join(",", args); Puts($"{debug}");
                 switch (args[0])
                 {
+                    case "backup":
+                        string backupfile = "nextgenpve_" + DateTime.Now.ToString("yyyy-MM-dd_HH:mm:ss") + ".db";
+                        if(args.Length > 1)
+                        {
+                            backupfile = args[1] + ".db";
+                        }
+                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                        {
+                            c.Open();
+                            string bkup = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
+                            using (SQLiteConnection d = new SQLiteConnection(bkup))
+                            {
+                                d.Open();
+                                c.BackupDatabase(d, "main", "main", -1, null, -1);
+                            }
+                            Message(iplayer, "BackupDone", backupfile);
+                        }
+                        break;
+                    case "restore":
+                        var files = Interface.Oxide.DataFileSystem.GetFiles($"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}");
+                        files = Array.FindAll(files, x => x.EndsWith(".db"));
+                        files = Array.FindAll(files, x => !x.EndsWith("nextgenpve.db"));
+
+                        if (args.Length > 1)
+                        {
+                            string restorefile = $"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{args[1]}";
+                            if(files.Contains(restorefile) && restorefile.EndsWith(".db"))
+                            {
+                                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                {
+                                    c.Open();
+                                    string target = $"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nexgenpve.db";
+                                    string restore = $"Data Source={restorefile}";
+                                    using (SQLiteConnection d = new SQLiteConnection(restore))
+                                    {
+                                        try
+                                        {
+                                            d.Open();
+                                            d.BackupDatabase(c, "main", "main", -1, null, -1);
+                                            sqlConnection = new SQLiteConnection(connStr);
+                                            sqlConnection.Open();
+                                            Message(iplayer, "RestoreDone", restorefile);
+                                        }
+                                        catch
+                                        {
+                                            Message(iplayer, "RestoreFailed", restorefile);
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                Message(iplayer, "RestoreFilename", restorefile);
+                            }
+                        }
+                        else
+                        {
+                            Message(iplayer, "RestoreFilename");
+                            Message(iplayer, "RestoreAvailable", string.Join("\n\t", files.Select(x => x.Replace($"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}", ""))));
+                        }
+                        break;
                     case "editruleset":
                         //e.g.: pverule editruleset {rulesetname} damage 0
                         //      pverule editruleset {rulesetname} name {newname}
@@ -1758,6 +1848,8 @@ namespace Oxide.Plugins
             UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("nextgenpverulesets"), 24, "0.2 0.92", "0.65 1");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("standard"), 12, "0.66 0.95", "0.72 0.98");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#5540d8", 1f), Lang("automated"), 12, "0.73 0.95", "0.79 0.98");
+
+            UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("backup"), 12, "0.8 0.01", "0.9 0.05", "pverule backup");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
             if (enabled)
