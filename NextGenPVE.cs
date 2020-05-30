@@ -18,7 +18,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.35")]
+    [Info("NextGen PVE", "RFC1920", "1.0.36")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -37,7 +37,7 @@ namespace Oxide.Plugins
         private string connStr;
 
         [PluginReference]
-        private readonly Plugin ZoneManager, LiteZones, HumanNPC, Friends, Clans, RustIO;
+        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO;
         private bool ValidHumanNPC = false;
 
         private readonly string logfilename = "log";
@@ -473,8 +473,7 @@ namespace Oxide.Plugins
                     hasBP = false;
                 }
             }
-
-            if (configData.Options.useZoneManager || configData.Options.useLiteZones)
+            if (configData.Options.useZoneManager)
             {
                 string[] sourcezone = GetEntityZones(source);
                 string[] targetzone = GetEntityZones(target);
@@ -1283,6 +1282,11 @@ namespace Oxide.Plugins
                                         {
                                             newrs.ExecuteNonQuery();
                                         }
+                                        // Disable the clone for now...
+                                        using (SQLiteCommand newrs = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='0' WHERE name = '{clone}'", c))
+                                        {
+                                            newrs.ExecuteNonQuery();
+                                        }
                                     }
                                     GUIRuleSets(player);
                                     GUIRulesetEditor(player, clone);
@@ -1321,7 +1325,8 @@ namespace Oxide.Plugins
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
-                                    using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES ('{newname}', 0, 1, 0, 0, '', '', '', 0)", c))
+                                    // Add this new ruleset as disabled
+                                    using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES ('{newname}', 0, 0, 0, 0, '', '', '', 0)", c))
                                     {
                                         newrs.ExecuteNonQuery();
                                     }
@@ -1668,6 +1673,27 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 0, 36))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_balloon', 'Trap can damage balloon', 1, 0, 'trap', 'balloon')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('minicopter_building', 'Minicopter can damage building', 1, 0, 'minicopter', 'building')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('scrapcopter_building', 'Scrapcopter can damage building', 1, 0, 'scrapcopter', 'building')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
             configData.Version = Version;
             SaveConfig(configData);
         }
@@ -1694,7 +1720,6 @@ namespace Oxide.Plugins
         private class Options
         {
             public bool useZoneManager = false;
-            public bool useLiteZones = false;
             public bool useSchedule = false;
             public bool useRealTime = true;
             public bool useFriends = false;
@@ -2724,13 +2749,6 @@ namespace Oxide.Plugins
                     return (string[])ZoneManager?.Call("GetEntityZoneIDs", new object[] { entity });
                 }
             }
-            else if (LiteZones && configData.Options.useLiteZones)
-            {
-                if (entity.IsValid())
-                {
-                    return (string[])LiteZones?.Call("GetEntityZoneIDs", new object[] { entity });
-                }
-            }
             return null;
         }
 
@@ -3205,11 +3223,15 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_minicopter', 'Player can damage MiniCopter', 1, 0, 'player', 'minicopter')", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('minicopter_building', 'Minicopter can damage building', 1, 0, 'minicopter', 'building')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('minicopter_player', 'MiniCopter can damage Player', 1, 0, 'minicopter', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_scrapcopter', 'Player can damage Scrapcopter', 1, 0, 'player', 'scrapcopter')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('scrapcopter_player', 'Scrapcopter can damage Player', 1, 0, 'scrapcopter', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('scrapcopter_building', 'Scrapcopter can damage building', 1, 0, 'scrapcopter', 'building')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_helicopter', 'Player can damage Helicopter', 1, 0, 'player', 'helicopter')", sqlConnection);
             ct.ExecuteNonQuery();
@@ -3234,6 +3256,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_npc', 'Helicopter can damage NPC', 1, 0, 'helicopter', 'npc')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_trap', 'Trap can damage trap', 1, 0, 'trap', 'trap')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_balloon', 'Trap can damage balloon', 1, 0, 'trap', 'balloon')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_resource', 'Trap can damage Resource', 1, 0, 'trap', 'resource')", sqlConnection);
             ct.ExecuteNonQuery();
