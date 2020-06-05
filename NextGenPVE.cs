@@ -1,3 +1,25 @@
+#region License (GPL v3)
+/*
+    NextGenPVE - Prevent damage to players and objects in a Rust PVE environment
+    Copyright (c) 2020 RFC1920 <desolationoutpostpve@gmail.com>
+
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License
+    as published by the Free Software Foundation; either version 2
+    of the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+    Optionally you can also view the license at <http://www.gnu.org/licenses/>.
+*/
+#endregion License (GPL v3)
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
@@ -18,7 +40,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.37")]
+    [Info("NextGen PVE", "RFC1920", "1.0.38")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -150,6 +172,7 @@ namespace Oxide.Plugins
                 ["TrapsIgnorePlayers"] = "Traps Ignore Players",
                 ["HonorBuildingPrivilege"] = "Honor Building Privilege",
                 ["UnprotectedBuildingDamage"] = "Unprotected Building Damage",
+                ["TwigDamage"] = "Twig Damage",
                 ["HonorRelationships"] = "Honor Relationships",
                 ["backup"] = "Backup Database",
                 ["BackupDone"] = "NextGenPVE database has been backed up to {0}",
@@ -306,6 +329,7 @@ namespace Oxide.Plugins
             //Puts($"attacker: {hitinfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}");
             string stype; string ttype;
             bool canhurt = EvaluateRulesets(hitinfo.Initiator, entity as BaseEntity, out stype, out ttype);
+            if (stype == null && ttype == null) return null;
 
             if (stype == "BasePlayer")
             {
@@ -1456,6 +1480,9 @@ namespace Oxide.Plugins
                             case "UnprotectedBuildingDamage":
                                 configData.Options.UnprotectedBuildingDamage = val;
                                 break;
+                            case "TwigDamage":
+                                configData.Options.TwigDamage = val;
+                                break;
                             case "HonorRelationships":
                                 configData.Options.HonorRelationships = val;
                                 break;
@@ -1787,6 +1814,23 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 0, 38))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_helicopter', 'Trap can damage helicopter', 1, 0, 'trap', 'helicopter')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'RidableHorse', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
             configData.Version = Version;
             SaveConfig(configData);
         }
@@ -1826,6 +1870,7 @@ namespace Oxide.Plugins
             public bool TrapsIgnorePlayers = false;
             public bool HonorBuildingPrivilege = true;
             public bool UnprotectedBuildingDamage = false;
+            public bool TwigDamage = false;
             public bool HonorRelationships = false;
         }
         protected void LoadDefaultFlags()
@@ -1977,6 +2022,16 @@ namespace Oxide.Plugins
             else
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.TwigDamage)
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("TwigDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TwigDamage false");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("TwigDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TwigDamage true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -2907,6 +2962,20 @@ namespace Oxide.Plugins
             DoLog($"Does player {player.displayName} own {entity.ShortPrefabName}?");
             if (entity is BuildingBlock)
             {
+                if (configData.Options.TwigDamage)
+                {
+                    try
+                    {
+                        var block = entity as BuildingBlock;
+                        if (block.grade == BuildingGrade.Enum.Twigs)
+                        {
+                            DoLog("Allowing twig destruction...");
+                            return true;
+                        }
+                    }
+                    catch { }
+                }
+
                 if (!configData.Options.HonorBuildingPrivilege) return true;
 
                 BuildingManager.Building building = (entity as BuildingBlock).GetBuilding();
@@ -3178,6 +3247,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'Horse', 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'RidableHorse', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'Stag', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'Wolf', 0)", sqlConnection);
@@ -3351,6 +3422,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_npc', 'Helicopter can damage NPC', 1, 0, 'helicopter', 'npc')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_trap', 'Trap can damage trap', 1, 0, 'trap', 'trap')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_helicopter', 'Trap can damage helicopter', 1, 0, 'trap', 'helicopter')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_balloon', 'Trap can damage balloon', 1, 0, 'trap', 'balloon')", sqlConnection);
             ct.ExecuteNonQuery();
