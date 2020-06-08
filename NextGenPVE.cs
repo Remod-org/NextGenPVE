@@ -40,7 +40,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.40")]
+    [Info("NextGen PVE", "RFC1920", "1.0.39")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1907,7 +1907,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            if (configData.Version < new VersionNumber(1, 0, 40))
+            if (configData.Version < new VersionNumber(1, 0, 39))
             {
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
