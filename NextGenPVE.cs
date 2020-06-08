@@ -40,7 +40,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.38")]
+    [Info("NextGen PVE", "RFC1920", "1.0.40")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -162,6 +162,8 @@ namespace Oxide.Plugins
                 ["lookup"] = "lookup",
                 ["defaultdamage"] = "Default Damage",
                 ["damageexceptions"] = "Damage Exceptions",
+                ["sourceexcl"] = "Source Exclusions",
+                ["targetexcl"] = "Target Exclusions",
                 ["rule"] = "Rule",
                 ["rules"] = "Rules",
                 ["logging"] = "Logging set to {0}",
@@ -272,7 +274,6 @@ namespace Oxide.Plugins
         {
             if (target == null || turret == null) return null;
             if (!enabled) return null;
-            //DoLog($"Checking whether {turret.name} can target {target.displayName}");
 
             object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
             if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
@@ -868,9 +869,85 @@ namespace Oxide.Plugins
 
             if (args.Length > 0)
             {
-                //string debug = string.Join(",", args); Puts($"{debug}");
+                string debug = string.Join(",", args); Puts($"{debug}");
                 switch (args[0])
                 {
+                    case "list":
+                        LMessage(iplayer, "nextgenpverulesets");
+                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                        {
+                            c.Open();
+                            using (SQLiteCommand checkrs = new SQLiteCommand($"SELECT DISTINCT name, enabled, zone FROM ngpve_rulesets", c))
+                            {
+                                using (SQLiteDataReader crs = checkrs.ExecuteReader())
+                                {
+                                    while (crs.Read())
+                                    {
+                                        var rs = crs.GetValue(0).ToString();
+                                        var en = crs.GetBoolean(1).ToString();
+                                        var zone = crs.GetValue(2).ToString();
+                                        if (zone == "0" || zone == "" || zone == "default") zone = Lang("default");
+                                        if (zone != "") zone = Lang("zone") + ": " + zone;
+                                        if (rs != "")
+                                        {
+                                            LMessage(iplayer, "\n" + rs + ", " + Lang("enabled") + ": " + en + ", " + zone + "\n");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    case "dump":
+                        if(args.Length > 1)
+                        {
+                            string output = "";
+                            string zone = "";
+                            string rules = "";
+                            List<string> src = new List<string>();
+                            List<string> tgt = new List<string>();
+                            using (SQLiteConnection c = new SQLiteConnection(connStr))
+                            {
+                                c.Open();
+                                using (SQLiteCommand d = new SQLiteCommand($"SELECT DISTINCT * FROM ngpve_rulesets WHERE name='{args[1]}'", c))
+                                {
+                                    using (SQLiteDataReader re = d.ExecuteReader())
+                                    {
+                                        while (re.Read())
+                                        {
+                                            //(name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1,
+                                            //automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255),
+                                            //src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255))
+                                            output = Lang("nextgenpveruleset") + ": " + re.GetValue(0).ToString() + ", " + Lang("defaultdamage") + ": " + re.GetBoolean(1).ToString() + ", " + Lang("enabled") + ": " + re.GetBoolean(2).ToString();
+                                            zone = re.GetValue(4).ToString();
+                                            if (zone == "0" || zone == "" || zone == "default") zone = Lang("default");
+                                            if (zone != "") zone = ", " + Lang("zone") + ": " + zone;
+                                            rules += re.GetValue(5).ToString() + "\n\t";
+                                            var s = re.GetValue(6).ToString();
+                                            var t = re.GetValue(7).ToString();
+                                            if(s != "" && !src.Contains(s))
+                                            {
+                                                src.Add(s);
+                                            }
+                                            if(t != "" && !tgt.Contains(t))
+                                            {
+                                                tgt.Add(t);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            output += zone + "\n" + Lang("damageexceptions") + ":\n\t" + rules;
+                            if(src.Count > 0)
+                            {
+                                output += "\n" + Lang("sourceexcl") + ":\n\t" + string.Join("\n\t", src);
+                            }
+                            if(tgt.Count > 0)
+                            {
+                                output += "\n" + Lang("targetexcl") + ":\n\t" + string.Join("\n\t", tgt);
+                            }
+                            LMessage(iplayer, output);
+                        }
+                        break;
                     case "backup":
                         string backupfile = "nextgenpve_" + DateTime.Now.ToString("yyyy-MM-dd_HHmmss") + ".db";
                         if(args.Length > 1)
@@ -1825,6 +1902,17 @@ namespace Oxide.Plugins
                         ct.ExecuteNonQuery();
                     }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('animal', 'RidableHorse', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 0, 40))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_npc', 'Trap can damage npc', 1, 0, 'trap', 'npc')", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -3422,6 +3510,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_npc', 'Helicopter can damage NPC', 1, 0, 'helicopter', 'npc')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_trap', 'Trap can damage trap', 1, 0, 'trap', 'trap')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_npc', 'Trap can damage npc', 1, 0, 'trap', 'npc')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_helicopter', 'Trap can damage helicopter', 1, 0, 'trap', 'helicopter')", sqlConnection);
             ct.ExecuteNonQuery();
