@@ -40,7 +40,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.39")]
+    [Info("NextGen PVE", "RFC1920", "1.0.40")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -273,6 +273,7 @@ namespace Oxide.Plugins
         private object CanBeTargeted(BasePlayer target, MonoBehaviour turret)
         {
             if (target == null || turret == null) return null;
+            if (turret as HelicopterTurret) return null;
             if (!enabled) return null;
 
             object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
@@ -284,10 +285,7 @@ namespace Oxide.Plugins
             var aturret = turret as AutoTurret;
             if (aturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
             {
-                if (!configData.Options.AutoTurretTargetsNPCs)
-                {
-                    return false;
-                }
+                if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
             else if (aturret != null && !configData.Options.AutoTurretTargetsPlayers)
             {
@@ -312,6 +310,7 @@ namespace Oxide.Plugins
         {
             if (!enabled) return null;
             if (entity == null) return null;
+
             if (hitinfo.Initiator == null)
             {
                 AttackEntity turret;
@@ -325,6 +324,13 @@ namespace Oxide.Plugins
                 }
             }
             if (hitinfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
+
+            try
+            {
+                object CanTakeDamage = Interface.CallHook("CanEntityTakeDamage", new object[] { entity, hitinfo });
+                if (CanTakeDamage != null && CanTakeDamage is bool && (bool)CanTakeDamage) return null;
+            }
+            catch { }
 
             //Puts($"attacker: {hitinfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}"); return true;
             //Puts($"attacker: {hitinfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}");
