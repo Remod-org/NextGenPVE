@@ -40,7 +40,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.40")]
+    [Info("NextGen PVE", "RFC1920", "1.0.41")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -59,7 +59,7 @@ namespace Oxide.Plugins
         private string connStr;
 
         [PluginReference]
-        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO;
+        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde;
         private bool ValidHumanNPC = false;
 
         private readonly string logfilename = "log";
@@ -111,6 +111,10 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
+            if (ConVar.Server.pve)
+            {
+                Puts("SERVER PVE MUST BE SET TO FALSE!");
+            }
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 ["notauthorized"] = "You don't have permission to use this command.",
@@ -308,6 +312,11 @@ namespace Oxide.Plugins
 
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
+            if (ConVar.Server.pve)
+            {
+                Puts("SERVER PVE MUST BE SET TO FALSE!");
+                return null;
+            }
             if (!enabled) return null;
             if (entity == null) return null;
 
@@ -503,7 +512,7 @@ namespace Oxide.Plugins
             if (stype == "BasePlayer" && HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
             if (ttype == "BasePlayer" && HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
 
-            // Special case for building damage requiring owner or auth access
+            // Special cases for building damage requiring owner or auth access
             if (stype == "BasePlayer" && (ttype == "BuildingBlock" || ttype == "Door"))
             {
                 isBuilding = true;
@@ -512,6 +521,48 @@ namespace Oxide.Plugins
                     hasBP = false;
                 }
             }
+            if (stype == "BasePlayer" && ttype == "BuildingPrivlidge")
+            {
+                if (!PlayerOwnsTC(source as BasePlayer, target as BuildingPrivlidge))
+                {
+                    hasBP = false;
+                }
+            }
+            if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door"))
+            {
+                isBuilding = true;
+                var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
+                hasBP = false;
+                foreach(var x in pl)
+                {
+                    var y = x.ent as BasePlayer;
+                    if (y == null) continue;
+                    DoLog($"Heli targeting player {y.displayName}.  Checking building permission for {target.ShortPrefabName}");
+                    if(PlayerOwnsItem(y, target))
+                    {
+                        DoLog("Yes they own that building!");
+                        hasBP = true;
+                    }
+                }
+            }
+            if (stype == "BaseHelicopter" && ttype == "BuildingPrivlidge")
+            {
+                isBuilding = true;
+                var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
+                hasBP = false;
+                foreach(var x in pl)
+                {
+                    var y = x.ent as BasePlayer;
+                    if (y == null) continue;
+                    DoLog($"Heli targeting player {y.displayName}.  Checking building permission for {target.ShortPrefabName}");
+                    if(PlayerOwnsItem(y, target as BuildingPrivlidge))
+                    {
+                        DoLog("Yes they own that building!");
+                        hasBP = true;
+                    }
+                }
+            }
+
             if (configData.Options.useZoneManager)
             {
                 string[] sourcezone = GetEntityZones(source);
@@ -663,12 +714,12 @@ namespace Oxide.Plugins
             }
             if (hasBP && isBuilding)
             {
-                DoLog($"Player has building privilege and is attacking a BuildingBlock");
+                DoLog($"Player has building privilege and is attacking a BuildingBlock.  Or, heli is attacking a building owned by a targeted player.");
                 return true;
             }
             else if(!hasBP && isBuilding)
             {
-                DoLog("Player does NOT have building privilege and is attacking a BuildingBlock");
+                DoLog("Player does NOT have building privilege and is attacking a BuildingBlock.  Or, player owner is not being targeted by the heli.");
                 return false;
             }
 
@@ -875,7 +926,7 @@ namespace Oxide.Plugins
 
             if (args.Length > 0)
             {
-                string debug = string.Join(",", args); Puts($"{debug}");
+                //string debug = string.Join(",", args); DoLog($"{debug}");
                 switch (args[0])
                 {
                     case "list":
@@ -1919,6 +1970,21 @@ namespace Oxide.Plugins
                 {
                     c.Open();
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_npc', 'Trap can damage npc', 1, 0, 'trap', 'npc')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 0, 41))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('building', 'BuildingPrivlidge', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('heli_trap', 'Heli can damage trap', 1, 0, 'helicopter', 'trap')", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -3051,6 +3117,50 @@ namespace Oxide.Plugins
             return false;
         }
 
+
+        private bool PlayerOwnsTC(BasePlayer player, BuildingPrivlidge privilege)
+        {
+            DoLog($"Does player {player.displayName} own {privilege.ShortPrefabName}?");
+            if (!configData.Options.HonorBuildingPrivilege) return true;
+
+            BuildingManager.Building building = privilege.GetBuilding();
+            if (building != null)
+            {
+                var privs = building.GetDominatingBuildingPrivilege();
+                if (privs == null)
+                {
+                    if (configData.Options.UnprotectedBuildingDamage)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+                foreach (var auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
+                {
+                    if (privilege.OwnerID == player.userID)
+                    {
+                        DoLog($"Player owns BuildingBlock", 2);
+                        return true;
+                    }
+                    else if (player.userID == auth)
+                    {
+                        DoLog($"Player has privilege on BuildingBlock", 2);
+                        return true;
+                    }
+                    else if (configData.Options.HonorRelationships && IsFriend(auth, privilege.OwnerID))
+                    {
+                        DoLog($"Player is friends with owner of BuildingBlock", 2);
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         private bool PlayerOwnsItem(BasePlayer player, BaseEntity entity)
         {
             DoLog($"Does player {player.displayName} own {entity.ShortPrefabName}?");
@@ -3350,6 +3460,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('balloon', 'HotAirBalloon', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('building', 'BuildingBlock', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('building', 'BuildingPrivlidge', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('building', 'Door', 0)", sqlConnection);
             ct.ExecuteNonQuery();
