@@ -40,7 +40,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.41")]
+    [Info("NextGen PVE", "RFC1920", "1.0.42")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1985,6 +1985,29 @@ namespace Oxide.Plugins
                         ct.ExecuteNonQuery();
                     }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('heli_trap', 'Heli can damage trap', 1, 0, 'helicopter', 'trap')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
+            if (configData.Version < new VersionNumber(1, 0, 42))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'ModularCarGarage', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'BaseVehicleModule', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleEngine', 0)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
