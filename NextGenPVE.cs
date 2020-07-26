@@ -33,6 +33,7 @@ using System.Data.SQLite;
 using System.IO;
 using System.Text.RegularExpressions;
 using Oxide.Core.Configuration;
+using System.Text;
 
 // TODO
 // Finish work on custom rule editor gui (src/target)
@@ -40,7 +41,7 @@ using Oxide.Core.Configuration;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.42")]
+    [Info("NextGen PVE", "RFC1920", "1.0.43")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -175,6 +176,7 @@ namespace Oxide.Plugins
                 ["NPCAutoTurretTargetsNPCs"] = "NPC AutoTurret Targets NPCs",
                 ["AutoTurretTargetsPlayers"] = "AutoTurret Targets Players",
                 ["AutoTurretTargetsNPCs"] = "AutoTurret Targets NPCs",
+                ["SamSitesIgnorePlayers"] = "SamSites Ignore Players",
                 ["TrapsIgnorePlayers"] = "Traps Ignore Players",
                 ["HonorBuildingPrivilege"] = "Honor Building Privilege",
                 ["UnprotectedBuildingDamage"] = "Unprotected Building Damage",
@@ -271,6 +273,44 @@ namespace Oxide.Plugins
 
             if (configData.Options.TrapsIgnorePlayers) return false;
 
+            return null;
+        }
+
+        private BasePlayer GetMountedPlayer(BaseMountable mount)
+        {
+            if (mount.GetMounted())
+            {
+                return mount.GetMounted();
+            }
+
+            if (mount is BaseVehicle)
+            {
+                var vehicle = mount as BaseVehicle;
+
+                foreach (var point in vehicle.mountPoints)
+                {
+                    if (point.mountable.IsValid() && point.mountable.GetMounted())
+                    {
+                        return point.mountable.GetMounted();
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private object OnSamSiteTarget(SamSite sam, BaseMountable mountable)
+        {
+            if (sam == null) return null;
+            var player = GetMountedPlayer(mountable);
+            if(player.IsValid())
+            {
+                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { player, sam });
+                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                {
+                    return null;
+                }
+            }
             return null;
         }
 
@@ -513,7 +553,7 @@ namespace Oxide.Plugins
             if (ttype == "BasePlayer" && HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
 
             // Special cases for building damage requiring owner or auth access
-            if (stype == "BasePlayer" && (ttype == "BuildingBlock" || ttype == "Door"))
+            if (stype == "BasePlayer" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
             {
                 isBuilding = true;
                 if (!PlayerOwnsItem(source as BasePlayer, target))
@@ -528,7 +568,7 @@ namespace Oxide.Plugins
                     hasBP = false;
                 }
             }
-            if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door"))
+            if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
             {
                 isBuilding = true;
                 var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
@@ -1463,6 +1503,9 @@ namespace Oxide.Plugins
                                             break;
                                     }
                                     break;
+                                case "flags":
+                                    // AND the inbound flag and the existing flags, rewrite. FIXME
+                                    break;
                             }
                             GUIRuleSets(player);
                             GUIRulesetEditor(player, rs);
@@ -1604,6 +1647,9 @@ namespace Oxide.Plugins
                                 break;
                             case "AutoTurretTargetsNPCs":
                                 configData.Options.AutoTurretTargetsNPCs = val;
+                                break;
+                            case "SamSitesIgnorePlayers":
+                                configData.Options.SamSitesIgnorePlayers = val;
                                 break;
                             case "TrapsIgnorePlayers":
                                 configData.Options.TrapsIgnorePlayers = val;
@@ -2014,9 +2060,35 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 0, 43))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('vehicle_vehicle', 'Vehicle can damage Vehicle', 1, 0, 'vehicle', 'vehicle')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('building', 'wall.window', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleStorage', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleSeating', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
             configData.Version = Version;
             SaveConfig(configData);
         }
+
         protected override void LoadDefaultConfig()
         {
             Puts("Creating new config file.");
@@ -2050,6 +2122,7 @@ namespace Oxide.Plugins
             public bool NPCAutoTurretTargetsNPCs = true;
             public bool AutoTurretTargetsPlayers = false;
             public bool AutoTurretTargetsNPCs = false;
+            public bool SamSitesIgnorePlayers = false;
             public bool TrapsIgnorePlayers = false;
             public bool HonorBuildingPrivilege = true;
             public bool UnprotectedBuildingDamage = false;
@@ -2063,6 +2136,7 @@ namespace Oxide.Plugins
             configData.Options.NPCAutoTurretTargetsNPCs = true;
             configData.Options.AutoTurretTargetsPlayers = false;
             configData.Options.AutoTurretTargetsNPCs = false;
+            configData.Options.SamSitesIgnorePlayers = false;
             configData.Options.TrapsIgnorePlayers = false;
             configData.Options.HonorBuildingPrivilege = true;
             configData.Options.UnprotectedBuildingDamage = false;
@@ -2175,6 +2249,16 @@ namespace Oxide.Plugins
             else
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.SamSitesIgnorePlayers)
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers false");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
@@ -2520,6 +2604,10 @@ namespace Oxide.Plugins
 //                pb = GetButtonPositionP(row, col);
 //                UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
+
+            row = 0; col = 6;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("rflags"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             col = 0; row = 5;
             pb = GetButtonPositionP(row, col);
@@ -3261,6 +3349,17 @@ namespace Oxide.Plugins
             return false;
         }
 
+        public static string StringToBinary(string data)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            foreach (char c in data.ToCharArray())
+            {
+                sb.Append(Convert.ToString(c, 2).PadLeft(8, '0'));
+            }
+            return sb.ToString();
+        }
+
         private static bool GetBoolValue(string value)
         {
             if (value == null) return false;
@@ -3574,6 +3673,12 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'BaseCar', 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleEngine', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleStorage', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleSeating', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
         }
 
         // Default rules which can be applied
@@ -3663,6 +3768,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_vehicle', 'Player can damage Vehicle', 1, 0, 'player', 'vehicle')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('vehicle_player', 'Vehicle can damage Player', 1, 0, 'vehicle', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('vehicle_vehicle', 'Vehicle can damage Vehicle', 1, 0, 'vehicle', 'vehicle')", sqlConnection);
             ct.ExecuteNonQuery();
         }
 
