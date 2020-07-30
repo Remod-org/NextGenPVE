@@ -41,7 +41,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.43")]
+    [Info("NextGen PVE", "RFC1920", "1.0.44")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -107,7 +107,7 @@ namespace Oxide.Plugins
             permission.RegisterPermission(permNextGenPVEGod, this);
             enabled = true;
 
-            RunSchedule(true);
+            if(configData.Options.useSchedule) RunSchedule(true);
         }
 
         private void OnServerInitialized()
@@ -784,7 +784,7 @@ namespace Oxide.Plugins
         private void RunSchedule(bool refresh = false)
         {
             TimeSpan ts = configData.Options.useRealTime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
-            if (refresh)
+            if (refresh && configData.Options.useSchedule)
             {
                 ngpveschedule = new Dictionary<string, string>();
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
