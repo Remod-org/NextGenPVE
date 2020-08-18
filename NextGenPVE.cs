@@ -2060,7 +2060,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            if (configData.Version < new VersionNumber(1, 0, 44))
+            if (configData.Version < new VersionNumber(1, 0, 43))
             {
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
@@ -2082,6 +2082,14 @@ namespace Oxide.Plugins
                     {
                         ct.ExecuteNonQuery();
                     }
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 0, 44))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('helicopter', 'CH47HelicopterAIController', 0)", c))
                     {
                         ct.ExecuteNonQuery();
