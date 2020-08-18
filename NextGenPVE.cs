@@ -2060,7 +2060,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            if (configData.Version < new VersionNumber(1, 0, 43))
+            if (configData.Version < new VersionNumber(1, 0, 44))
             {
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
@@ -2079,6 +2079,10 @@ namespace Oxide.Plugins
                         ct.ExecuteNonQuery();
                     }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleSeating', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('helicopter', 'CH47HelicopterAIController', 0)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -3590,6 +3594,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('helicopter', 'BaseHelicopter', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('helicopter', 'HelicopterDebris', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('helicopter', 'CH47HelicopterAIController', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('highwall', 'SimpleBuildingBlock', 0)", sqlConnection);
             ct.ExecuteNonQuery();
