@@ -41,7 +41,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.45")]
+    [Info("NextGen PVE", "RFC1920", "1.0.46")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -177,6 +177,7 @@ namespace Oxide.Plugins
                 ["AutoTurretTargetsPlayers"] = "AutoTurret Targets Players",
                 ["AutoTurretTargetsNPCs"] = "AutoTurret Targets NPCs",
                 ["SamSitesIgnorePlayers"] = "SamSites Ignore Players",
+                ["AllowSuicide"] = "Allow Player Suicide",
                 ["TrapsIgnorePlayers"] = "Traps Ignore Players",
                 ["HonorBuildingPrivilege"] = "Honor Building Privilege",
                 ["UnprotectedBuildingDamage"] = "Unprotected Building Damage",
@@ -393,6 +394,18 @@ namespace Oxide.Plugins
                 {
                     Puts("Admin god!");
                     return null;
+                }
+                if(ttype == "BasePlayer")
+                {
+                    try
+                    {
+                        if ((entity as BasePlayer).userID == (hitinfo.Initiator as BasePlayer).userID && configData.Options.AllowSuicide)
+                        {
+                            DoLog("AllowSuicide TRUE");
+                            canhurt = true;
+                        }
+                    }
+                    catch { }
                 }
             }
 
@@ -1663,6 +1676,9 @@ namespace Oxide.Plugins
                             case "SamSitesIgnorePlayers":
                                 configData.Options.SamSitesIgnorePlayers = val;
                                 break;
+                            case "AllowSuicide":
+                                configData.Options.AllowSuicide = val;
+                                break;
                             case "TrapsIgnorePlayers":
                                 configData.Options.TrapsIgnorePlayers = val;
                                 break;
@@ -2147,6 +2163,7 @@ namespace Oxide.Plugins
             public bool AutoTurretTargetsPlayers = false;
             public bool AutoTurretTargetsNPCs = false;
             public bool SamSitesIgnorePlayers = false;
+            public bool AllowSuicide = false;
             public bool TrapsIgnorePlayers = false;
             public bool HonorBuildingPrivilege = true;
             public bool UnprotectedBuildingDamage = false;
@@ -2161,6 +2178,7 @@ namespace Oxide.Plugins
             configData.Options.AutoTurretTargetsPlayers = false;
             configData.Options.AutoTurretTargetsNPCs = false;
             configData.Options.SamSitesIgnorePlayers = false;
+            configData.Options.AllowSuicide = false;
             configData.Options.TrapsIgnorePlayers = false;
             configData.Options.HonorBuildingPrivilege = true;
             configData.Options.UnprotectedBuildingDamage = false;
@@ -2234,7 +2252,7 @@ namespace Oxide.Plugins
             UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("flags"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             // Global flags
-            col = 5;
+            col = 5; row--;
             pb = GetButtonPositionZ(row, col);
             if(configData.Options.AutoTurretTargetsPlayers)
             {
@@ -2333,6 +2351,16 @@ namespace Oxide.Plugins
             else
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.AllowSuicide)
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AllowSuicide"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AllowSuicide false");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AllowSuicide"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AllowSuicide true");
             }
 
             row++;
@@ -3170,7 +3198,7 @@ namespace Oxide.Plugins
         private float[] GetButtonPositionZ(int rowNumber, int columnNumber)
         {
             float offsetX = 0.05f + (0.156f * columnNumber);
-            float offsetY = (0.80f - (rowNumber * 0.064f));
+            float offsetY = (0.75f - (rowNumber * 0.054f));
 
             return new float[] { offsetX, offsetY, offsetX + 0.296f, offsetY + 0.03f };
         }
