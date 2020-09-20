@@ -41,7 +41,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.44")]
+    [Info("NextGen PVE", "RFC1920", "1.0.45")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -252,7 +252,7 @@ namespace Oxide.Plugins
             }
             if (!found) LoadDefaultRuleset();
 
-            ngpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, NextGenPVEZoneMap>>(this.Name + "/ngpve_zonemaps");
+            ngpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, NextGenPVEZoneMap>>(Name + "/ngpve_zonemaps");
         }
 
         private void SaveData()
@@ -632,7 +632,7 @@ namespace Oxide.Plugins
             string src = null; string tgt = null;
             //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection);
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection))
-                {
+            {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
                 {
                     while (readMe.Read())
@@ -656,7 +656,18 @@ namespace Oxide.Plugins
                 }
             }
 
-            using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets", sqlConnection))
+            string mquery = "";
+            switch (zone)
+            {
+                case "default":
+                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
+                    break;
+                default:
+                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup'";
+                    break;
+            }
+            //using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets", sqlConnection))
+            using (SQLiteCommand findIt = new SQLiteCommand(mquery, sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
                 {
@@ -698,6 +709,7 @@ namespace Oxide.Plugins
                                 DoLog($"Skipping ruleset {rulesetname} due to zone mismatch with current zone, {zone}");
                                 continue;
                             }
+                            DoLog($"Lookup zone {zone}");
                         }
 
                         DoLog($"Checking ruleset {rulesetname}");
