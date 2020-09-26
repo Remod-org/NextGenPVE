@@ -41,7 +41,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.47")]
+    [Info("NextGen PVE", "RFC1920", "1.0.48")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -61,7 +61,6 @@ namespace Oxide.Plugins
 
         [PluginReference]
         private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde;
-        private bool ValidHumanNPC = false;
 
         private readonly string logfilename = "log";
         private bool dolog = false;
@@ -3460,21 +3459,29 @@ namespace Oxide.Plugins
             {
                 string playerclan = (string)Clans?.CallHook("GetClanOf", playerid);
                 string ownerclan = (string)Clans?.CallHook("GetClanOf", ownerid);
-                if (playerclan == ownerclan && playerclan != null && ownerclan != null)
+                if (playerclan != null && ownerclan != null)
                 {
-                    return true;
+                    if (playerclan == ownerclan)
+                    {
+                        return true;
+                    }
                 }
             }
             if (configData.Options.useTeams)
             {
                 BasePlayer player = BasePlayer.FindByID(playerid);
-                if (player.currentTeam != (long)0)
+                if (player != null)
                 {
-                    RelationshipManager.PlayerTeam playerTeam = RelationshipManager.Instance.FindTeam(player.currentTeam);
-                    if (playerTeam == null) return false;
-                    if (playerTeam.members.Contains(ownerid))
+                    if (player.currentTeam != 0)
                     {
-                        return true;
+                        RelationshipManager.PlayerTeam playerTeam = RelationshipManager.Instance.FindTeam(player.currentTeam);
+                        if (playerTeam != null)
+                        {
+                            if (playerTeam.members.Contains(ownerid))
+                            {
+                                return true;
+                            }
+                        }
                     }
                 }
             }
