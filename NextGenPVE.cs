@@ -41,7 +41,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.46")]
+    [Info("NextGen PVE", "RFC1920", "1.0.47")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -100,6 +100,7 @@ namespace Oxide.Plugins
             AddCovalenceCommand("pvebackup", "CmdNextGenPVEbackup");
             AddCovalenceCommand("pverule", "CmdNextGenPVEGUI");
             AddCovalenceCommand("pveenable", "CmdNextGenPVEenable");
+            AddCovalenceCommand("pvedrop", "CmdNextGenPVEDrop");
             AddCovalenceCommand("pvelog", "CmdNextGenPVElog");
 
             permission.RegisterPermission(permNextGenPVEUse, this);
@@ -131,8 +132,10 @@ namespace Oxide.Plugins
                 ["current2chedule"] = "Currently scheduled for day: {0} from {1} until {2}",
                 ["noschedule"] = "Not currently scheduled",
                 ["flags"] = "Global Flags",
-                ["defload"] = "RESET",
+                ["defload"] = "Set Defaults",
+                ["deflag"] = "Reset Flags",
                 ["default"] = "default",
+                ["drop"] = "RESET DATABASE",
                 ["none"] = "none",
                 ["close"] = "Close",
                 ["clone"] = "Clone",
@@ -958,6 +961,22 @@ namespace Oxide.Plugins
             LMessage(player, "BackupDone", backupfile);
         }
 
+        [Command("pvedrop")]
+        private void CmdNextGenPVEDrop(IPlayer player, string command, string[] args)
+        {
+            if (!player.HasPermission(permNextGenPVEAdmin)) { Message(player, "notauthorized"); return; }
+
+            LoadDefaultEntities();
+            LoadDefaultRules();
+            LoadDefaultRuleset();
+
+            if (args.Length > 0)
+            {
+                Puts("HAHA");
+                if (args[0] == "gui") GUIRuleSets(player.Object as BasePlayer);
+            }
+        }
+
         [Command("pveenable")]
         private void CmdNextGenPVEenable(IPlayer player, string command, string[] args)
         {
@@ -1696,7 +1715,7 @@ namespace Oxide.Plugins
                                 break;
                             case "RESET":
                                 LoadDefaultFlags();
-                                LoadConfigVariables();
+                                //LoadConfigVariables();
                                 break;
                         }
                         SaveConfig(configData);
@@ -2196,6 +2215,7 @@ namespace Oxide.Plugins
             UI.Label(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("standard"), 12, "0.66 0.95", "0.72 0.98");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#5540d8", 1f), Lang("automated"), 12, "0.73 0.95", "0.79 0.98");
 
+            //UI.Button(ref container, NGPVERULELIST, UI.Color("#ff0000", 1f), Lang("drop"), 12, "0.6 0.01", "0.78 0.05", "pvedrop gui");
             UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("backup"), 12, "0.8 0.01", "0.9 0.05", "pverule backup");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
@@ -2365,7 +2385,7 @@ namespace Oxide.Plugins
 
             row++;
             pb = GetButtonPositionZ(row, col);
-            UI.Button(ref container, NGPVERULELIST, UI.Color("#d82222", 1f), Lang("defload"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig RESET true");
+            UI.Button(ref container, NGPVERULELIST, UI.Color("#d82222", 1f), Lang("deflag"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig RESET true");
 
             CuiHelper.AddUi(player, container);
         }
