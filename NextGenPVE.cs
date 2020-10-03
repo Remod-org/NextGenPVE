@@ -41,7 +41,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.48")]
+    [Info("NextGen PVE", "RFC1920", "1.0.49")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -73,6 +73,7 @@ namespace Oxide.Plugins
         private const string NGPVESCHEDULEEDIT = "nextgenpve.schedule";
         private const string NGPVERULESELECT = "nextgenpve.selectrule";
         private const string NGPVERULEEXCLUSIONS = "nextgenpve.exclusions";
+        private const string NGPVECUSTOMSELECT = "nextgenpve.customsel";
         #endregion
 
         #region Message
@@ -166,6 +167,7 @@ namespace Oxide.Plugins
                 ["damage"] = "Damage",
                 ["stock"] = "Stock",
                 ["custom"] = "Custom",
+                ["customedit"] = "Custom Editor",
                 ["lookup"] = "lookup",
                 ["defaultdamage"] = "Default Damage",
                 ["damageexceptions"] = "Damage Exceptions",
@@ -205,6 +207,7 @@ namespace Oxide.Plugins
                 CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
                 CuiHelper.DestroyUi(player, NGPVERULESELECT);
                 CuiHelper.DestroyUi(player, NGPVERULEEXCLUSIONS);
+                CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
             }
 
             if (scheduleTimer != null) scheduleTimer.Destroy();
@@ -675,10 +678,11 @@ namespace Oxide.Plugins
             switch (zone)
             {
                 case "default":
+                    DoLog("Default ruleset query");
                     mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
                     break;
                 default:
-                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup'";
+                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='default' OR zone='0' OR zone='lookup'";
                     break;
             }
             //using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets", sqlConnection))
@@ -721,7 +725,7 @@ namespace Oxide.Plugins
                         {
                             if (!ngpvezonemaps[rulesetname].map.Contains(zone))
                             {
-                                DoLog($"Skipping ruleset {rulesetname} due to zone mismatch with current zone, {zone}");
+                                DoLog($"Skipping ruleset {rulesetname} due to zone lookup mismatch with current zone, {zone}");
                                 continue;
                             }
                             DoLog($"Lookup zone {zone}");
@@ -971,7 +975,6 @@ namespace Oxide.Plugins
 
             if (args.Length > 0)
             {
-                Puts("HAHA");
                 if (args[0] == "gui") GUIRuleSets(player.Object as BasePlayer);
             }
         }
@@ -1148,6 +1151,9 @@ namespace Oxide.Plugins
                             Message(iplayer, "RestoreFilename");
                             Message(iplayer, "RestoreAvailable", string.Join("\n\t", files.Select(x => x.Replace($"{Interface.Oxide.DataDirectory}/{Name}/", ""))));
                         }
+                        break;
+                    case "customgui":
+                        GUICustomSelect(player);
                         break;
                     case "editruleset":
                         //e.g.: pverule editruleset {rulesetname} damage 0
@@ -1724,6 +1730,9 @@ namespace Oxide.Plugins
                         string rn = args[1];
                         GUIRuleEditor(player, rn);
                         break;
+                    case "closecustom":
+                        CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
+                        break;
                     case "close":
                         CuiHelper.DestroyUi(player, NGPVERULELIST);
                         CuiHelper.DestroyUi(player, NGPVERULEEDIT);
@@ -1731,6 +1740,7 @@ namespace Oxide.Plugins
                         CuiHelper.DestroyUi(player, NGPVESCHEDULEEDIT);
                         CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
                         CuiHelper.DestroyUi(player, NGPVERULESELECT);
+                        CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
                         break;
                     case "closeexclusions":
                         CuiHelper.DestroyUi(player, NGPVERULEEXCLUSIONS);
@@ -2215,6 +2225,7 @@ namespace Oxide.Plugins
             UI.Label(ref container, NGPVERULELIST, UI.Color("#5540d8", 1f), Lang("automated"), 12, "0.73 0.95", "0.79 0.98");
 
             //UI.Button(ref container, NGPVERULELIST, UI.Color("#ff0000", 1f), Lang("drop"), 12, "0.6 0.01", "0.78 0.05", "pvedrop gui");
+            //UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("customedit"), 12, "0.65 0.01", "0.79 0.05", "pverule customgui");
             UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("backup"), 12, "0.8 0.01", "0.9 0.05", "pverule backup");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
@@ -2688,6 +2699,43 @@ namespace Oxide.Plugins
             else
             {
                 UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+            }
+
+            CuiHelper.AddUi(player, container);
+        }
+
+        private void GUICustomSelect(BasePlayer player)
+        {
+            CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
+            CuiElementContainer container = UI.Container(NGPVECUSTOMSELECT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closecustom");
+            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#55d840", 1f), Lang("add"), 12, "0.86 0.95", "0.91 0.98", $"pverule addcustom");
+
+            int col = 0;
+            int row = 0;
+
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                using (SQLiteCommand sr = new SQLiteCommand($"SELECT DISTINCT name from ngpve_rules WHERE custom=1 ORDER BY name", c))
+                {
+                    using (SQLiteDataReader rr = sr.ExecuteReader())
+                    {
+                        float[] pb = GetButtonPositionP(row, col);
+                        while (rr.Read())
+                        {
+                            string rulename = rr.GetString(0);
+                            if (row > 10)
+                            {
+                                row = 0;
+                                col++;
+                            }
+                            pb = GetButtonPositionP(row, col);
+                            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#db5540", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editcustom {rulename}");
+                            row++;
+                        }
+                    }
+                }
             }
 
             CuiHelper.AddUi(player, container);
