@@ -41,7 +41,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.49")]
+    [Info("NextGen PVE", "RFC1920", "1.0.50")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -561,6 +561,14 @@ namespace Oxide.Plugins
             stype = source.GetType().Name;
             ttype = target.GetType().Name;
             //Puts($"{stype} attacking {ttype}");
+
+            // Special case for preventing codelock hacking
+            if (stype =="CodeLock" && ttype == "BasePlayer")
+            {
+                DoLog($"Allowing codelock damage");
+                return true;
+            }
+
             string zone = "default";
             string rulesetzone = "";
             bool hasBP = true;
