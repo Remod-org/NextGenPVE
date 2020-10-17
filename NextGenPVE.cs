@@ -41,13 +41,11 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.50")]
+    [Info("NextGen PVE", "RFC1920", "1.0.51")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
         #region vars
-        private Dictionary<string, NextGenPVERule> custom_rules = new Dictionary<string, NextGenPVERule>();
-
         // Ruleset to multiple zones
         private Dictionary<string, NextGenPVEZoneMap> ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
         private Dictionary<string, string> ngpveschedule = new Dictionary<string, string>();
@@ -58,6 +56,8 @@ namespace Oxide.Plugins
         private ConfigData configData;
         private SQLiteConnection sqlConnection;
         private string connStr;
+
+        private List<ulong> isopen = new List<ulong>();
 
         [PluginReference]
         private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde;
@@ -110,6 +110,13 @@ namespace Oxide.Plugins
 
             if(configData.Options.useSchedule) RunSchedule(true);
         }
+
+//        private object OnPlayerCommand(BasePlayer player, string command, string[] args)
+//        {
+//            Puts($"OnPlayerCommand: {command}");
+//            if (command != "pverule" && isopen.Contains(player.userID)) return true;
+//            return null;
+//        }
 
         private void OnServerInitialized()
         {
@@ -1021,6 +1028,7 @@ namespace Oxide.Plugins
             if (args.Length > 0)
             {
                 //string debug = string.Join(",", args); DoLog($"{debug}");
+                string debug = string.Join(",", args); Puts($"{debug}");
                 switch (args[0])
                 {
                     case "list":
@@ -1162,6 +1170,15 @@ namespace Oxide.Plugins
                         break;
                     case "customgui":
                         GUICustomSelect(player);
+                        break;
+                    case "customrules":
+                        GUISelectRule(player,null,true);
+                        break;
+                    case "customentities":
+//                        GUISelectEntity(player,null,true);
+                        break;
+                    case "addcustomrule":
+                        GUIRuleEditor(player, null);
                         break;
                     case "editruleset":
                         //e.g.: pverule editruleset {rulesetname} damage 0
@@ -1550,6 +1567,7 @@ namespace Oxide.Plugins
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
+                        CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
                                                     //Puts($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'");
                                                     using (SQLiteCommand ads = new SQLiteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'", c))
                                                     {
@@ -1734,14 +1752,58 @@ namespace Oxide.Plugins
                         SaveConfig(configData);
                         GUIRuleSets(player);
                         break;
+                    case "addrule":
                     case "editrule":
                         string rn = args[1];
+                        if(args[0] == "editrule" && rn != null)
+                        {
+                            if (args.Length > 3)
+                            {
+                                string mode = args[2];
+                                string mod = args[3];
+
+                                Puts($"UPDATE ngpve_rules SET {mode}='{mod}', damage=1 WHERE name='{rn}'");
+                                //edit
+                                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                {
+                                    c.Open();
+                                    using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rules SET {mode}='{mod}', damage=1 WHERE name='{rn}'", c))
+                                    {
+                                        cmd.ExecuteNonQuery();
+                                    }
+                                }
+                            }
+                        }
+                        else if(args[0] == "addrule" && rn != null)
+                        {
+                            using (SQLiteConnection c = new SQLiteConnection(connStr))
+                            {
+                                c.Open();
+                                using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rules VALUES ('{rn}','', 1, 1, null, null)", c))
+                                {
+                                    cmd.ExecuteNonQuery();
+                                }
+                            }
+                        }
+
                         GUIRuleEditor(player, rn);
+                        break;
+                    case "deleterule":
+                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                        {
+                            c.Open();
+                            using (SQLiteCommand cmd = new SQLiteCommand($"DELETE FROM ngpve_rules WHERE name='{args[1]}'", c))
+                            {
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                        GUISelectRule(player,null,true);
                         break;
                     case "closecustom":
                         CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
                         break;
                     case "close":
+                        IsOpen(player.userID, false);
                         CuiHelper.DestroyUi(player, NGPVERULELIST);
                         CuiHelper.DestroyUi(player, NGPVERULEEDIT);
                         CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
@@ -1755,6 +1817,7 @@ namespace Oxide.Plugins
                         break;
                     case "closeruleselect":
                         CuiHelper.DestroyUi(player, NGPVERULESELECT);
+                        CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
                         break;
                     case "closeruleset":
                         CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
@@ -2160,6 +2223,26 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Version < new VersionNumber(1, 0, 51))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('elevator', 'ElevatorLift', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('elevator_player', 'Elevator can crush Player', 1, 0, 'elevator', 'player')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'PlayerCorpse', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
 
             configData.Version = Version;
             SaveConfig(configData);
@@ -2223,8 +2306,18 @@ namespace Oxide.Plugins
         #endregion
 
         #region GUI
+        private void IsOpen(ulong uid, bool yes=false)
+        {
+            if(yes)
+            {
+                if(!isopen.Contains(uid)) isopen.Add(uid);
+                return;
+            }
+            isopen.Remove(uid);
+        }
         private void GUIRuleSets(BasePlayer player)
         {
+            IsOpen(player.userID, true);
             CuiHelper.DestroyUi(player, NGPVERULELIST);
 
             CuiElementContainer container = UI.Container(NGPVERULELIST, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
@@ -2410,6 +2503,7 @@ namespace Oxide.Plugins
 
         private void GUIRulesetEditor(BasePlayer player, string rulesetname)
         {
+            IsOpen(player.userID, true);
             CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
             string rulename = rulesetname;
             bool isEnabled = false;
@@ -2714,78 +2808,67 @@ namespace Oxide.Plugins
 
         private void GUICustomSelect(BasePlayer player)
         {
+            IsOpen(player.userID, true);
             CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
-            CuiElementContainer container = UI.Container(NGPVECUSTOMSELECT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closecustom");
-            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#55d840", 1f), Lang("add"), 12, "0.86 0.95", "0.91 0.98", $"pverule addcustom");
-
-            int col = 0;
-            int row = 0;
-
-            using (SQLiteConnection c = new SQLiteConnection(connStr))
-            {
-                c.Open();
-                using (SQLiteCommand sr = new SQLiteCommand($"SELECT DISTINCT name from ngpve_rules WHERE custom=1 ORDER BY name", c))
-                {
-                    using (SQLiteDataReader rr = sr.ExecuteReader())
-                    {
-                        float[] pb = GetButtonPositionP(row, col);
-                        while (rr.Read())
-                        {
-                            string rulename = rr.GetString(0);
-                            if (row > 10)
-                            {
-                                row = 0;
-                                col++;
-                            }
-                            pb = GetButtonPositionP(row, col);
-                            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#db5540", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editcustom {rulename}");
-                            row++;
-                        }
-                    }
-                }
-            }
+            CuiElementContainer container = UI.Container(NGPVECUSTOMSELECT, UI.Color("3b3b3b", 1f), "0.4 0.4", "0.6 0.55", true, "Overlay");
+            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#55d840", 1f), Lang("rules"),    12, "0.15 0.4", "0.35 0.6", $"pverule customrules");
+            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#55d840", 1f), Lang("entities"), 12, "0.37 0.4", "0.57 0.6", $"pverule customentities");
+            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#d85540", 1f), Lang("close"),    12, "0.59 0.4", "0.79 0.6", $"pverule closecustom");
 
             CuiHelper.AddUi(player, container);
         }
 
         // Select rule to add to ruleset
-        private void GUISelectRule(BasePlayer player, string rulesetname)
+        private void GUISelectRule(BasePlayer player, string rulesetname, bool docustom = false)
         {
+            IsOpen(player.userID, true);
             CuiHelper.DestroyUi(player, NGPVERULESELECT);
 
             CuiElementContainer container = UI.Container(NGPVERULESELECT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
             UI.Label(ref container, NGPVERULESELECT, UI.Color("#ffffff", 1f), Lang("nextgenpveruleselect"), 24, "0.2 0.92", "0.7 1");
             UI.Label(ref container, NGPVERULESELECT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
 
-            UI.Label(ref container, NGPVERULESELECT, UI.Color("#5555cc", 1f), Lang("stock"), 12, "0.72 0.95", "0.78 0.98");
-            UI.Label(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), Lang("enabled"), 12, "0.79 0.95", "0.85 0.98");
-            UI.Label(ref container, NGPVERULESELECT, UI.Color("#d85540", 1f), Lang("custom"), 12, "0.86 0.95", "0.92 0.98");
             UI.Button(ref container, NGPVERULESELECT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleselect");
 
             int col = 0;
             int row = 0;
 
             List<string> exc = new List<string>();
-            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            if (rulesetname != null)
             {
-                c.Open();
-                using (SQLiteCommand crs = new SQLiteCommand($"SELECT exception from ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c))
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
-                    using (SQLiteDataReader crd = crs.ExecuteReader())
+                    c.Open();
+                    using (SQLiteCommand crs = new SQLiteCommand($"SELECT exception from ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c))
                     {
-                        while (crd.Read())
+                        using (SQLiteDataReader crd = crs.ExecuteReader())
                         {
-                            exc.Add(crd.GetString(0));
+                            while (crd.Read())
+                            {
+                                exc.Add(crd.GetString(0));
+                            }
                         }
                     }
                 }
+            }
+            string custsel = " WHERE custom='1' ";
+            if (docustom)
+            {
+                UI.Button(ref container, NGPVERULESELECT, UI.Color("#d85540", 1f), Lang("add"), 12, "0.72 0.95", "0.78 0.98", "pverule addcustomrule");
+            }
+            else
+            {
+                UI.Label(ref container, NGPVERULESELECT, UI.Color("#5555cc", 1f), Lang("stock"), 12, "0.72 0.95", "0.78 0.98");
+                UI.Label(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), Lang("enabled"), 12, "0.79 0.95", "0.85 0.98");
+                UI.Label(ref container, NGPVERULESELECT, UI.Color("#d85540", 1f), Lang("custom"), 12, "0.86 0.95", "0.92 0.98");
+
+                custsel = "";
             }
 
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand sr = new SQLiteCommand($"SELECT DISTINCT name, custom from ngpve_rules ORDER BY name", c))
+                using (SQLiteCommand sr = new SQLiteCommand($"SELECT DISTINCT name, custom from ngpve_rules {custsel}ORDER BY name", c))
                 {
                     using (SQLiteDataReader rr = sr.ExecuteReader())
                     {
@@ -2800,7 +2883,11 @@ namespace Oxide.Plugins
                                 col++;
                             }
                             pb = GetButtonPositionP(row, col);
-                            if (exc.Contains(rulename))
+                            if (docustom)
+                            {
+                                UI.Button(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename}");
+                            }
+                            else if (exc.Contains(rulename))
                             {
                                 UI.Button(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} except {rulename} delete");
                             }
@@ -2821,6 +2908,7 @@ namespace Oxide.Plugins
 
         private void GUISelectExclusion(BasePlayer player, string rulesetname, string srctgt)
         {
+            IsOpen(player.userID, true);
             //Puts($"GUISelectExclusion called for {rulesetname}");
             CuiHelper.DestroyUi(player, NGPVERULEEXCLUSIONS);
             string t = Lang("source"); if (srctgt == "tgt_exclude") t = Lang("target");
@@ -2991,11 +3079,12 @@ namespace Oxide.Plugins
             CuiHelper.AddUi(player, container);
         }
 
-        private void GUIRuleEditor(BasePlayer player, string rulename)
+        private void GUIRuleEditor(BasePlayer player, string rulename = "")
         {
+            IsOpen(player.userID, true);
             CuiHelper.DestroyUi(player, NGPVERULEEDIT);
 
-            CuiElementContainer container = UI.Container(NGPVERULEEDIT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            CuiElementContainer container = UI.Container(NGPVERULEEDIT, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true);//, "Overlay");
             UI.Button(ref container, NGPVERULEEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closerule");
             UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), Lang("nextgenpverule") + ": " + rulename, 24, "0.2 0.92", "0.7 1");
             UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.05");
@@ -3008,76 +3097,112 @@ namespace Oxide.Plugins
             row++;
             pb = GetButtonPositionP(row, col);
             UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Description", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-            row++;
-            pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Damage", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-            row++;
-            pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Source", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-            row++;
-            pb = GetButtonPositionP(row, col);
-            UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Target", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             string description = "";
             string source = "";
             string target = "";
             bool damage = false;
             bool custom = false;
-            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            if (rulename != null)
             {
-                c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT * FROM ngpve_rules WHERE name='{rulename}'", c))
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Damage", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Source", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Target", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
-                    using (SQLiteDataReader rd = getrs.ExecuteReader())
+                    c.Open();
+                    using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT * FROM ngpve_rules WHERE name='{rulename}'", c))
                     {
-                        description = "";
-                        source = "";
-                        target = "";
-                        while (rd.Read())
+                        using (SQLiteDataReader rd = getrs.ExecuteReader())
                         {
-                            description = rd.GetString(1);
-                            damage = rd.GetBoolean(2);
-                            custom = rd.GetBoolean(3);
-                            source = rd.GetString(4);
-                            target = rd.GetString(5);
+                            description = "";
+                            source = "";
+                            target = "";
+                            while (rd.Read())
+                            {
+                                description = rd.GetString(1);
+                                damage = rd.GetBoolean(2);
+                                custom = rd.GetBoolean(3);
+                                source = rd.GetValue(4).ToString();
+                                target = rd.GetValue(5).ToString();
+                                Puts($"Found rule {rulename}: {description}, {source}, {target}");
+                            }
                         }
                     }
                 }
-            }
 
-            row = 0; col = 1;
-            pb = GetButtonPositionP(row, col);
-            if (!custom)
-            {
-                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-                row++;
+                row = 0; col = 1;
                 pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-                row++;
-                pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-                row++;
-                pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-                row++;
-                pb = GetButtonPositionP(row, col);
-                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                if (!custom)
+                {
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    row++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    row++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    row++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    row++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                }
+                else
+                {
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    row++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#535353", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    UI.Input(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} description ");
+                    row++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    row++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#535353", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    UI.Input(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} source ");
+                    row++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Label(ref container, NGPVERULEEDIT, UI.Color("#535353", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    UI.Input(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target ");
+                    row++;
+                    pb = GetButtonPositionP(row, col);
+                    UI.Button(ref container, NGPVERULEEDIT, UI.Color("#d85540", 1f), Lang("delete"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule deleterule {rulename}");
+                }
             }
             else
             {
-                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} name");
+                row = 2; col = 0;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Source", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), description, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} description");
+                UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), "Target", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+                row = 0; col = 1;
+                pb = GetButtonPositionP(row, col);
+                UI.Input(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule addrule ");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), damage.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} damage");
+                UI.Input(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} description ");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), source, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} source");
+                UI.Input(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} source ");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#2b2b2b", 1f), target, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target");
+                UI.Input(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target ");
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#d85540", 1f), Lang("delete"), 12, "0.93 0.95", "0.99 0.98", $"pverule deleterule {rulename}");
             }
 
             CuiHelper.AddUi(player, container);
@@ -3085,6 +3210,7 @@ namespace Oxide.Plugins
 
         private void GUIEditValue(BasePlayer player, string rulesetname, string key = null)
         {
+            IsOpen(player.userID, true);
             CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
 
             CuiElementContainer container = UI.Container(NGPVEVALUEEDIT, UI.Color("4b4b4b", 1f), "0.15 0.15", "0.85 0.85", true, "Overlay");
@@ -3193,6 +3319,7 @@ namespace Oxide.Plugins
 
         private void GUIEditSchedule(BasePlayer player, string rulesetname)
         {
+            IsOpen(player.userID, true);
             CuiHelper.DestroyUi(player, NGPVESCHEDULEEDIT);
 
             string schedule = null;
@@ -3768,6 +3895,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'NPCPlayerCorpse', 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'PlayerCorpse', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'DroppedItemContainer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'HorseCorpse', 0)", sqlConnection);
@@ -3815,6 +3944,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'ModularCar', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('vehicle', 'ModularCarGarage', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('elevator', 'ElevatorLift', 0)", sqlConnection);
             ct.ExecuteNonQuery();
         }
 
@@ -3908,6 +4039,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('vehicle_vehicle', 'Vehicle can damage Vehicle', 1, 0, 'vehicle', 'vehicle')", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('elevator_player', 'Elevator can crush Player', 1, 0, 'elevator', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
         }
 
         private void LoadDefaultRuleset(bool drop=true)
@@ -3921,6 +4054,8 @@ namespace Oxide.Plugins
                 cd.ExecuteNonQuery();
             }
             SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_player', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'elevator_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_animal', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
