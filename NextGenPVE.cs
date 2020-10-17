@@ -1028,7 +1028,7 @@ namespace Oxide.Plugins
             if (args.Length > 0)
             {
                 //string debug = string.Join(",", args); DoLog($"{debug}");
-                string debug = string.Join(",", args); Puts($"{debug}");
+                //string debug = string.Join(",", args); Puts($"{debug}");
                 switch (args[0])
                 {
                     case "list":
@@ -2238,6 +2238,10 @@ namespace Oxide.Plugins
                         ct.ExecuteNonQuery();
                     }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'PlayerCorpse', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'elevator_player', null, null, null)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
