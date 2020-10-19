@@ -101,6 +101,7 @@ The following commands have been implemented:
     - `/pverule editruleset {RULESETNAME} zone {zoneID}` - Set zone for ruleset.
 
     - `/pvedrop {gui} - Resets database to plugin defaults, removing any custom rules and entities.  Requires AllowDropDatabase config to be true.
+	- `/pveupdate` - Update new entity types (normally run automatically at wipe, but can be run any time).  Any newly-detected entities will be added to the collection 'unknown'. 
 
 The above commands can also be run from console or RCON (without /).
 
