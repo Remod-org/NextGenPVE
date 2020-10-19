@@ -4,7 +4,7 @@ Prevent damage to players and objects in a PVE environment
 Uses ZoneManager/LiteZones, Friends, Clans, RustIO, HumanNPC
 
 ### Overview
-NextGenPVE is a new plugin and not a fork of TruePVE, et al.  It includes an integrated GUI for ruleset management.
+NextGenPVE is a new plugin and not a fork of TruePVE, et al.  It includes an integrated GUI for ruleset and entity management.
 
 NextGenPVE is organized into entity collections, rules that use those collections, and rulesets that include a set of rules.
 
@@ -19,6 +19,8 @@ Each ruleset can and probably should be associated with a zone (if not the defau
 Each ruleset can be either enabled or disabled.
 
 The default ruleset (out of the box) has the following settings:
+
+The builtin rules categorize entity types into collections, e.g. player, npc, fire, etc.
 
 - Default damage false
 - Exceptions:
@@ -58,6 +60,10 @@ There is an integrated GUI for the admin to use to:
  8. Set a schedule for ruleset enable/disable (WORK IN PROGRESS)
  9. Edit custom rules (WORK IN PROGRESS)
 10. Set global flags.
+11. Create and edit custom rules.
+12. Edit collections for ALL known entity types.
+
+(Any new entity types should be added automatically on server wipe.  They will be in the unknown collection and by default will accept default ruleset damage.)
 
 ![](https://i.imgur.com/NbnonRb.jpg)
 
@@ -94,6 +100,8 @@ The following commands have been implemented:
     - `/pverule editruleset {RULESETNAME} zone delete` - Delete zone from a ruleset.
     - `/pverule editruleset {RULESETNAME} zone {zoneID}` - Set zone for ruleset.
 
+    - `/pvedrop {gui} - Resets database to plugin defaults, removing any custom rules and entities.  Requires AllowDropDatabase config to be true.
+
 The above commands can also be run from console or RCON (without /).
 
 ### Permissions
@@ -114,6 +122,8 @@ The above commands can also be run from console or RCON (without /).
     "useFriends": false,
     "useClans": false,
     "useTeams": false,
+    "AllowCustomEdit": false,
+    "AllowDropDatabase": false,
     "NPCAutoTurretTargetsPlayers": true,
     "NPCAutoTurretTargetsNPCs": true,
     "AutoTurretTargetsPlayers": false,
@@ -142,6 +152,10 @@ If a player is trying to damage a building, "HonorBuildingPrivilege" determines 
 "HonorRelationships" determines whether or not a player can damage their friend's structures or deployables.
 
 Note that friends support can include Friends, Clans, or Teams.
+
+AllowCustomEdit - Enables the editing of custom rulesets and setting collections for entities.  Be careful here as you can easily categorize animals as NPCs, resources as players, etc.
+
+AllowDropDatabase - Enables pvedrop command and GUI button to reset the database to defaults.  This wipes everything!!!
 
 ### Details
 
