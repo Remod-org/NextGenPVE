@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.52")]
+    [Info("NextGen PVE", "RFC1920", "1.0.53")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -148,9 +148,10 @@ namespace Oxide.Plugins
             foreach (var obj in Resources.FindObjectsOfTypeAll(new BaseCombatEntity().GetType()))
             {
                 string objname = obj.GetType().ToString();
+                if(objname.Contains("Entity")) continue;
                 if (names.Contains(objname)) continue; // Saves 20-30 seconds of processing time.
                 names.Add(objname);
-                if(objname.Contains("Entity")) continue;
+                Puts($"{objname}");
 
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
@@ -174,6 +175,7 @@ namespace Oxide.Plugins
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 ["notauthorized"] = "You don't have permission to use this command.",
+                ["zonemanagerreq"] = "ZoneManager required for handling multiple active rulesets.",
                 ["nextgenpverulesets"] = "NextGenPVE Rulesets",
                 ["rulesets"] = "Rulesets",
                 ["nextgenpveruleset"] = "NextGenPVE Ruleset",
@@ -444,7 +446,8 @@ namespace Oxide.Plugins
                     return null;
                 }
             }
-            if (hitinfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
+//            if (hitinfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
+            if (hitinfo.damageTypes.GetMajorityDamageType().ToString() == "Decay") return null;
 
             try
             {
@@ -895,7 +898,7 @@ namespace Oxide.Plugins
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    using (SQLiteCommand use = new SQLiteCommand($"SELECT name, schedule FROM ngpve_rulesets WHERE schedule != '0'", c))
+                    using (SQLiteCommand use = new SQLiteCommand($"SELECT DISTINCT name, schedule FROM ngpve_rulesets WHERE schedule != '0'", c))
                     {
                         using (SQLiteDataReader schedule = use.ExecuteReader())
                         {
@@ -2418,6 +2421,7 @@ namespace Oxide.Plugins
             public bool TrapsIgnorePlayers = false;
             public bool HonorBuildingPrivilege = true;
             public bool UnprotectedBuildingDamage = false;
+            public bool UnprotectedDeployableDamage = false;
             public bool TwigDamage = false;
             public bool HonorRelationships = false;
         }
@@ -2493,10 +2497,12 @@ namespace Oxide.Plugins
             UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("rulesets"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             row++;
 
+            string rssql = "";
+            if (!ZoneManager) rssql = " WHERE name='default'";
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT name, automated from ngpve_rulesets ORDER BY name", c))
+                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT name, automated from ngpve_rulesets{rssql} ORDER BY name", c))
                 {
                     using (SQLiteDataReader rsread = getrs.ExecuteReader())
                     {
@@ -2522,6 +2528,12 @@ namespace Oxide.Plugins
 
             pb = GetButtonPositionP(row, col);
             UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset add");
+            if (!ZoneManager)
+            {
+                row++;
+                pb = GetButtonPositionP(row, col);
+                UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("zonemanagerreq"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) + .1)} {pb[3]}");
+            }
 
             row = 0;col = 6;
             pb = GetButtonPositionP(row, col);
@@ -3626,7 +3638,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand rs = new SQLiteCommand("SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand rs = new SQLiteCommand($"SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
                 {
                     using (SQLiteDataReader rsd = rs.ExecuteReader())
                     {
@@ -3682,7 +3694,7 @@ namespace Oxide.Plugins
 
             col++;
             pb = GetButtonPositionP(row, 4);
-            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#665353", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#dddddd", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             UI.Input(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule ");
 
             CuiHelper.AddUi(player, container);
@@ -3881,17 +3893,27 @@ namespace Oxide.Plugins
             }
             else
             {
+//                var priv = entity.GetComponentInParent<BuildingPrivlidge>();
                 if (configData.Options.HonorRelationships)
                 {
                     if (IsFriend(player.userID, entity.OwnerID))
                     {
                         DoLog($"Player is friends with owner of entity", 2);
+ //                       if (priv == null)
+ //                       {
+ //                           if (configData.Options.UnprotectedDeployableDamage)
+ //                           {
+ //                               DoLog("Entity not protected by TC.",2);
+ //                               return true;
+ //                           }
+ //                           return false;
+ //                       }
                         return true;
                     }
                 }
                 else if (entity.OwnerID == player.userID)
                 {
-                    DoLog($"Player owns BuildingBlock", 2);
+                    DoLog($"Player owns item", 2);
                     return true;
                 }
             }
