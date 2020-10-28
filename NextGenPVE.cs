@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.53")]
+    [Info("NextGen PVE", "RFC1920", "1.0.54")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -56,8 +56,11 @@ namespace Oxide.Plugins
 
         private List<ulong> isopen = new List<ulong>();
 
+        private readonly string BannerColor = "Grey";
+        private string TextColor = "Red";
+
         [PluginReference]
-        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde;
+        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements;
 
         private readonly string logfilename = "log";
         private bool dolog = false;
@@ -178,6 +181,8 @@ namespace Oxide.Plugins
                 ["zonemanagerreq"] = "ZoneManager required for handling multiple active rulesets.",
                 ["nextgenpverulesets"] = "NextGenPVE Rulesets",
                 ["rulesets"] = "Rulesets",
+                ["pveenabled"] = "PVE Enabled for {0} ruleset.",
+                ["pvedisabled"] = "PVE Disabled for {0} ruleset.",
                 ["nextgenpveruleset"] = "NextGenPVE Ruleset",
                 ["nextgenpverule"] = "NextGenPVE Rule",
                 ["nextgenpveruleselect"] = "NextGenPVE Rule Select",
@@ -889,8 +894,35 @@ namespace Oxide.Plugins
             return damage;
         }
 
+        void MessageToAll(string key, string ruleset)
+        {
+            if(!configData.Options.useMessageBroadcast && !configData.Options.useGUIAnnouncements) return;
+            foreach(var player in BasePlayer.activePlayerList)
+            {
+                if(configData.Options.useMessageBroadcast)
+                {
+                    Message(player.IPlayer, key, ruleset);
+                }
+                if(GUIAnnouncements && configData.Options.useGUIAnnouncements)
+                {
+                    var ann = Lang(key, null, ruleset);
+                    switch(key)
+                    {
+                        case "pveenabled":
+                            TextColor = "Green";
+                            break;
+                        default:
+                            TextColor = "Red";
+                            break;
+                    }
+                    GUIAnnouncements?.Call("CreateAnnouncement", ann, BannerColor, TextColor, player);
+                }
+            }
+        }
+
         private void RunSchedule(bool refresh = false)
         {
+            Dictionary<string, bool> enables = new Dictionary<string, bool>();
             TimeSpan ts = configData.Options.useRealTime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
             if (refresh && configData.Options.useSchedule)
             {
@@ -927,40 +959,99 @@ namespace Oxide.Plugins
                         DoLog($"Schedule day == {x.ToString()} {parsed.dayName} {parsed.starthour} to {parsed.endhour}");
                         if(ts.Days == x)
                         {
-                            DoLog($"Day matched.  Comparing {ts.Hours.ToString()} to start time {parsed.starthour}:{parsed.startminute} and end time {parsed.endhour}:{parsed.endminute}");
+                            DoLog($"Day matched.  Comparing {ts.Hours.ToString()}:{ts.Minutes.ToString().PadLeft(2,'0')} to start time {parsed.starthour}:{parsed.startminute} and end time {parsed.endhour}:{parsed.endminute}");
                             if (ts.Hours >= Convert.ToInt32(parsed.starthour) && ts.Hours <= Convert.ToInt32(parsed.endhour))
                             {
-                                if(ts.Minutes >= Convert.ToInt32(parsed.endminute))
+                                // Hours matched for activating ruleset, check minutes
+                                DoLog($"Hours matched for ruleset {scheduleInfo.Key}", 1);
+                                if (ts.Hours == Convert.ToInt32(parsed.starthour) && ts.Minutes >= Convert.ToInt32(parsed.startminute))
                                 {
-                                    DoLog($"Disabling ruleset {scheduleInfo.Key}");
-                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
-                                    {
-                                        c.Open();
-                                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='0' WHERE name='{scheduleInfo.Key}'", c))
-                                        {
-                                            cmd.ExecuteNonQuery();
-                                        }
-                                    }
+                                    DoLog("Matched START hour and minute.", 2);
+                                    enables[scheduleInfo.Key] = true;
                                 }
-                                else if(ts.Minutes >= Convert.ToInt32(parsed.startminute))
+                                else if(ts.Hours == Convert.ToInt32(parsed.endhour) && ts.Minutes <= Convert.ToInt32(parsed.endminute))
                                 {
-                                    DoLog($"Enabling ruleset {scheduleInfo.Key}");
-                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
-                                    {
-                                        c.Open();
-                                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='1' WHERE name='{scheduleInfo.Key}'", c))
-                                        {
-                                            cmd.ExecuteNonQuery();
-                                        }
-                                    }
+                                    DoLog("Matched END hour and minute.", 2);
+                                    enables[scheduleInfo.Key] = true;
+                                }
+                                else if (ts.Hours > Convert.ToInt32(parsed.starthour) && ts.Hours < Convert.ToInt32(parsed.endhour))
+                                {
+                                    DoLog("Between start and end hours.", 2);
+                                    enables[scheduleInfo.Key] = true;
+                                }
+                                else
+                                {
+                                    DoLog("Minute mismatch for START OR END.", 2);
+                                    enables[scheduleInfo.Key] = false;
                                 }
                             }
+                            else
+                            {
+                                DoLog($"Hours NOT matched for ruleset {scheduleInfo.Key}", 1);
+                                enables[scheduleInfo.Key] = false;
+                            }
                         }
+//                        else
+//                        {
+//                            DoLog($"Day NOT matched for ruleset {scheduleInfo.Key}", 1);
+//                            enables[scheduleInfo.Key] = false;
+//                        }
                     }
                 }
             }
 
-            scheduleTimer = timer.Once(configData.Options.useRealTime ? 30f : 3f, () => RunSchedule());
+            foreach (KeyValuePair<string, bool> doenable in enables)
+            {
+                switch (doenable.Value)
+                {
+                    case false:
+                        DoLog($"Disabling ruleset {doenable.Key}", 3);
+                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                        {
+                            c.Open();
+                            using (SQLiteCommand info = new SQLiteCommand($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{doenable.Key}'", c))
+                            {
+                                using (SQLiteDataReader crs = info.ExecuteReader())
+                                {
+                                    while (crs.Read())
+                                    {
+                                        var was = crs.GetValue(0).ToString();
+                                        if (was != "0") MessageToAll("pvedisabled", doenable.Key);
+                                    }
+                                }
+                            }
+                            using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='0' WHERE name='{doenable.Key}'", c))
+                            {
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                        break;
+                    case true:
+                        DoLog($"Enabling ruleset {doenable.Key}", 3);
+                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                        {
+                            c.Open();
+                            using (SQLiteCommand info = new SQLiteCommand($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{doenable.Key}'", c))
+                            {
+                                using (SQLiteDataReader crs = info.ExecuteReader())
+                                {
+                                    while (crs.Read())
+                                    {
+                                        var was = crs.GetValue(0).ToString();
+                                        if (was != "1") MessageToAll("pveenabled", doenable.Key);
+                                    }
+                                }
+                            }
+                            using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='1' WHERE name='{doenable.Key}'", c))
+                            {
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                        break;
+                }
+            }
+
+            scheduleTimer = timer.Once(configData.Options.useRealTime ? 30f : 5f, () => RunSchedule());
         }
 
         private bool ParseSchedule(string dbschedule, out NextGenPVESchedule parsed)
@@ -2405,6 +2496,8 @@ namespace Oxide.Plugins
         {
             public bool useZoneManager = false;
             public bool useSchedule = false;
+            public bool useGUIAnnouncements = false;
+            public bool useMessageBroadcast = false;
             public bool useRealTime = true;
             public bool useFriends = false;
             public bool useClans = false;
