@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.54")]
+    [Info("NextGen PVE", "RFC1920", "1.0.55")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -3737,7 +3737,7 @@ namespace Oxide.Plugins
                     {
                         while (rsd.Read())
                         {
-                            schedule = rsd.GetString(0);
+                            schedule = rsd.GetValue(0).ToString();
                         }
                     }
                 }
