@@ -1,7 +1,13 @@
-## NextGenPVE - WORK IN PROGRESS
+## NextGenPVE
 Prevent damage to players and objects in a PVE environment
 
-Uses ZoneManager/LiteZones, Friends, Clans, RustIO, HumanNPC
+Uses ZoneManager, Friends, Clans, RustIO, GUIAnnouncements, HumanNPC (from remod.org), ZombieHorde
+
+Works with DynamicPVP.
+
+Don't let the documentation trouble you.  In most cases all you should need to do is install the plugin.  The rest is optional.
+
+NEW FOR 1.0.52: Custom rule and entity collection editor - You must set AllowCustomEdit true in the configuration to enable this feature.  To go along with this, new entity types will be detected at wipe and should be available to set into existing or new collections for inclusion in rulesets.
 
 ### Overview
 NextGenPVE is a new plugin and not a fork of TruePVE, et al.  It includes an integrated GUI for ruleset and entity management.
@@ -77,7 +83,15 @@ The following commands have been implemented:
     - `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
     - `/pverule` - Starts the GUI for editing, creating, and deleting rulesets
 
-#### Commands called by GUI
+#### Sub-commands for /pverule
+
+    - `/pverule list` - List current rulesets
+  - `/pverule dump RULESETNAME` - List some information about a specific ruleset
+  - `/pverule backup` - Same as /pvebackup.
+  - `/pverule restore` - List available backup files from the plugin oxide data folder.
+  - `/pverule restore FILENAME` - Restores the named database backup file to the live database.  The file must end in .db and MUST be from a previous backup created by NextGenPVE.  It must also be located in the plugin oxide data folder.
+
+#### Additional sub-commands of /pverule called by GUI
 
     - `/pverule editconfig {CONFIG} true/false` - Set any of the global flags below to true/false
     - `/pverule editconfig RESET true` - Reset all of the global flags to default
@@ -101,7 +115,7 @@ The following commands have been implemented:
     - `/pverule editruleset {RULESETNAME} zone {zoneID}` - Set zone for ruleset.
 
     - `/pvedrop {gui} - Resets database to plugin defaults, removing any custom rules and entities.  Requires AllowDropDatabase config to be true.
-	- `/pveupdate` - Update new entity types (normally run automatically at wipe, but can be run any time).  Any newly-detected entities will be added to the collection 'unknown'. 
+  - `/pveupdate` - Update new entity types (normally run automatically at wipe, but can be run any time).  Any newly-detected entities will be added to the collection 'unknown'. 
 
 The above commands can also be run from console or RCON (without /).
 
@@ -116,29 +130,33 @@ The above commands can also be run from console or RCON (without /).
 ```json
 {
   "Options": {
-    "useZoneManager": true,
-    "useLiteZones": false,
-    "useSchedule": false,
-    "useRealtime": true,
-    "useFriends": false,
-    "useClans": false,
-    "useTeams": false,
-    "AllowCustomEdit": false,
-    "AllowDropDatabase": false,
-    "NPCAutoTurretTargetsPlayers": true,
-    "NPCAutoTurretTargetsNPCs": true,
-    "AutoTurretTargetsPlayers": false,
-    "AutoTurretTargetsNPCs": false,
-    "TrapsIgnorePlayers": false,
-    "HonorBuildingPrivilege": true,
-    "UnprotectedBuildingDamage": false,
-    "HonorRelationships": false
+    "useZoneManager": false,
+      "useSchedule": false,
+      "useGUIAnnouncements": false,
+      "useMessageBroadcast": false,
+      "useRealtime": true,
+      "useFriends": false,
+      "useClans": false,
+      "useTeams": false,
+      "AllowCustomEdit": false,
+      "AllowDropDatabase": false,
+      "NPCAutoTurretTargetsPlayers": true,
+      "NPCAutoTurretTargetsNPCs": true,
+      "AutoTurretTargetsPlayers": false,
+      "AutoTurretTargetsNPCs": false,
+      "SamSitesIgnorePlayers": false,
+      "AllowSuicide": false,
+      "TrapsIgnorePlayers": false,
+      "HonorBuildingPrivilege": true,
+      "UnprotectedBuildingDamage": false,
+      "TwigDamage": false,
+      "HonorRelationships": false
   },
-  "Version": {
-    "Major": 1,
-    "Minor": 0,
-    "Patch": 16
-  }
+    "Version": {
+      "Major": 1,
+      "Minor": 0,
+      "Patch": 56
+    }
 }
 ```
 
@@ -202,7 +220,44 @@ Example 3:
 5. Target exclusion for Chicken.
 6. DAMAGE BLOCKED.
 
+### DynamicPVP
+
+ For use with DynamicPVP, you may need to create a new ruleset.  Change the name to match the one that DynamicPVP uses - default name is "exclude".  Set that ruleset's default damage to true.  After that, reload DynamicPVP.  Your ruleset should look like this:
+ spacer.png
+
+ Note that the Zone is set to lookup.  You can click on "lookup" to see that the zone lookup for this is set to one or more DynamicPVP-created zones.  You should be able to adjust the rules for the zone to block things that would otherwise be allowed.
+
+### A Note about AutoTurrets
+
+AutoTurrets are weird.  The attacker (initiator) from a turret is actually the weapon inside the turret.  In most if not all cases, this will appear as BaseProjectile (1.0.25 on).
+
+So, for example: The default ruleset has damage set to false.  If you add the rule trap_player to this ruleset, all traps will hurt players.  If you want to exclude AutoTurrets from being able to damage players, add BaseProjectile to the source exclusion list.  Consider the simplicity of leaving that global flag off to just skip targeting altogether (AutoTurretTargetsPlayers).
+
+The BaseProjectile source would have impact for turrets as well as other weapon attacks and in this case would likely prevent damage from held weapons as well.  On second thought, maybe not.  The attacker should be BasePlayer for weapons held by a player, and so on...
+
+However, if you have a rule set for a zone with default damage true and no exception rules or exclusions, it should behave like standard PVP.
+
+BotSpawn can override autoturret targeting since we call out to the CanBeTargeted hook.  You will need to set the global configuration in BotSpawn "Turret_Safe": false to allow targeting in addition to setting our global flag, AutoTurretTargetsNPCs.
+
+### Competing Ruleset Examples
+
+    You create a clone of the default ruleset and enable it.
+    You now have two rulesets with identical functionality including default damage, allow rules, and exclusions.
+    Both rulesets would apply to the entire map by default.
+    If you edit the allow rules or exclusions, the rulesets will compete.  The clone will likely override the default.
+    Without a schedule or zone to determine which one is active at any given time or place, either may match for all PVE activity.
+     FIX 1: Apply schedules to both rulesets
+     FIX 2: Set a zone to the cloned ruleset (requires ZoneManager) to isolate it.
+
+    You create a new ruleset with default damage TRUE and enable it
+    You now have a ruleset which competes with the default ruleset.
+    This new ruleset has default damage TRUE, which overrides the default ruleset.
+    The entire map is now PVP.
+     FIX 1: Add a zone to the new ruleset (requires ZoneManager) to isolate it to a specific area of the map.
+     FIX 2: Add a schedule to the new ruleset.  A better option for scheduled PVP might be to add a schedule to the default ruleset and delete your secondary ruleset.
+
+    In short, any rulesets you copy or create should be isolated by time and/or area using schedules or zones.  If your intention is to simply modify what types of damage is to be allowed globally, delete the extra rulesets and edit the default ruleset instead. 
+
 ### TODO
-1. Document all of the commands typically used only by the GUI but potentially used programmatically.  All of these feed off of /pverule or pverule.
-2. Improve the schedule editor.
-3. Fix as found to be broken as this is still somewhat of a WORK IN PROGRESS.
+1. Improve the schedule editor.
+2. Performance tweaks as needed.
