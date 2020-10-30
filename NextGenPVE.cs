@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.55")]
+    [Info("NextGen PVE", "RFC1920", "1.0.56")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -923,8 +923,25 @@ namespace Oxide.Plugins
         private void RunSchedule(bool refresh = false)
         {
             Dictionary<string, bool> enables = new Dictionary<string, bool>();
-            TimeSpan ts = configData.Options.useRealTime ? new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay) : TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
-            if (refresh && configData.Options.useSchedule)
+            TimeSpan ts = new TimeSpan();
+
+            if(configData.Options.useRealTime)
+            {
+                ts = new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay);
+            }
+            else
+            {
+                try
+                {
+                    ts = TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
+                }
+                catch
+                {
+                    Puts("TOD_Sky failure...");
+                    refresh = true;
+                }
+            }
+            if (refresh)// && configData.Options.useSchedule)
             {
                 ngpveschedule = new Dictionary<string, string>();
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
@@ -1051,7 +1068,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            scheduleTimer = timer.Once(configData.Options.useRealTime ? 30f : 5f, () => RunSchedule());
+            scheduleTimer = timer.Once(configData.Options.useRealTime ? 30f : 5f, () => RunSchedule(refresh));
         }
 
         private bool ParseSchedule(string dbschedule, out NextGenPVESchedule parsed)
