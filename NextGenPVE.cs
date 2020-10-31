@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.57")]
+    [Info("NextGen PVE", "RFC1920", "1.0.58")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -250,6 +250,7 @@ namespace Oxide.Plugins
                 ["NPCAutoTurretTargetsPlayers"] = "NPC AutoTurret Targets Players",
                 ["NPCAutoTurretTargetsNPCs"] = "NPC AutoTurret Targets NPCs",
                 ["AutoTurretTargetsPlayers"] = "AutoTurret Targets Players",
+                ["HeliTurretTargetsPlayers"] = "Heli Turret Targets Players",
                 ["AutoTurretTargetsNPCs"] = "AutoTurret Targets NPCs",
                 ["SamSitesIgnorePlayers"] = "SamSites Ignore Players",
                 ["AllowSuicide"] = "Allow Player Suicide",
@@ -396,7 +397,7 @@ namespace Oxide.Plugins
         private object CanBeTargeted(BasePlayer target, MonoBehaviour turret)
         {
             if (target == null || turret == null) return null;
-            if (turret as HelicopterTurret) return null;
+//            if (turret as HelicopterTurret) return null;
             if (!enabled) return null;
 
             object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
@@ -404,6 +405,9 @@ namespace Oxide.Plugins
             {
                 return null;
             }
+
+            var heliturret = turret as HelicopterTurret;
+            if (heliturret != null && !configData.Options.HeliTurretTargetsPlayers) return false;
 
             var aturret = turret as AutoTurret;
             if (aturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
@@ -1931,6 +1935,9 @@ namespace Oxide.Plugins
                             case "NPCAutoTurretTargetsPlayers":
                                 configData.Options.NPCAutoTurretTargetsPlayers = val;
                                 break;
+                            case "HeliTurretTargetsPlayers":
+                                configData.Options.HeliTurretTargetsPlayers = val;
+                                break;
                             case "NPCAutoTurretTargetsNPCs":
                                 configData.Options.NPCAutoTurretTargetsNPCs= val;
                                 break;
@@ -2545,6 +2552,7 @@ namespace Oxide.Plugins
             public bool NPCAutoTurretTargetsPlayers = true;
             public bool NPCAutoTurretTargetsNPCs = true;
             public bool AutoTurretTargetsPlayers = false;
+            public bool HeliTurretTargetsPlayers = true;
             public bool AutoTurretTargetsNPCs = false;
             public bool SamSitesIgnorePlayers = false;
             public bool AllowSuicide = false;
@@ -2561,6 +2569,7 @@ namespace Oxide.Plugins
             configData.Options.NPCAutoTurretTargetsPlayers = true;
             configData.Options.NPCAutoTurretTargetsNPCs = true;
             configData.Options.AutoTurretTargetsPlayers = false;
+            configData.Options.HeliTurretTargetsPlayers = true;
             configData.Options.AutoTurretTargetsNPCs = false;
             configData.Options.SamSitesIgnorePlayers = false;
             configData.Options.AllowSuicide = false;
@@ -2689,6 +2698,16 @@ namespace Oxide.Plugins
             else
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.HeliTurretTargetsPlayers)
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HeliTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HeliTurretTargetsPlayers false");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HeliTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HeliTurretTargetsPlayers true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);
