@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.56")]
+    [Info("NextGen PVE", "RFC1920", "1.0.57")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -411,6 +411,26 @@ namespace Oxide.Plugins
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
             else if (aturret != null && !configData.Options.AutoTurretTargetsPlayers)
+            {
+                return false;
+            }
+
+            var bturret = turret as FlameTurret;
+            if (bturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
+            {
+                if (!configData.Options.AutoTurretTargetsNPCs) return false;
+            }
+            else if (bturret != null && !configData.Options.AutoTurretTargetsPlayers)
+            {
+                return false;
+            }
+
+            var cturret = turret as GunTrap;
+            if (cturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
+            {
+                if (!configData.Options.AutoTurretTargetsNPCs) return false;
+            }
+            else if (bturret != null && !configData.Options.AutoTurretTargetsPlayers)
             {
                 return false;
             }
@@ -3899,7 +3919,6 @@ namespace Oxide.Plugins
             weapon = null;
             return false;
         }
-
 
         private bool PlayerOwnsTC(BasePlayer player, BuildingPrivlidge privilege)
         {
