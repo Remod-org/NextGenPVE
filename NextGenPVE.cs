@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.58")]
+    [Info("NextGen PVE", "RFC1920", "1.0.59")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -462,6 +462,8 @@ namespace Oxide.Plugins
             }
             if (!enabled) return null;
             if (entity == null) return null;
+            string majority = hitinfo.damageTypes.GetMajorityDamageType().ToString();
+            if (majority == "Decay") return null;
 
             if (hitinfo.Initiator == null)
             {
@@ -475,8 +477,6 @@ namespace Oxide.Plugins
                     return null;
                 }
             }
-//            if (hitinfo.damageTypes.Has(Rust.DamageType.Decay)) return null;
-            if (hitinfo.damageTypes.GetMajorityDamageType().ToString() == "Decay") return null;
 
             try
             {
@@ -495,7 +495,7 @@ namespace Oxide.Plugins
             {
                 if ((hitinfo.Initiator as BasePlayer).IPlayer.HasPermission(permNextGenPVEGod))
                 {
-                    Puts("Admin god!");
+                    Puts("Admin almighty!");
                     return null;
                 }
                 if(ttype == "BasePlayer")
@@ -514,11 +514,11 @@ namespace Oxide.Plugins
 
             if (canhurt)
             {
-                DoLog($"DAMAGE ALLOWED for {stype} attacking {ttype}");
+                DoLog($"DAMAGE ALLOWED for {stype} attacking {ttype}, maj. damage {majority}");
                 return null;
             }
 
-            DoLog($"DAMAGE BLOCKED for {stype} attacking {ttype}");
+            DoLog($"DAMAGE BLOCKED for {stype} attacking {ttype}, maj. damage {majority}");
             return true;
         }
         #endregion
@@ -2512,6 +2512,19 @@ namespace Oxide.Plugins
                 configData.Options.AllowCustomEdit = false;
                 configData.Options.AllowDropDatabase = false;
             }
+            if (configData.Version < new VersionNumber(1, 0, 59))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'Bullet', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
             configData.Version = Version;
             SaveConfig(configData);
         }
@@ -3476,7 +3489,7 @@ namespace Oxide.Plugins
                                         if (type == "") continue;
                                         if (foundsrc.Contains(type)) continue;
                                         foundsrc.Add(type);
-                                        if (row > 10)
+                                        if (row > 12)
                                         {
                                             row = 0;
                                             col++;
@@ -3505,7 +3518,7 @@ namespace Oxide.Plugins
                                         if (type == "") continue;
                                         if (foundtgt.Contains(type)) continue;
                                         foundtgt.Add(type);
-                                        if (row > 10)
+                                        if (row > 12)
                                         {
                                             row = 0;
                                             col++;
@@ -4386,6 +4399,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'Barricade', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'BearTrap', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'Bullet', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'FlameTurret', 0)", sqlConnection);
             ct.ExecuteNonQuery();
