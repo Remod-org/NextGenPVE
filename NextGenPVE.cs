@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.59")]
+    [Info("NextGen PVE", "RFC1920", "1.0.60")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -682,17 +682,27 @@ namespace Oxide.Plugins
                 isBuilding = true;
                 if (!PlayerOwnsItem(source as BasePlayer, target))
                 {
+                    DoLog("No building block access.");
                     hasBP = false;
                 }
+                else
+                {
+                    DoLog("Player has privilege to block or is not blocked by TC.");
+                }
             }
-            if (stype == "BasePlayer" && ttype == "BuildingPrivlidge")
+            else if (stype == "BasePlayer" && ttype == "BuildingPrivlidge")
             {
                 if (!PlayerOwnsTC(source as BasePlayer, target as BuildingPrivlidge))
                 {
+                    DoLog("No building privilege.");
                     hasBP = false;
                 }
+                else
+                {
+                    DoLog("Player has building privilege or is not blocked.");
+                }
             }
-            if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
+            else if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
             {
                 isBuilding = true;
                 var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
@@ -709,7 +719,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            if (stype == "BaseHelicopter" && ttype == "BuildingPrivlidge")
+            else if (stype == "BaseHelicopter" && ttype == "BuildingPrivlidge")
             {
                 isBuilding = true;
                 var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
@@ -3954,8 +3964,12 @@ namespace Oxide.Plugins
 
         private bool PlayerOwnsTC(BasePlayer player, BuildingPrivlidge privilege)
         {
+            if (!configData.Options.HonorBuildingPrivilege)
+            {
+                DoLog("HonorBuildingPrivilege set to false.  Skipping owner checks...");
+                return true;
+            }
             DoLog($"Does player {player.displayName} own {privilege.ShortPrefabName}?");
-            if (!configData.Options.HonorBuildingPrivilege) return true;
 
             BuildingManager.Building building = privilege.GetBuilding();
             if (building != null)
@@ -3965,10 +3979,12 @@ namespace Oxide.Plugins
                 {
                     if (configData.Options.UnprotectedBuildingDamage)
                     {
+                        DoLog($"Null privileges.  UnprotectedBuildingDamage true.  Player effectively owns {privilege.ShortPrefabName}");
                         return true;
                     }
                     else
                     {
+                        DoLog($"Null privileges.  UnprotectedBuildingDamage false.  Player effectively does not own {privilege.ShortPrefabName}");
                         return false;
                     }
                 }
