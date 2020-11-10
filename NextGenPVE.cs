@@ -441,7 +441,7 @@ namespace Oxide.Plugins
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
-            else if (bturret != null && !configData.Options.AutoTurretTargetsPlayers)
+            else if (cturret != null && !configData.Options.AutoTurretTargetsPlayers)
             {
                 return false;
             }
