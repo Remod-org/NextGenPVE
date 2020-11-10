@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.60")]
+    [Info("NextGen PVE", "RFC1920", "1.0.61")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -171,10 +171,11 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
-            if (ConVar.Server.pve)
-            {
-                Puts("SERVER PVE MUST BE SET TO FALSE!");
-            }
+            if (ConVar.Server.pve) Puts("SERVER PVE MUST BE SET TO FALSE!");
+        }
+
+        protected override void LoadDefaultMessages()
+        {
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 ["notauthorized"] = "You don't have permission to use this command.",
@@ -379,12 +380,18 @@ namespace Oxide.Plugins
             return null;
         }
 
+
         private object OnSamSiteTarget(SamSite sam, BaseMountable mountable)
         {
             if (sam == null) return null;
             var player = GetMountedPlayer(mountable);
             if(player.IsValid())
             {
+                if (configData.Options.SamSitesIgnorePlayers)
+                {
+                    DoLog($"Skipping targeting by SamSite of player {player.displayName}");
+                    return true;
+                }
                 object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { player, sam });
                 if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
                 {
