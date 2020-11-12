@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.61")]
+    [Info("NextGen PVE", "RFC1920", "1.0.62")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -253,6 +253,7 @@ namespace Oxide.Plugins
                 ["AutoTurretTargetsPlayers"] = "AutoTurret Targets Players",
                 ["HeliTurretTargetsPlayers"] = "Heli Turret Targets Players",
                 ["AutoTurretTargetsNPCs"] = "AutoTurret Targets NPCs",
+                ["NPCSamSitesIgnorePlayers"] = "NPC SamSites Ignore Players",
                 ["SamSitesIgnorePlayers"] = "SamSites Ignore Players",
                 ["AllowSuicide"] = "Allow Player Suicide",
                 ["TrapsIgnorePlayers"] = "Traps Ignore Players",
@@ -364,7 +365,7 @@ namespace Oxide.Plugins
                 return mount.GetMounted();
             }
 
-            if (mount is BaseVehicle)
+            if (mount as BaseVehicle)
             {
                 var vehicle = mount as BaseVehicle;
 
@@ -380,25 +381,39 @@ namespace Oxide.Plugins
             return null;
         }
 
-
         private object OnSamSiteTarget(SamSite sam, BaseMountable mountable)
         {
             if (sam == null) return null;
+            if (mountable == null) return null;
             var player = GetMountedPlayer(mountable);
+
             if(player.IsValid())
             {
-                if (configData.Options.SamSitesIgnorePlayers)
+                if (sam.OwnerID == 0 && configData.Options.NPCSamSitesIgnorePlayers)
+                {
+                    DoLog($"Skipping targeting by NPC SamSite of player {player.displayName}");
+                    return true; // block
+                }
+                else if (sam.OwnerID > 0 && configData.Options.SamSitesIgnorePlayers)
                 {
                     DoLog($"Skipping targeting by SamSite of player {player.displayName}");
-                    return true;
+                    return true; // block
                 }
+
                 object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { player, sam });
-                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool)
                 {
-                    return null;
+                    if ((bool)extCanEntityBeTargeted)
+                    {
+                        return null; // allow
+                    }
+                    else
+                    {
+                        return true; // block
+                    }
                 }
             }
-            return null;
+            return null; // allow
         }
 
         private object CanBeTargeted(BasePlayer target, MonoBehaviour turret)
@@ -1964,6 +1979,9 @@ namespace Oxide.Plugins
                             case "AutoTurretTargetsNPCs":
                                 configData.Options.AutoTurretTargetsNPCs = val;
                                 break;
+                            case "NPCSamSitesIgnorePlayers":
+                                configData.Options.NPCSamSitesIgnorePlayers = val;
+                                break;
                             case "SamSitesIgnorePlayers":
                                 configData.Options.SamSitesIgnorePlayers = val;
                                 break;
@@ -2584,6 +2602,7 @@ namespace Oxide.Plugins
             public bool AutoTurretTargetsPlayers = false;
             public bool HeliTurretTargetsPlayers = true;
             public bool AutoTurretTargetsNPCs = false;
+            public bool NPCSamSitesIgnorePlayers = false;
             public bool SamSitesIgnorePlayers = false;
             public bool AllowSuicide = false;
             public bool TrapsIgnorePlayers = false;
@@ -2601,6 +2620,7 @@ namespace Oxide.Plugins
             configData.Options.AutoTurretTargetsPlayers = false;
             configData.Options.HeliTurretTargetsPlayers = true;
             configData.Options.AutoTurretTargetsNPCs = false;
+            configData.Options.NPCSamSitesIgnorePlayers = false;
             configData.Options.SamSitesIgnorePlayers = false;
             configData.Options.AllowSuicide = false;
             configData.Options.TrapsIgnorePlayers = false;
@@ -2758,6 +2778,16 @@ namespace Oxide.Plugins
             else
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
+            }
+            row++;
+            pb = GetButtonPositionZ(row, col);
+            if(configData.Options.NPCSamSitesIgnorePlayers)
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers false");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers true");
             }
             row++;
             pb = GetButtonPositionZ(row, col);

@@ -144,6 +144,7 @@ The above commands can also be run from console or RCON (without /).
       "NPCAutoTurretTargetsNPCs": true,
       "AutoTurretTargetsPlayers": false,
       "AutoTurretTargetsNPCs": false,
+      "NPCSamSitesIgnorePlayers": false,
       "SamSitesIgnorePlayers": false,
       "AllowSuicide": false,
       "TrapsIgnorePlayers": false,
