@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.62")]
+    [Info("NextGen PVE", "RFC1920", "1.0.63")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -507,8 +507,9 @@ namespace Oxide.Plugins
             }
             catch { }
 
-            //Puts($"attacker: {hitinfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}"); return true;
-            //Puts($"attacker: {hitinfo.Initiator.ShortPrefabName}, victim: {entity.ShortPrefabName}");
+#if DEBUG
+            Puts($"attacker prefab: {hitinfo.Initiator.ShortPrefabName}, victim prefab: {entity.ShortPrefabName}");
+#endif
             string stype; string ttype;
             bool canhurt = EvaluateRulesets(hitinfo.Initiator, entity as BaseEntity, out stype, out ttype);
             if (stype == null && ttype == null) return null;
@@ -680,8 +681,9 @@ namespace Oxide.Plugins
             }
             stype = source.GetType().Name;
             ttype = target.GetType().Name;
-            //Puts($"{stype} attacking {ttype}");
-
+#if DEBUG
+            Puts($"attacker type: {stype}, victim type: {ttype}");
+#endif
             // Special case for preventing codelock hacking
             if (stype =="CodeLock" && ttype == "BasePlayer")
             {
@@ -786,7 +788,7 @@ namespace Oxide.Plugins
             string rulesetname = null;
 
             string src = null; string tgt = null;
-            //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection);
+            //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'");
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
@@ -799,7 +801,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'", sqlConnection);
+            //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'");
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'", sqlConnection))
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
@@ -828,8 +830,10 @@ namespace Oxide.Plugins
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
                 {
+                    DoLog("QUERY START");
                     while (readMe.Read())
                     {
+                        DoLog("READING...");
                         if (foundmatch) break; // Breaking due to match found in previously checked ruleset
                         enabled = readMe.GetBoolean(3);
                         rulesetname = readMe.GetString(0);
@@ -869,7 +873,7 @@ namespace Oxide.Plugins
                             DoLog($"Lookup zone {zone}");
                         }
 
-                        DoLog($"Checking ruleset {rulesetname}");
+                        DoLog($"Checking ruleset {rulesetname} for {src} attacking {tgt}.");
                         //Puts($"SELECT enabled, src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' AND enabled='1' AND exception='{src}_{tgt}'");
                         if (src != null && tgt != null)
                         {
@@ -2559,6 +2563,17 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Version < new VersionNumber(1, 0, 63))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand($"INSERT OR REPLACE INTO ngpve_entities VALUES('trap', 'AutoTurret', 0)", c)) // AutoTurret when attacked
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
 
             configData.Version = Version;
             SaveConfig(configData);
@@ -3376,8 +3391,8 @@ namespace Oxide.Plugins
             else
             {
                 UI.Label(ref container, NGPVERULESELECT, UI.Color("#5555cc", 1f), Lang("stock"), 12, "0.72 0.95", "0.78 0.98");
-                UI.Label(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), Lang("enabled"), 12, "0.79 0.95", "0.85 0.98");
-                UI.Label(ref container, NGPVERULESELECT, UI.Color("#d85540", 1f), Lang("custom"), 12, "0.86 0.95", "0.92 0.98");
+                UI.Label(ref container, NGPVERULESELECT, UI.Color("#d85540", 1f), Lang("custom"), 12, "0.79 0.95", "0.85 0.98");
+                UI.Label(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), Lang("enabled"), 12, "0.86 0.95", "0.92 0.98");
 
                 custsel = "";
             }
@@ -3536,23 +3551,23 @@ namespace Oxide.Plugins
                                         if (type == "") continue;
                                         if (foundsrc.Contains(type)) continue;
                                         foundsrc.Add(type);
-                                        if (row > 12)
+                                        if (row > 13)
                                         {
                                             row = 0;
                                             col++;
                                         }
-                                        pb = GetButtonPositionP(row, col);
+                                        pb = GetButtonPositionS(row, col);
                                         string eColor = "#d85540";
 
                                         //Puts($"  Creating button for {type}, src_exclude='{src_exclude}'");
                                         if (!src_exclude.Contains(type))
                                         {
-                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} add");
+                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} add");
                                         }
                                         else
                                         {
                                             eColor = "#55d840";
-                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} delete");
+                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} src_exclude {type} delete");
                                         }
                                         row++;
                                     }
@@ -3565,23 +3580,23 @@ namespace Oxide.Plugins
                                         if (type == "") continue;
                                         if (foundtgt.Contains(type)) continue;
                                         foundtgt.Add(type);
-                                        if (row > 12)
+                                        if (row > 13)
                                         {
                                             row = 0;
                                             col++;
                                         }
-                                        pb = GetButtonPositionP(row, col);
+                                        pb = GetButtonPositionS(row, col);
                                         string eColor = "#d85540";
 
                                         //Puts($"  Creating button for {type}, tgt_exclude='{tgt_exclude}'");
                                         if (!tgt_exclude.Contains(type))
                                         {
-                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} add");
+                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} add");
                                         }
                                         else
                                         {
                                             eColor = "#55d840";
-                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} delete");
+                                            UI.Button(ref container, NGPVERULEEXCLUSIONS, UI.Color(eColor, 1f), type, 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} tgt_exclude {type} delete");
                                         }
                                         row++;
                                     }
@@ -3916,6 +3931,14 @@ namespace Oxide.Plugins
             float offsetY = (0.87f - (rowNumber * 0.064f));
 
             return new float[] { offsetX, offsetY, offsetX + (0.226f * colspan), offsetY + 0.03f };
+        }
+
+        private float[] GetButtonPositionS(int rowNumber, int columnNumber, float colspan = 1f)
+        {
+            float offsetX = 0.05f + (0.116f * columnNumber);
+            float offsetY = (0.87f - (rowNumber * 0.064f));
+
+            return new float[] { offsetX, offsetY, offsetX + (0.206f * colspan), offsetY + 0.03f };
         }
 
         private float[] GetButtonPositionZ(int rowNumber, int columnNumber)
@@ -4447,6 +4470,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter', 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'AutoTurret', 0)", sqlConnection); // AutoTurret when attacked
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'BaseProjectile', 0)", sqlConnection); // AutoTurret weapon
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('trap', 'Barricade', 0)", sqlConnection);
@@ -4646,6 +4671,10 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_building', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_vehicle', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'vehicle_vehicle', null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'highwall_player', null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
         }
         #endregion
