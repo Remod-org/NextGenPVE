@@ -115,7 +115,7 @@ namespace Oxide.Plugins
             if(configData.Options.useSchedule) RunSchedule(true);
         }
 
-        void OnConnected(IPlayer player) => OnUserDisconnected(player);
+        void OnUserConnected(IPlayer player) => OnUserDisconnected(player);
         void OnUserDisconnected(IPlayer player)
         {
             if (configData.Options.usePlayerDatabase) return;
