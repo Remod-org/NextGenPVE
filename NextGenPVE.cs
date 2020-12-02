@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.63")]
+    [Info("NextGen PVE", "RFC1920", "1.0.64")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -416,10 +416,9 @@ namespace Oxide.Plugins
             return null; // allow
         }
 
-        private object CanBeTargeted(BasePlayer target, MonoBehaviour turret)
+        private object CanBeTargeted(BasePlayer target, GunTrap turret)
         {
             if (target == null || turret == null) return null;
-//            if (turret as HelicopterTurret) return null;
             if (!enabled) return null;
 
             object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
@@ -428,50 +427,89 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            var heliturret = turret as HelicopterTurret;
-            if (heliturret != null && !configData.Options.HeliTurretTargetsPlayers) return false;
-
-            var aturret = turret as AutoTurret;
-            if (aturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
+            if ((HumanNPC && IsHumanNPC(target)) || target.IsNpc)
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
-            else if (aturret != null && !configData.Options.AutoTurretTargetsPlayers)
+            else if (!configData.Options.AutoTurretTargetsPlayers)
             {
                 return false;
             }
+            return null;
+        }
 
-            var bturret = turret as FlameTurret;
-            if (bturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
+        private object CanBeTargeted(BasePlayer target, FlameTurret turret)
+        {
+            if (target == null || turret == null) return null;
+            if (!enabled) return null;
+
+            object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
+            if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+            {
+                return null;
+            }
+
+            if ((HumanNPC && IsHumanNPC(target)) || target.IsNpc)
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
-            else if (bturret != null && !configData.Options.AutoTurretTargetsPlayers)
+            else if (!configData.Options.AutoTurretTargetsPlayers)
             {
                 return false;
             }
+            return null;
+        }
 
-            var cturret = turret as GunTrap;
-            if (cturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
+        private object CanBeTargeted(BasePlayer target, HelicopterTurret turret)
+        {
+            if (target == null || turret == null) return null;
+            if (!enabled) return null;
+
+            if (!configData.Options.HeliTurretTargetsPlayers) return false;
+            return null;
+        }
+
+        private object CanBeTargeted(BasePlayer target, AutoTurret turret)
+        {
+            if (target == null || turret == null) return null;
+            if (!enabled) return null;
+
+            object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
+            if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+            {
+                return null;
+            }
+
+            if ((HumanNPC && IsHumanNPC(target)) || target.IsNpc)
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
-            else if (cturret != null && !configData.Options.AutoTurretTargetsPlayers)
+            else if (!configData.Options.AutoTurretTargetsPlayers)
             {
                 return false;
             }
+            return null;
+        }
 
-            var npcturret = turret as NPCAutoTurret;
-            if (npcturret != null && ((HumanNPC && IsHumanNPC(target)) || target.IsNpc))
+        private object CanBeTargeted(BasePlayer target, NPCAutoTurret turret)
+        {
+            if (target == null || turret == null) return null;
+            if (!enabled) return null;
+
+            object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
+            if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+            {
+                return null;
+            }
+
+            if ((HumanNPC && IsHumanNPC(target)) || target.IsNpc)
             {
                 if (!configData.Options.NPCAutoTurretTargetsNPCs) return false;
             }
-            else if (npcturret != null && !configData.Options.NPCAutoTurretTargetsPlayers)
+            else if (!configData.Options.NPCAutoTurretTargetsPlayers)
             {
                 return false;
             }
-
-            //Puts("CanBeTargeted == yes");
             return null;
         }
 
