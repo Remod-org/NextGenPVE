@@ -118,7 +118,7 @@ namespace Oxide.Plugins
         void OnUserConnected(IPlayer player) => OnUserDisconnected(player);
         void OnUserDisconnected(IPlayer player)
         {
-            if (configData.Options.usePlayerDatabase) return;
+//            if (configData.Options.usePlayerDatabase) return;
             if(lastConnected.ContainsKey(player.Id))
             {
                 lastConnected[player.Id] = ToEpochTime(DateTime.UtcNow);
@@ -780,15 +780,13 @@ namespace Oxide.Plugins
                 else if (configData.Options.protectedDays > 0 && target.OwnerID > 0)
                 {
                     // Check days since last owner connection
-                    long lc = 0;
-                    if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
-                    {
-                        lc = (long)PlayerDatabase?.CallHook("GetPlayerData", target.OwnerID.ToString(), "lc");
-                    }
-                    else
-                    {
-                        lc = lastConnected.ContainsKey(target.OwnerID.ToString()) ? lastConnected[target.OwnerID.ToString()] : 0;
-                    }
+//                    long lc = 0;
+//                    if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
+//                    {
+//                        lc = (long)PlayerDatabase?.CallHook("GetPlayerData", target.OwnerID.ToString(), "lc");
+//                    }
+//                    else
+                    long lc = lastConnected.ContainsKey(target.OwnerID.ToString()) ? lastConnected[target.OwnerID.ToString()] : 0;
                     if (lc > 0)
                     {
                         long now = ToEpochTime(DateTime.UtcNow);
@@ -2685,7 +2683,7 @@ namespace Oxide.Plugins
         private class Options
         {
             public bool useZoneManager = false;
-            public bool usePlayerDatabase = false;
+//            public bool usePlayerDatabase = false;
             public float protectedDays = 0f;
             public bool useSchedule = false;
             public bool useGUIAnnouncements = false;
@@ -4178,15 +4176,14 @@ namespace Oxide.Plugins
                 if (configData.Options.protectedDays > 0 && entity.OwnerID > 0)
                 {
                     // Check days since last owner connection
-                    long lc = 0;
-                    if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
-                    {
-                        lc = (long)PlayerDatabase?.CallHook("GetPlayerData", entity.OwnerID.ToString(), "lc");
-                    }
-                    else
-                    {
-                        lc = lastConnected.ContainsKey(entity.OwnerID.ToString()) ? lastConnected[entity.OwnerID.ToString()] : 0;
-                    }
+//                    long lc = 0;
+//                    if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
+//                    {
+//                        lc = (long)PlayerDatabase?.CallHook("GetPlayerData", entity.OwnerID.ToString(), "lc");
+//                    }
+//                    else
+//                    {
+                    long lc = lastConnected.ContainsKey(entity.OwnerID.ToString()) ? lastConnected[entity.OwnerID.ToString()] : 0;
                     if(lc > 0)
                     {
                         long now = ToEpochTime(DateTime.UtcNow);
