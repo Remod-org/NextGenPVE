@@ -132,7 +132,6 @@ The above commands can also be run from console or RCON (without /).
   "Options": {
     "useZoneManager": false,
       "useSchedule": false,
-      "usePlayerDatabase": false,
       "protectedDays": 0f,
       "useGUIAnnouncements": false,
       "useMessageBroadcast": false,
@@ -180,7 +179,6 @@ AllowCustomEdit - Enables the editing of custom rulesets and setting collections
 AllowDropDatabase - Enables pvedrop command and GUI button to reset the database to defaults.  This wipes everything!!!
 
 If protectedDays is set to any value other than zero, player buildings, etc. will only be protected if the user has been online sometime within that number of days.
-If usePlayerDatabase is true, and the plugin is available, the last connected time will be taken from that plugin.  Otherwise, we save that information in a new data file, ngpve_lastconnected.
 
 ### Details
 
