@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.64")]
+    [Info("NextGen PVE", "RFC1920", "1.0.65")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -46,6 +46,7 @@ namespace Oxide.Plugins
         // Ruleset to multiple zones
         private Dictionary<string, NextGenPVEZoneMap> ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
         private Dictionary<string, string> ngpveschedule = new Dictionary<string, string>();
+        private Dictionary<string, long> lastConnected = new Dictionary<string, long>();
 
         private const string permNextGenPVEUse = "nextgenpve.use";
         private const string permNextGenPVEAdmin = "nextgenpve.admin";
@@ -60,7 +61,7 @@ namespace Oxide.Plugins
         private string TextColor = "Red";
 
         [PluginReference]
-        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements;
+        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements, PlayerDatabase;
 
         private readonly string logfilename = "log";
         private bool dolog = false;
@@ -114,6 +115,21 @@ namespace Oxide.Plugins
             if(configData.Options.useSchedule) RunSchedule(true);
         }
 
+        void OnConnected(IPlayer player) => OnUserDisconnected(player);
+        void OnUserDisconnected(IPlayer player)
+        {
+            if (configData.Options.usePlayerDatabase) return;
+            if(lastConnected.ContainsKey(player.Id))
+            {
+                lastConnected[player.Id] = ToEpochTime(DateTime.UtcNow);
+            }
+            else
+            {
+                lastConnected.Add(player.Id, ToEpochTime(DateTime.UtcNow));
+            }
+            SaveData();
+        }
+
         private object OnUserCommand(BasePlayer player, string command, string[] args)
         {
             if (command != "pverule" && isopen.Contains(player.userID))
@@ -154,7 +170,7 @@ namespace Oxide.Plugins
                 if(objname.Contains("Entity")) continue;
                 if (names.Contains(objname)) continue; // Saves 20-30 seconds of processing time.
                 names.Add(objname);
-                Puts($"{objname}");
+                //Puts($"{objname}");
 
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
@@ -335,11 +351,13 @@ namespace Oxide.Plugins
             if (!found) LoadDefaultRuleset();
 
             ngpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, NextGenPVEZoneMap>>(Name + "/ngpve_zonemaps");
+            lastConnected = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, long>>(Name + "/ngpve_lastconnected");
         }
 
         private void SaveData()
         {
             Interface.Oxide.DataFileSystem.WriteObject(Name + "/ngpve_zonemaps", ngpvezonemaps);
+            Interface.Oxide.DataFileSystem.WriteObject(Name + "/ngpve_lastconnected", lastConnected);
         }
         #endregion
 
@@ -758,6 +776,33 @@ namespace Oxide.Plugins
                 {
                     DoLog("No building privilege.");
                     hasBP = false;
+                }
+                else if (configData.Options.protectedDays > 0 && target.OwnerID > 0)
+                {
+                    // Check days since last owner connection
+                    long lc = 0;
+                    if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
+                    {
+                        lc = (long)PlayerDatabase?.CallHook("GetPlayerData", target.OwnerID.ToString(), "lc");
+                    }
+                    else
+                    {
+                        lc = lastConnected.ContainsKey(target.OwnerID.ToString()) ? lastConnected[target.OwnerID.ToString()] : 0;
+                    }
+                    if (lc > 0)
+                    {
+                        long now = ToEpochTime(DateTime.UtcNow);
+                        float days = Math.Abs((now - lc) / 86400);
+                        if (days > configData.Options.protectedDays)
+                        {
+                            DoLog($"Allowing TC damage for offline owner beyond {configData.Options.protectedDays.ToString()} days");
+                            return true;
+                        }
+                        else
+                        {
+                            DoLog($"Owner was last connected {days.ToString()} days ago and is still protected...");
+                        }
+                    }
                 }
                 else
                 {
@@ -2640,6 +2685,8 @@ namespace Oxide.Plugins
         private class Options
         {
             public bool useZoneManager = false;
+            public bool usePlayerDatabase = false;
+            public float protectedDays = 0f;
             public bool useSchedule = false;
             public bool useGUIAnnouncements = false;
             public bool useMessageBroadcast = false;
@@ -4086,6 +4133,7 @@ namespace Oxide.Plugins
                         return false;
                     }
                 }
+
                 foreach (var auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                 {
                     if (privilege.OwnerID == player.userID)
@@ -4126,6 +4174,33 @@ namespace Oxide.Plugins
                         }
                     }
                     catch { }
+                }
+                if (configData.Options.protectedDays > 0 && entity.OwnerID > 0)
+                {
+                    // Check days since last owner connection
+                    long lc = 0;
+                    if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
+                    {
+                        lc = (long)PlayerDatabase?.CallHook("GetPlayerData", entity.OwnerID.ToString(), "lc");
+                    }
+                    else
+                    {
+                        lc = lastConnected.ContainsKey(entity.OwnerID.ToString()) ? lastConnected[entity.OwnerID.ToString()] : 0;
+                    }
+                    if(lc > 0)
+                    {
+                        long now = ToEpochTime(DateTime.UtcNow);
+                        float days = Math.Abs((now - lc) / 86400);
+                        if(days > configData.Options.protectedDays)
+                        {
+                            DoLog($"Allowing damage for offline owner beyond {configData.Options.protectedDays.ToString()} days");
+                            return true;
+                        }
+                        else
+                        {
+                            DoLog($"Owner was last connected {days.ToString()} days ago and is still protected...");
+                        }
+                    }
                 }
 
                 if (!configData.Options.HonorBuildingPrivilege) return true;
@@ -4194,6 +4269,15 @@ namespace Oxide.Plugins
             }
             DoLog("Player does not own or have access to this entity");
             return false;
+        }
+
+        // From PlayerDatabase
+        private long ToEpochTime(DateTime dateTime)
+        {
+            var date = dateTime.ToUniversalTime();
+            var ticks = date.Ticks - new DateTime(1970, 1, 1, 0, 0, 0, 0).Ticks;
+            var ts = ticks / TimeSpan.TicksPerSecond;
+            return ts;
         }
 
         public static string StringToBinary(string data)
