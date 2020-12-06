@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.65")]
+    [Info("NextGen PVE", "RFC1920", "1.0.66")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -61,7 +61,7 @@ namespace Oxide.Plugins
         private string TextColor = "Red";
 
         [PluginReference]
-        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements, PlayerDatabase;
+        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements;//, PlayerDatabase;
 
         private readonly string logfilename = "log";
         private bool dolog = false;
@@ -118,8 +118,10 @@ namespace Oxide.Plugins
         void OnUserConnected(IPlayer player) => OnUserDisconnected(player);
         void OnUserDisconnected(IPlayer player)
         {
-//            if (configData.Options.usePlayerDatabase) return;
-            if(lastConnected.ContainsKey(player.Id))
+            //if (configData.Options.usePlayerDatabase) return;
+            long lc = 0;
+            lastConnected.TryGetValue(player.Id, out lc);
+            if(lc > 0)
             {
                 lastConnected[player.Id] = ToEpochTime(DateTime.UtcNow);
             }
@@ -780,13 +782,13 @@ namespace Oxide.Plugins
                 else if (configData.Options.protectedDays > 0 && target.OwnerID > 0)
                 {
                     // Check days since last owner connection
-//                    long lc = 0;
+                    long lc = 0;
 //                    if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
 //                    {
 //                        lc = (long)PlayerDatabase?.CallHook("GetPlayerData", target.OwnerID.ToString(), "lc");
 //                    }
 //                    else
-                    long lc = lastConnected.ContainsKey(target.OwnerID.ToString()) ? lastConnected[target.OwnerID.ToString()] : 0;
+                    lastConnected.TryGetValue(target.OwnerID.ToString(), out lc);
                     if (lc > 0)
                     {
                         long now = ToEpochTime(DateTime.UtcNow);
@@ -903,7 +905,8 @@ namespace Oxide.Plugins
                     mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
                     break;
                 default:
-                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='default' OR zone='0' OR zone='lookup'";
+                    //mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='default' OR zone='0' OR zone='lookup'";
+                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup'";
                     break;
             }
             //using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets", sqlConnection))
@@ -4176,14 +4179,14 @@ namespace Oxide.Plugins
                 if (configData.Options.protectedDays > 0 && entity.OwnerID > 0)
                 {
                     // Check days since last owner connection
-//                    long lc = 0;
+                    long lc = 0;
 //                    if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
 //                    {
 //                        lc = (long)PlayerDatabase?.CallHook("GetPlayerData", entity.OwnerID.ToString(), "lc");
 //                    }
 //                    else
 //                    {
-                    long lc = lastConnected.ContainsKey(entity.OwnerID.ToString()) ? lastConnected[entity.OwnerID.ToString()] : 0;
+                    lastConnected.TryGetValue(entity.OwnerID.ToString(), out lc);
                     if(lc > 0)
                     {
                         long now = ToEpochTime(DateTime.UtcNow);
