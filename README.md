@@ -231,17 +231,6 @@ Example 3:
 
  Note that the Zone is set to lookup.  You can click on "lookup" to see that the zone lookup for this is set to one or more DynamicPVP-created zones.  You should be able to adjust the rules for the zone to block things that would otherwise be allowed.
 
-### A Note about AutoTurrets
-
-AutoTurrets are weird.  The attacker (initiator) from a turret is actually the weapon inside the turret.  In most if not all cases, this will appear as BaseProjectile (1.0.25 on).
-
-So, for example: The default ruleset has damage set to false.  If you add the rule trap_player to this ruleset, all traps will hurt players.  If you want to exclude AutoTurrets from being able to damage players, add BaseProjectile to the source exclusion list.  Consider the simplicity of leaving that global flag off to just skip targeting altogether (AutoTurretTargetsPlayers).
-
-The BaseProjectile source would have impact for turrets as well as other weapon attacks and in this case would likely prevent damage from held weapons as well.  On second thought, maybe not.  The attacker should be BasePlayer for weapons held by a player, and so on...
-
-However, if you have a rule set for a zone with default damage true and no exception rules or exclusions, it should behave like standard PVP.
-
-BotSpawn can override autoturret targeting since we call out to the CanBeTargeted hook.  You will need to set the global configuration in BotSpawn "Turret_Safe": false to allow targeting in addition to setting our global flag, AutoTurretTargetsNPCs.
 
 ### Competing Ruleset Examples
 
