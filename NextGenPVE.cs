@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.66")]
+    [Info("NextGen PVE", "RFC1920", "1.0.67")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -545,19 +545,6 @@ namespace Oxide.Plugins
             string majority = hitinfo.damageTypes.GetMajorityDamageType().ToString();
             if (majority == "Decay") return null;
 
-            if (hitinfo.Initiator == null)
-            {
-                AttackEntity turret;
-                if (IsAutoTurret(hitinfo, out turret))
-                {
-                    hitinfo.Initiator = turret as BaseEntity;
-                }
-                else
-                {
-                    return null;
-                }
-            }
-
             try
             {
                 object CanTakeDamage = Interface.CallHook("CanEntityTakeDamage", new object[] { entity, hitinfo });
@@ -844,7 +831,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            if (configData.Options.useZoneManager)
+            if (ZoneManager && configData.Options.useZoneManager)
             {
                 string[] sourcezone = GetEntityZones(source);
                 string[] targetzone = GetEntityZones(target);
@@ -3549,7 +3536,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand rs = new SQLiteCommand($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand rs = new SQLiteCommand($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' ORDER BY src_exclude,tgt_exclude", c))
                 {
                     using (SQLiteDataReader rsd = rs.ExecuteReader())
                     {
@@ -4090,21 +4077,6 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
-            return false;
-        }
-
-        private bool IsAutoTurret(HitInfo hitinfo, out AttackEntity weapon)
-        {
-            // Check for turret initiator
-            var turret = hitinfo.Weapon?.GetComponentInParent<AutoTurret>();
-            if (turret != null)
-            {
-                DoLog($"Turret weapon '{hitinfo.Weapon?.ShortPrefabName}' is initiator");
-                weapon = hitinfo.Weapon;
-                return true;
-            }
-
-            weapon = null;
             return false;
         }
 
