@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.67")]
+    [Info("NextGen PVE", "RFC1920", "1.0.68")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -61,7 +61,7 @@ namespace Oxide.Plugins
         private string TextColor = "Red";
 
         [PluginReference]
-        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements;//, PlayerDatabase;
+        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements;
 
         private readonly string logfilename = "log";
         private bool dolog = false;
@@ -112,7 +112,7 @@ namespace Oxide.Plugins
             permission.RegisterPermission(permNextGenPVEGod, this);
             enabled = true;
 
-            if(configData.Options.useSchedule) RunSchedule(true);
+            if (configData.Options.useSchedule) RunSchedule(true);
         }
 
         void OnUserConnected(IPlayer player) => OnUserDisconnected(player);
@@ -121,7 +121,7 @@ namespace Oxide.Plugins
             //if (configData.Options.usePlayerDatabase) return;
             long lc = 0;
             lastConnected.TryGetValue(player.Id, out lc);
-            if(lc > 0)
+            if (lc > 0)
             {
                 lastConnected[player.Id] = ToEpochTime(DateTime.UtcNow);
             }
@@ -169,7 +169,7 @@ namespace Oxide.Plugins
             foreach (var obj in Resources.FindObjectsOfTypeAll(new BaseCombatEntity().GetType()))
             {
                 string objname = obj.GetType().ToString();
-                if(objname.Contains("Entity")) continue;
+                if (objname.Contains("Entity")) continue;
                 if (names.Contains(objname)) continue; // Saves 20-30 seconds of processing time.
                 names.Add(objname);
                 //Puts($"{objname}");
@@ -189,7 +189,7 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
-            if (ConVar.Server.pve) Puts("SERVER PVE MUST BE SET TO FALSE!");
+            ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
         }
 
         protected override void LoadDefaultMessages()
@@ -407,7 +407,7 @@ namespace Oxide.Plugins
             if (mountable == null) return null;
             var player = GetMountedPlayer(mountable);
 
-            if(player.IsValid())
+            if (player.IsValid())
             {
                 if (sam.OwnerID == 0 && configData.Options.NPCSamSitesIgnorePlayers)
                 {
@@ -447,7 +447,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            if ((HumanNPC && IsHumanNPC(target)) || target.IsNpc)
+            if (IsHumanNPC(target) || target.IsNpc)
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
@@ -469,7 +469,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            if ((HumanNPC && IsHumanNPC(target)) || target.IsNpc)
+            if (IsHumanNPC(target) || target.IsNpc)
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
@@ -500,7 +500,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            if ((HumanNPC && IsHumanNPC(target)) || target.IsNpc)
+            if (IsHumanNPC(target) || target.IsNpc)
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
@@ -522,7 +522,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            if ((HumanNPC && IsHumanNPC(target)) || target.IsNpc)
+            if (IsHumanNPC(target) || target.IsNpc)
             {
                 if (!configData.Options.NPCAutoTurretTargetsNPCs) return false;
             }
@@ -535,11 +535,7 @@ namespace Oxide.Plugins
 
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
-            if (ConVar.Server.pve)
-            {
-                Puts("SERVER PVE MUST BE SET TO FALSE!");
-                return null;
-            }
+            if (ConVar.Server.pve) ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
             if (!enabled) return null;
             if (entity == null) return null;
             string majority = hitinfo.damageTypes.GetMajorityDamageType().ToString();
@@ -582,11 +578,11 @@ namespace Oxide.Plugins
 
             if (canhurt)
             {
-                DoLog($"DAMAGE ALLOWED for {stype} attacking {ttype}, maj. damage {majority}");
+                DoLog($"DAMAGE ALLOWED for {stype} attacking {ttype}, majority damage type {majority}");
                 return null;
             }
 
-            DoLog($"DAMAGE BLOCKED for {stype} attacking {ttype}, maj. damage {majority}");
+            DoLog($"DAMAGE BLOCKED for {stype} attacking {ttype}, majority damage type {majority}");
             return true;
         }
         #endregion
@@ -2645,6 +2641,17 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Version < new VersionNumber(1, 0, 68))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'TunnelDweller', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
 
             configData.Version = Version;
             SaveConfig(configData);
@@ -4040,7 +4047,6 @@ namespace Oxide.Plugins
             return null;
         }
 
-        //private bool IsHumanNPC(BaseEntity player) => (bool)HumanNPC?.Call("IsHumanNPC", player as BasePlayer);
         private bool IsHumanNPC(BaseEntity player)
         {
             if (HumanNPC)
@@ -4525,6 +4531,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'HelicopterDebris', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'HumanNPC', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'TunnelDweller', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'BaseNpc', 0)", sqlConnection);
             ct.ExecuteNonQuery();
