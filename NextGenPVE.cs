@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.68")]
+    [Info("NextGen PVE", "RFC1920", "1.0.69")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -2646,6 +2646,21 @@ namespace Oxide.Plugins
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'TunnelDweller', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 0, 69))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("DELETE FROM ngpve_entities WHERE type='TunnelDweller'", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'TunnelDweller', 0)", c))
                     {
                         ct.ExecuteNonQuery();
