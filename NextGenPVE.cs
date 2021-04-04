@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.71")]
+    [Info("NextGen PVE", "RFC1920", "1.0.72")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -246,7 +246,11 @@ namespace Oxide.Plugins
                 ["genabled"] = "Globally Enabled",
                 ["gdisabled"] = "Globally Disabled",
                 ["zone"] = "Zone",
+                ["sinvert"] = "Invert Schedule",
+                ["sinverted"] = "Schedule Inverted",
                 ["schedule"] = "Schedule",
+                ["schedulep"] = "Schedule (Active period)",
+                ["schedulei"] = "Schedule (Inactive period)",
                 ["editing"] = "Editing",
                 ["select"] = "Select",
                 ["damage"] = "Damage",
@@ -1055,6 +1059,7 @@ namespace Oxide.Plugins
         {
             Dictionary<string, bool> enables = new Dictionary<string, bool>();
             TimeSpan ts = new TimeSpan();
+            bool invert = false;
 
             if(configData.Options.useRealTime)
             {
@@ -1078,7 +1083,7 @@ namespace Oxide.Plugins
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    using (SQLiteCommand use = new SQLiteCommand($"SELECT DISTINCT name, schedule FROM ngpve_rulesets WHERE schedule != '0'", c))
+                    using (SQLiteCommand use = new SQLiteCommand($"SELECT DISTINCT name, schedule, invschedule FROM ngpve_rulesets WHERE schedule != '0'", c))
                     {
                         using (SQLiteDataReader schedule = use.ExecuteReader())
                         {
@@ -1086,6 +1091,7 @@ namespace Oxide.Plugins
                             {
                                 string nm = schedule.GetString(0);
                                 string sc = schedule.GetValue(1).ToString();
+                                invert = Convert.ToBoolean(schedule.GetBoolean(2));
                                 if (nm != "" && sc != "")
                                 {
                                     ngpveschedule.Add(nm, sc);
@@ -1102,10 +1108,13 @@ namespace Oxide.Plugins
                 NextGenPVESchedule parsed;
                 if (ParseSchedule(scheduleInfo.Value, out parsed))
                 {
+                    DoLog("Schedule string was parsed correctly...");
+                    int i = 0;
                     foreach (var x in parsed.day)
                     {
-                        DoLog($"Schedule day == {x.ToString()} {parsed.dayName} {parsed.starthour} to {parsed.endhour}");
-                        if(ts.Days == x)
+                        DoLog($"Schedule day == {x} {parsed.dayName[i]} {parsed.starthour} to {parsed.endhour}");
+                        i++;
+                        if (ts.Days.ToString() == x)
                         {
                             DoLog($"Day matched.  Comparing {ts.Hours.ToString()}:{ts.Minutes.ToString().PadLeft(2,'0')} to start time {parsed.starthour}:{parsed.startminute} and end time {parsed.endhour}:{parsed.endminute}");
                             if (ts.Hours >= Convert.ToInt32(parsed.starthour) && ts.Hours <= Convert.ToInt32(parsed.endhour))
@@ -1115,28 +1124,28 @@ namespace Oxide.Plugins
                                 if (ts.Hours == Convert.ToInt32(parsed.starthour) && ts.Minutes >= Convert.ToInt32(parsed.startminute))
                                 {
                                     DoLog("Matched START hour and minute.", 2);
-                                    enables[scheduleInfo.Key] = true;
+                                    enables[scheduleInfo.Key] = !invert;
                                 }
                                 else if(ts.Hours == Convert.ToInt32(parsed.endhour) && ts.Minutes <= Convert.ToInt32(parsed.endminute))
                                 {
                                     DoLog("Matched END hour and minute.", 2);
-                                    enables[scheduleInfo.Key] = true;
+                                    enables[scheduleInfo.Key] = !invert;
                                 }
                                 else if (ts.Hours > Convert.ToInt32(parsed.starthour) && ts.Hours < Convert.ToInt32(parsed.endhour))
                                 {
                                     DoLog("Between start and end hours.", 2);
-                                    enables[scheduleInfo.Key] = true;
+                                    enables[scheduleInfo.Key] = !invert;
                                 }
                                 else
                                 {
                                     DoLog("Minute mismatch for START OR END.", 2);
-                                    enables[scheduleInfo.Key] = false;
+                                    enables[scheduleInfo.Key] = invert;
                                 }
                             }
                             else
                             {
                                 DoLog($"Hours NOT matched for ruleset {scheduleInfo.Key}", 1);
-                                enables[scheduleInfo.Key] = false;
+                                enables[scheduleInfo.Key] = invert;
                             }
                         }
 //                        else
@@ -1150,10 +1159,11 @@ namespace Oxide.Plugins
 
             foreach (KeyValuePair<string, bool> doenable in enables)
             {
-                switch (doenable.Value)
+                DoLog($"Enable = {doenable.ToString()}, invert = {invert.ToString()}");
+                switch (doenable.Value)// & !invert)
                 {
                     case false:
-                        DoLog($"Disabling ruleset {doenable.Key}", 3);
+                        DoLog($"Disabling ruleset {doenable.Key} (inverted={invert.ToString()})", 3);
                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                         {
                             c.Open();
@@ -1175,7 +1185,7 @@ namespace Oxide.Plugins
                         }
                         break;
                     case true:
-                        DoLog($"Enabling ruleset {doenable.Key}", 3);
+                        DoLog($"Enabling ruleset {doenable.Key} (inverted={invert.ToString()})", 3);
                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                         {
                             c.Open();
@@ -1204,6 +1214,7 @@ namespace Oxide.Plugins
 
         private bool ParseSchedule(string dbschedule, out NextGenPVESchedule parsed)
         {
+            DoLog($"ParseSchedule called on string {dbschedule}");
             int day = 0;
             parsed = new NextGenPVESchedule();
 
@@ -1215,7 +1226,7 @@ namespace Oxide.Plugins
             parsed.endhour = nextgenschedule[4];
             parsed.endminute = nextgenschedule[5];
 
-            parsed.day = new List<int>();
+            parsed.day = new List<string>();
             parsed.dayName = new List<string>();
 
             string tmp = nextgenschedule[1];
@@ -1225,7 +1236,7 @@ namespace Oxide.Plugins
             {
                 for (int i = 0; i < 7; i++)
                 {
-                    parsed.day.Add(i);
+                    parsed.day.Add(i.ToString());
                     parsed.dayName.Add(Enum.GetName(typeof(DayOfWeek), i));
                 }
             }
@@ -1234,14 +1245,14 @@ namespace Oxide.Plugins
                 foreach (var d in days)
                 {
                     int.TryParse(d, out day);
-                    parsed.day.Add(day);
+                    parsed.day.Add(day.ToString());
                     parsed.dayName.Add(Enum.GetName(typeof(DayOfWeek), day));
                 }
             }
             else
             {
                 int.TryParse(tmp, out day);
-                parsed.day.Add(day);
+                parsed.day.Add(day.ToString());
                 parsed.dayName.Add(Enum.GetName(typeof(DayOfWeek), day));
             }
             return true;
@@ -1552,6 +1563,17 @@ namespace Oxide.Plugins
                                             dm.ExecuteNonQuery();
                                         }
                                     }
+                                    break;
+                                case "invschedule":
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand dm = new SQLiteCommand($"UPDATE ngpve_rulesets SET invschedule='{newval}' WHERE name='{rs}'", c))
+                                        {
+                                            dm.ExecuteNonQuery();
+                                        }
+                                    }
+                                    RunSchedule(true);
                                     break;
                                 case "name":
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
@@ -2698,6 +2720,17 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Version < new VersionNumber(1, 0, 72))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand($"ALTER TABLE ngpve_rulesets ADD COLUMN invschedule INT(1) DEFAULT 0", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
 
             configData.Version = Version;
             SaveConfig(configData);
@@ -3018,11 +3051,12 @@ namespace Oxide.Plugins
             string schedule = null;
             string zone = null;
             string zName = null;
+            bool invert = false;
 
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT automated, enabled, damage, schedule, zone from ngpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT automated, enabled, damage, schedule, zone, invschedule from ngpve_rulesets WHERE name='{rulesetname}'", c))
                 {
                     using (SQLiteDataReader rsread = getrs.ExecuteReader())
                     {
@@ -3032,6 +3066,7 @@ namespace Oxide.Plugins
                             isEnabled = rsread.GetBoolean(1);
                             damage = rsread.GetBoolean(2);
                             zone = rsread.GetString(4);
+                            invert = Convert.ToBoolean(rsread.GetBoolean(5));
                             zName = (string)ZoneManager?.Call("GetZoneName", zone);
                             try
                             {
@@ -3086,7 +3121,27 @@ namespace Oxide.Plugins
 
             row += 2;
             pb = GetButtonPositionP(row, hdrcol);
-            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedule"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            switch (invert)
+            {
+                case true:
+                    UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedulei"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    break;
+                case false:
+                    UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedulep"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                    break;
+            }
+
+            row += 2;
+            pb = GetButtonPositionP(row, hdrcol);
+            switch (invert)
+            {
+                case true:
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#ff3333", 1f), Lang("sinverted"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} invschedule 0");
+                    break;
+                case false:
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("sinvert"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} invschedule 1");
+                    break;
+            }
 
             row = 0; hdrcol++;
             pb = GetButtonPositionP(row, hdrcol);
@@ -4389,7 +4444,7 @@ namespace Oxide.Plugins
 
         public class NextGenPVESchedule
         {
-            public List<int> day;
+            public List<string> day;
             public List<string> dayName;
             public string starthour;
             public string startminute;
@@ -4769,7 +4824,7 @@ namespace Oxide.Plugins
             {
                 SQLiteCommand cd = new SQLiteCommand("DROP TABLE IF EXISTS ngpve_rulesets", sqlConnection);
                 cd.ExecuteNonQuery();
-                cd = new SQLiteCommand("CREATE TABLE ngpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255))", sqlConnection);
+                cd = new SQLiteCommand("CREATE TABLE ngpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255), invschedule INT(1) DEFAULT 0)", sqlConnection);
                 cd.ExecuteNonQuery();
             }
             SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_player', null, null, null)", sqlConnection);
