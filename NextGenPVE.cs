@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.70")]
+    [Info("NextGen PVE", "RFC1920", "1.0.71")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -953,6 +953,10 @@ namespace Oxide.Plugins
                                     {
                                         // source and target exist - verify that they are not excluded
                                         DoLog($"Found exception match for {stype} attacking {ttype}");
+
+                                        // Special override since we are seeing an XXX_building exception
+                                        if (stype == "BasePlayer" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window")) hasBP = true;
+
                                         string foundsrc = entry.GetValue(0).ToString();
                                         string foundtgt = entry.GetValue(1).ToString();
                                         foundexception = true;
