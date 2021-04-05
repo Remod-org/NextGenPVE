@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.72")]
+    [Info("NextGen PVE", "RFC1920", "1.0.73")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -199,6 +199,7 @@ namespace Oxide.Plugins
                 ["notauthorized"] = "You don't have permission to use this command.",
                 ["zonemanagerreq"] = "ZoneManager required for handling multiple active rulesets.",
                 ["nextgenpverulesets"] = "NextGenPVE Rulesets",
+                ["nextgenpverulesetsf"] = "NextGenPVE Rulesets and Flags",
                 ["rulesets"] = "Rulesets",
                 ["pveenabled"] = "PVE Enabled for {0} ruleset.",
                 ["pvedisabled"] = "PVE Disabled for {0} ruleset.",
@@ -658,7 +659,7 @@ namespace Oxide.Plugins
                 {
                     c.Open();
                     DoLog($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '')");
-                    using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '')", c))
+                    using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0)", c))
                     {
                         cmd.ExecuteNonQuery();
                     }
@@ -2827,7 +2828,7 @@ namespace Oxide.Plugins
             CuiHelper.DestroyUi(player, NGPVERULELIST);
 
             CuiElementContainer container = UI.Container(NGPVERULELIST, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
-            UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("nextgenpverulesets"), 24, "0.2 0.92", "0.65 1");
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("nextgenpverulesetsf"), 24, "0.2 0.92", "0.65 1");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("standard"), 12, "0.66 0.95", "0.72 0.98");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#5540d8", 1f), Lang("automated"), 12, "0.73 0.95", "0.79 0.98");
 
