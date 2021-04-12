@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.73")]
+    [Info("NextGen PVE", "RFC1920", "1.0.74")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -63,6 +63,7 @@ namespace Oxide.Plugins
         [PluginReference]
         private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements;
 
+        static NextGenPVE Instance;
         private readonly string logfilename = "log";
         private bool dolog = false;
         private bool enabled = true;
@@ -88,6 +89,7 @@ namespace Oxide.Plugins
         #region init
         private void Init()
         {
+            Instance = this;
             //Puts("Creating database connection for main thread.");
             DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/nextgenpve");
             dataFile.Save();
@@ -158,6 +160,8 @@ namespace Oxide.Plugins
 
         private void OnNewSave()
         {
+            ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
+            SaveData();
             UpdateEnts();
         }
         private void UpdateEnts()
@@ -2760,7 +2764,6 @@ namespace Oxide.Plugins
         private class Options
         {
             public bool useZoneManager = false;
-//            public bool usePlayerDatabase = false;
             public float protectedDays = 0f;
             public bool useSchedule = false;
             public bool useGUIAnnouncements = false;
@@ -4126,7 +4129,7 @@ namespace Oxide.Plugins
         private float[] GetButtonPositionZ(int rowNumber, int columnNumber)
         {
             float offsetX = 0.05f + (0.156f * columnNumber);
-            float offsetY = (0.75f - (rowNumber * 0.054f));
+            float offsetY = (0.77f - (rowNumber * 0.052f));
 
             return new float[] { offsetX, offsetY, offsetX + 0.296f, offsetY + 0.03f };
         }
@@ -4227,7 +4230,7 @@ namespace Oxide.Plugins
                         DoLog($"Player has privilege on BuildingBlock", 2);
                         return true;
                     }
-                    else if (configData.Options.HonorRelationships && IsFriend(auth, privilege.OwnerID))
+                    else if (IsFriend(auth, privilege.OwnerID))
                     {
                         DoLog($"Player is friends with owner of BuildingBlock", 2);
                         return true;
@@ -4313,7 +4316,7 @@ namespace Oxide.Plugins
                             DoLog($"Player has privilege on BuildingBlock", 2);
                             return true;
                         }
-                        else if (configData.Options.HonorRelationships && IsFriend(auth, entity.OwnerID))
+                        else if (IsFriend(auth, entity.OwnerID))
                         {
                             DoLog($"Player is friends with owner of BuildingBlock", 2);
                             return true;
@@ -4323,23 +4326,20 @@ namespace Oxide.Plugins
             }
             else
             {
-//                var priv = entity.GetComponentInParent<BuildingPrivlidge>();
-                if (configData.Options.HonorRelationships)
+                //var priv = entity.GetComponentInParent<BuildingPrivlidge>();
+                if (IsFriend(player.userID, entity.OwnerID))
                 {
-                    if (IsFriend(player.userID, entity.OwnerID))
-                    {
-                        DoLog($"Player is friends with owner of entity", 2);
- //                       if (priv == null)
- //                       {
- //                           if (configData.Options.UnprotectedDeployableDamage)
- //                           {
- //                               DoLog("Entity not protected by TC.",2);
- //                               return true;
- //                           }
- //                           return false;
- //                       }
-                        return true;
-                    }
+                    DoLog($"Player is friends with owner of entity", 2);
+                    //                       if (priv == null)
+                    //                       {
+                    //                           if (configData.Options.UnprotectedDeployableDamage)
+                    //                           {
+                    //                               DoLog("Entity not protected by TC.",2);
+                    //                               return true;
+                    //                           }
+                    //                           return false;
+                    //                       }
+                    return true;
                 }
                 else if (entity.OwnerID == player.userID)
                 {
@@ -4391,11 +4391,13 @@ namespace Oxide.Plugins
 
         private bool IsFriend(ulong playerid, ulong ownerid)
         {
+            if (!configData.Options.HonorRelationships) return false;
             if (configData.Options.useFriends && Friends != null)
             {
                 var fr = Friends?.CallHook("AreFriends", playerid, ownerid);
                 if (fr != null && (bool)fr)
                 {
+                    DoLog($"Friends plugin reports that {playerid.ToString()} and {ownerid.ToString()} are friends.");
                     return true;
                 }
             }
@@ -4407,6 +4409,7 @@ namespace Oxide.Plugins
                 {
                     if (playerclan == ownerclan)
                     {
+                        DoLog($"Clans plugin reports that {playerid.ToString()} and {ownerid.ToString()} are clanmates.");
                         return true;
                     }
                 }
@@ -4423,6 +4426,7 @@ namespace Oxide.Plugins
                         {
                             if (playerTeam.members.Contains(ownerid))
                             {
+                                DoLog($"Rust teams reports that {playerid.ToString()} and {ownerid.ToString()} are on the same team.");
                                 return true;
                             }
                         }
