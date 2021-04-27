@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.75")]
+    [Info("NextGen PVE", "RFC1920", "1.0.76")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -662,7 +662,8 @@ namespace Oxide.Plugins
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    DoLog($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '')");
+                    DoLog($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0)");
+
                     using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0)", c))
                     {
                         cmd.ExecuteNonQuery();
@@ -1685,7 +1686,7 @@ namespace Oxide.Plugins
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    using (SQLiteCommand ae = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rs}', {dmg}, 1, 0, '', '{args[3]}', '', '', 0)", c))
+                                                    using (SQLiteCommand ae = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rs}', {dmg}, 1, 0, '', '{args[3]}', '', '', 0, 0)", c))
                                                     {
                                                         ae.ExecuteNonQuery();
                                                     }
@@ -2050,7 +2051,7 @@ namespace Oxide.Plugins
                                 {
                                     c.Open();
                                     // Add this new ruleset as disabled
-                                    using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES ('{newname}', 0, 0, 0, 0, '', '', '', 0)", c))
+                                    using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES ('{newname}', 0, 0, 0, 0, '', '', '', 0, 0)", c))
                                     {
                                         newrs.ExecuteNonQuery();
                                     }
