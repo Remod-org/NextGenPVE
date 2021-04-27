@@ -1,4 +1,4 @@
-//#define DEBUG
+#define DEBUG
 #region License (GPL v3)
 /*
     NextGenPVE - Prevent damage to players and objects in a Rust PVE environment
@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.76")]
+    [Info("NextGen PVE", "RFC1920", "1.0.77")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -3071,7 +3071,9 @@ namespace Oxide.Plugins
                             isEnabled = rsread.GetBoolean(1);
                             damage = rsread.GetBoolean(2);
                             zone = rsread.GetString(4);
-                            invert = Convert.ToBoolean(rsread.GetBoolean(5));
+                            var inv = rsread.GetValue(5);
+                            if (inv is DBNull) inv = 0;
+                            invert = Convert.ToBoolean(inv);
                             zName = (string)ZoneManager?.Call("GetZoneName", zone);
                             try
                             {
