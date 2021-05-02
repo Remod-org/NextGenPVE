@@ -1,4 +1,4 @@
-#define DEBUG
+//#define DEBUG
 #region License (GPL v3)
 /*
     NextGenPVE - Prevent damage to players and objects in a Rust PVE environment
