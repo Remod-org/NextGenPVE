@@ -38,7 +38,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.77")]
+    [Info("NextGen PVE", "RFC1920", "1.0.78")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -900,6 +900,22 @@ namespace Oxide.Plugins
                 default:
                     //mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='default' OR zone='0' OR zone='lookup'";
                     mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup'";
+                    bool zonefound = false;
+                    using (SQLiteCommand findIt = new SQLiteCommand(mquery, sqlConnection))
+                    {
+                        using (SQLiteDataReader readMe = findIt.ExecuteReader())
+                        {
+                            while (readMe.Read())
+                            {
+                                zonefound = true;
+                            }
+                        }
+                    }
+                    if (!zonefound)
+                    {
+                        // No rules found matching this zone, revert to default...
+                        mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
+                    }
                     break;
             }
             //using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets", sqlConnection))
