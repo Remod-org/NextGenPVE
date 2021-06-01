@@ -1,4 +1,3 @@
-//#define DEBUG
 #region License (GPL v3)
 /*
     NextGenPVE - Prevent damage to players and objects in a Rust PVE environment
@@ -21,6 +20,7 @@
     Optionally you can also view the license at <http://www.gnu.org/licenses/>.
 */
 #endregion License (GPL v3)
+//#define DEBUG
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
@@ -35,10 +35,9 @@ using System.IO;
 using System.Text.RegularExpressions;
 using Oxide.Core.Configuration;
 using System.Text;
-
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.78")]
+    [Info("NextGen PVE", "RFC1920", "1.0.79")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -61,7 +60,7 @@ namespace Oxide.Plugins
         private string TextColor = "Red";
 
         [PluginReference]
-        private readonly Plugin ZoneManager, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements;
+        private readonly Plugin ZoneManager, Humanoids, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements, SAMTargeting;
 
         static NextGenPVE Instance;
         private readonly string logfilename = "log";
@@ -282,6 +281,12 @@ namespace Oxide.Plugins
                 ["AutoTurretTargetsNPCs"] = "AutoTurret Targets NPCs",
                 ["NPCSamSitesIgnorePlayers"] = "NPC SamSites Ignore Players",
                 ["SamSitesIgnorePlayers"] = "SamSites Ignore Players",
+                ["NPCSamSitesTargetPlayers"] = "(ext) NPC SamSites Target Players",
+                ["SamSitesTargetPlayers"] = "(ext) SamSites Target Players",
+                ["NPCSamSitesTargetNPCs"] = "(ext) NPC SamSites Target NPCs",
+                ["SamSitesTargetNPCs"] = "(ext) SamSites Target NPCs",
+                ["NPCSamSitesTargetAnimals"] = "(ext) NPC SamSites Target Animals",
+                ["SamSitesTargetAnimals"] = "(ext) SamSites Target Animals",
                 ["AllowSuicide"] = "Allow Player Suicide",
                 ["TrapsIgnorePlayers"] = "Traps Ignore Players",
                 ["HonorBuildingPrivilege"] = "Honor Building Privilege",
@@ -412,6 +417,8 @@ namespace Oxide.Plugins
 
         private object OnSamSiteTarget(SamSite sam, BaseMountable mountable)
         {
+            if (SAMTargeting != null) return null;
+
             if (sam == null) return null;
             if (mountable == null) return null;
             var player = GetMountedPlayer(mountable);
@@ -456,7 +463,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            if (IsHumanNPC(target) || target.IsNpc)
+            if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
@@ -478,7 +485,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            if (IsHumanNPC(target) || target.IsNpc)
+            if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
@@ -509,7 +516,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            if (IsHumanNPC(target) || target.IsNpc)
+            if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
                 if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
@@ -531,7 +538,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            if (IsHumanNPC(target) || target.IsNpc)
+            if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
                 if (!configData.Options.NPCAutoTurretTargetsNPCs) return false;
             }
@@ -571,7 +578,7 @@ namespace Oxide.Plugins
                     Puts("Admin almighty!");
                     return null;
                 }
-                if(ttype == "BasePlayer")
+                if (ttype == "BasePlayer")
                 {
                     try
                     {
@@ -635,7 +642,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            if(foundrs)
+            if (foundrs)
             {
                 if (ngpvezonemaps.ContainsKey(rulesetname) && !ngpvezonemaps[rulesetname].map.Contains(key))
                 {
@@ -747,9 +754,17 @@ namespace Oxide.Plugins
             bool hasBP = true;
             bool isBuilding = false;
 
-            // Special case since HumanNPC contains a BasePlayer object
-            if (stype == "BasePlayer" && HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
-            if (ttype == "BasePlayer" && HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
+            // Special case since Humanoids/HumanNPC contains a BasePlayer object
+            if (stype == "BasePlayer")
+            {
+                if (Humanoids && IsHumanoid(source)) stype = "Humanoid";
+                if (HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
+            }
+            if (ttype == "BasePlayer")
+            {
+                if (Humanoids && IsHumanoid(target)) ttype = "Humanoid";
+                if (HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
+            }
 
             // Special cases for building damage requiring owner or auth access
             if (stype == "BasePlayer" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
@@ -807,12 +822,12 @@ namespace Oxide.Plugins
                 isBuilding = true;
                 var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
                 hasBP = false;
-                foreach(var x in pl)
+                foreach (var x in pl)
                 {
                     var y = x.ent as BasePlayer;
                     if (y == null) continue;
                     DoLog($"Heli targeting player {y.displayName}.  Checking building permission for {target.ShortPrefabName}");
-                    if(PlayerOwnsItem(y, target))
+                    if (PlayerOwnsItem(y, target))
                     {
                         DoLog("Yes they own that building!");
                         hasBP = true;
@@ -824,12 +839,12 @@ namespace Oxide.Plugins
                 isBuilding = true;
                 var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
                 hasBP = false;
-                foreach(var x in pl)
+                foreach (var x in pl)
                 {
                     var y = x.ent as BasePlayer;
                     if (y == null) continue;
                     DoLog($"Heli targeting player {y.displayName}.  Checking building permission for {target.ShortPrefabName}");
-                    if(PlayerOwnsItem(y, target as BuildingPrivlidge))
+                    if (PlayerOwnsItem(y, target as BuildingPrivlidge))
                     {
                         DoLog("Yes they own that building!");
                         hasBP = true;
@@ -945,12 +960,12 @@ namespace Oxide.Plugins
 
                         // ZONE CHECKS
                         // First: If we are in a matching zone, use it
-                        if(zone == rulesetzone)
+                        if (zone == rulesetzone)
                         {
                             DoLog($"Zone match for ruleset {rulesetname}, zone {rulesetzone}");
                         }
                         // Second: If we are in the default zone, and this rulesetzone is not, skip it
-                        if(zone == "default" && rulesetzone != "default" && rulesetzone != "" && rulesetzone != "0")
+                        if (zone == "default" && rulesetzone != "default" && rulesetzone != "" && rulesetzone != "0")
                         {
                             DoLog($"Skipping ruleset {rulesetname} due to zone mismatch with current zone, {zone}");
                             continue;
@@ -1013,7 +1028,7 @@ namespace Oxide.Plugins
                                 // allow break on current ruleset and zone match with no exclustions
                                 foundmatch = true;
                             }
-                            else if(!foundexception)
+                            else if (!foundexception)
                             {
                                 // allow break on current ruleset and zone match with no exceptions
                                 foundmatch = true;
@@ -1027,7 +1042,7 @@ namespace Oxide.Plugins
                 DoLog($"Player has building privilege and is attacking a BuildingBlock.  Or, heli is attacking a building owned by a targeted player.");
                 return true;
             }
-            else if(!hasBP && isBuilding)
+            else if (!hasBP && isBuilding)
             {
                 DoLog("Player does NOT have building privilege and is attacking a BuildingBlock.  Or, player owner is not being targeted by the heli.");
                 return false;
@@ -1053,14 +1068,14 @@ namespace Oxide.Plugins
 
         void MessageToAll(string key, string ruleset)
         {
-            if(!configData.Options.useMessageBroadcast && !configData.Options.useGUIAnnouncements) return;
-            foreach(var player in BasePlayer.activePlayerList)
+            if (!configData.Options.useMessageBroadcast && !configData.Options.useGUIAnnouncements) return;
+            foreach (var player in BasePlayer.activePlayerList)
             {
-                if(configData.Options.useMessageBroadcast)
+                if (configData.Options.useMessageBroadcast)
                 {
                     Message(player.IPlayer, key, ruleset);
                 }
-                if(GUIAnnouncements && configData.Options.useGUIAnnouncements)
+                if (GUIAnnouncements && configData.Options.useGUIAnnouncements)
                 {
                     var ann = Lang(key, null, ruleset);
                     switch(key)
@@ -1083,7 +1098,7 @@ namespace Oxide.Plugins
             TimeSpan ts = new TimeSpan();
             bool invert = false;
 
-            if(configData.Options.useRealTime)
+            if (configData.Options.useRealTime)
             {
                 ts = new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay);
             }
@@ -1125,7 +1140,7 @@ namespace Oxide.Plugins
             }
 
             // Actual schedule processing here...
-            foreach(KeyValuePair<string,string> scheduleInfo in ngpveschedule)
+            foreach (KeyValuePair<string, string> scheduleInfo in ngpveschedule)
             {
                 NextGenPVESchedule parsed;
                 if (ParseSchedule(scheduleInfo.Value, out parsed))
@@ -1148,7 +1163,7 @@ namespace Oxide.Plugins
                                     DoLog("Matched START hour and minute.", 2);
                                     enables[scheduleInfo.Key] = !invert;
                                 }
-                                else if(ts.Hours == Convert.ToInt32(parsed.endhour) && ts.Minutes <= Convert.ToInt32(parsed.endminute))
+                                else if (ts.Hours == Convert.ToInt32(parsed.endhour) && ts.Minutes <= Convert.ToInt32(parsed.endminute))
                                 {
                                     DoLog("Matched END hour and minute.", 2);
                                     enables[scheduleInfo.Key] = !invert;
@@ -1400,7 +1415,7 @@ namespace Oxide.Plugins
                         }
                         break;
                     case "dump":
-                        if(args.Length > 1)
+                        if (args.Length > 1)
                         {
                             string output = "";
                             string zone = "";
@@ -1426,11 +1441,11 @@ namespace Oxide.Plugins
                                             rules += re.GetValue(5).ToString() + "\n\t";
                                             var s = re.GetValue(6).ToString();
                                             var t = re.GetValue(7).ToString();
-                                            if(s != "" && !src.Contains(s))
+                                            if (s != "" && !src.Contains(s))
                                             {
                                                 src.Add(s);
                                             }
-                                            if(t != "" && !tgt.Contains(t))
+                                            if (t != "" && !tgt.Contains(t))
                                             {
                                                 tgt.Add(t);
                                             }
@@ -1439,11 +1454,11 @@ namespace Oxide.Plugins
                                 }
                             }
                             output += zone + "\n" + Lang("damageexceptions") + ":\n\t" + rules;
-                            if(src.Count > 0)
+                            if (src.Count > 0)
                             {
                                 output += "\n" + Lang("sourceexcl") + ":\n\t" + string.Join("\n\t", src);
                             }
-                            if(tgt.Count > 0)
+                            if (tgt.Count > 0)
                             {
                                 output += "\n" + Lang("targetexcl") + ":\n\t" + string.Join("\n\t", tgt);
                             }
@@ -1452,7 +1467,7 @@ namespace Oxide.Plugins
                         break;
                     case "backup":
                         string backupfile = "nextgenpve_" + DateTime.Now.ToString("yyyy-MM-dd_HHmmss") + ".db";
-                        if(args.Length > 1)
+                        if (args.Length > 1)
                         {
                             backupfile = args[1] + ".db";
                         }
@@ -1476,7 +1491,7 @@ namespace Oxide.Plugins
                         if (args.Length > 1)
                         {
                             string restorefile = $"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{args[1]}";
-                            if(files.Contains(restorefile) && restorefile.EndsWith(".db"))
+                            if (files.Contains(restorefile) && restorefile.EndsWith(".db"))
                             {
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
@@ -1520,7 +1535,7 @@ namespace Oxide.Plugins
                     case "allentities":
                         string search = "";
                         string coll = "all";
-                        if(args.Length > 2 && args[1] == "coll")
+                        if (args.Length > 2 && args[1] == "coll")
                         {
                             coll = args[2];
                         }
@@ -1745,7 +1760,7 @@ namespace Oxide.Plugins
                                                 }
                                             }
 
-                                            if(etype != "")
+                                            if (etype != "")
                                             {
                                                 string exception = ""; string oldsrc = "";
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
@@ -1779,7 +1794,7 @@ namespace Oxide.Plugins
                                                         }
                                                     }
                                                 }
-                                                else if(exception != "")
+                                                else if (exception != "")
                                                 {
                                                     if (!oldsrc.Contains(newval))
                                                     {
@@ -1859,7 +1874,7 @@ namespace Oxide.Plugins
                                                 }
                                             }
 
-                                            if(etype != "")
+                                            if (etype != "")
                                             {
                                                 string exception = ""; string oldtgt = "";
                                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
@@ -1893,7 +1908,7 @@ namespace Oxide.Plugins
                                                         }
                                                     }
                                                 }
-                                                else if(exception != "")
+                                                else if (exception != "")
                                                 {
                                                     if (!oldtgt.Contains(newval))
                                                     {
@@ -2083,6 +2098,24 @@ namespace Oxide.Plugins
                         bool val = GetBoolValue(args[2]);
                         switch (cfg)
                         {
+                            case "SamSitesTargetPlayers":
+                                SAMTargeting?.CallHook("SetSamTargeting", "player", val);
+                                break;
+                            case "SamSitesTargetNPCs":
+                                SAMTargeting?.CallHook("SetSamTargeting", "npc", val);
+                                break;
+                            case "SamSitesTargetAnimals":
+                                SAMTargeting?.CallHook("SetSamTargeting", "animal", val);
+                                break;
+                            case "NPCSamSitesTargetPlayers":
+                                SAMTargeting?.CallHook("SetSamTargeting", "player", val, true);
+                                break;
+                            case "NPCSamSitesTargetNPCs":
+                                SAMTargeting?.CallHook("SetSamTargeting", "npc", val, true);
+                                break;
+                            case "NPCSamSitesTargetAnimals":
+                                SAMTargeting?.CallHook("SetSamTargeting", "animal", val, true);
+                                break;
                             case "NPCAutoTurretTargetsPlayers":
                                 configData.Options.NPCAutoTurretTargetsPlayers = val;
                                 break;
@@ -2133,7 +2166,7 @@ namespace Oxide.Plugins
                     case "addrule":
                     case "editrule":
                         string rn = args[1];
-                        if(args[0] == "editrule" && rn != null)
+                        if (args[0] == "editrule" && rn != null)
                         {
                             if (args.Length > 3)
                             {
@@ -2152,7 +2185,7 @@ namespace Oxide.Plugins
                                 }
                             }
                         }
-                        else if(args[0] == "addrule" && rn != null)
+                        else if (args[0] == "addrule" && rn != null)
                         {
                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                             {
@@ -2294,7 +2327,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            if(configData.Version < new VersionNumber(1, 0, 22))
+            if (configData.Version < new VersionNumber(1, 0, 22))
             {
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
@@ -2306,7 +2339,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            if(configData.Version < new VersionNumber(1, 0, 23))
+            if (configData.Version < new VersionNumber(1, 0, 23))
             {
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
@@ -2318,7 +2351,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            if(configData.Version < new VersionNumber(1, 0, 24))
+            if (configData.Version < new VersionNumber(1, 0, 24))
             {
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
@@ -2379,7 +2412,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            if(configData.Version < new VersionNumber(1, 0, 29))
+            if (configData.Version < new VersionNumber(1, 0, 29))
             {
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
@@ -2392,7 +2425,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            if(configData.Version < new VersionNumber(1, 0, 30))
+            if (configData.Version < new VersionNumber(1, 0, 30))
             {
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
@@ -2753,6 +2786,17 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Version < new VersionNumber(1, 0, 79))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Humanoid', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
 
             configData.Version = Version;
             SaveConfig(configData);
@@ -2828,12 +2872,12 @@ namespace Oxide.Plugins
         #region GUI
         private void IsOpen(ulong uid, bool set=false)
         {
-            if(set)
+            if (set)
             {
 #if DEBUG
                 Puts($"Setting isopen for {uid}");
 #endif
-                if(!isopen.Contains(uid)) isopen.Add(uid);
+                if (!isopen.Contains(uid)) isopen.Add(uid);
                 return;
             }
 #if DEBUG
@@ -2925,8 +2969,8 @@ namespace Oxide.Plugins
 
             // Global flags
             col = 5; row--;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.AutoTurretTargetsPlayers)
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.AutoTurretTargetsPlayers)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers false");
             }
@@ -2935,8 +2979,8 @@ namespace Oxide.Plugins
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers true");
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.AutoTurretTargetsNPCs)
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.AutoTurretTargetsNPCs)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs false");
             }
@@ -2945,8 +2989,8 @@ namespace Oxide.Plugins
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs true");
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.HeliTurretTargetsPlayers)
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.HeliTurretTargetsPlayers)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HeliTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HeliTurretTargetsPlayers false");
             }
@@ -2955,7 +2999,7 @@ namespace Oxide.Plugins
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HeliTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HeliTurretTargetsPlayers true");
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
+            pb = GetButtonPositionF(row, col);
             if (configData.Options.NPCAutoTurretTargetsPlayers)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers false");
@@ -2965,7 +3009,7 @@ namespace Oxide.Plugins
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers true");
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
+            pb = GetButtonPositionF(row, col);
             if (configData.Options.NPCAutoTurretTargetsNPCs)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs false");
@@ -2974,29 +3018,97 @@ namespace Oxide.Plugins
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
             }
-            row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.NPCSamSitesIgnorePlayers)
+            if (SAMTargeting == null)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers false");
+                row++;
+                pb = GetButtonPositionF(row, col);
+                if (configData.Options.NPCSamSitesIgnorePlayers)
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers true");
+                }
+                row++;
+                pb = GetButtonPositionF(row, col);
+                if (configData.Options.SamSitesIgnorePlayers)
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers true");
+                }
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers true");
+                row++;
+                pb = GetButtonPositionF(row, col);
+                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "npc", true))
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesTargetNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetNPCs false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesTargetNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetNPCs true");
+                }
+                row++;
+                pb = GetButtonPositionF(row, col);
+                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "npc"))
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesTargetNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetNPCs false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesTargetNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetNPCs true");
+                }
+
+                row++;
+                pb = GetButtonPositionF(row, col);
+                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "player", true))
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesTargetPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetPlayers false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesTargetPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetPlayers true");
+                }
+                row++;
+                pb = GetButtonPositionF(row, col);
+                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "player"))
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesTargetPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetPlayers false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesTargetPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetPlayers true");
+                }
+
+                row++;
+                pb = GetButtonPositionF(row, col);
+                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "animal", true))
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesTargetAnimals"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetAnimals false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesTargetAnimals"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetAnimals true");
+                }
+                row++;
+                pb = GetButtonPositionF(row, col);
+                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "animal"))
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesTargetAnimals"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetAnimals false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesTargetAnimals"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetAnimals true");
+                }
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.SamSitesIgnorePlayers)
-            {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers false");
-            }
-            else
-            {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers true");
-            }
-            row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.TrapsIgnorePlayers)
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.TrapsIgnorePlayers)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers false");
             }
@@ -3005,8 +3117,8 @@ namespace Oxide.Plugins
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers true");
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.HonorBuildingPrivilege)
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.HonorBuildingPrivilege)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege false");
             }
@@ -3015,8 +3127,8 @@ namespace Oxide.Plugins
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege true");
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.UnprotectedBuildingDamage)
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.UnprotectedBuildingDamage)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage false");
             }
@@ -3025,8 +3137,8 @@ namespace Oxide.Plugins
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage true");
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.TwigDamage)
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.TwigDamage)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("TwigDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TwigDamage false");
             }
@@ -3035,8 +3147,8 @@ namespace Oxide.Plugins
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("TwigDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TwigDamage true");
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.HonorRelationships)
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.HonorRelationships)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships false");
             }
@@ -3045,8 +3157,8 @@ namespace Oxide.Plugins
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships true");
             }
             row++;
-            pb = GetButtonPositionZ(row, col);
-            if(configData.Options.AllowSuicide)
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.AllowSuicide)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AllowSuicide"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AllowSuicide false");
             }
@@ -3056,7 +3168,7 @@ namespace Oxide.Plugins
             }
 
             row++;
-            pb = GetButtonPositionZ(row, col);
+            pb = GetButtonPositionF(row, col);
             UI.Button(ref container, NGPVERULELIST, UI.Color("#d82222", 1f), Lang("deflag"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig RESET true");
 
             CuiHelper.AddUi(player, container);
@@ -3436,7 +3548,7 @@ namespace Oxide.Plugins
             {
                 q = $"SELECT name, type from ngpve_entities WHERE type LIKE '%{search}%' ORDER BY type";
             }
-            else if(cat == "all")
+            else if (cat == "all")
             {
                 q = $"SELECT DISTINCT name, type from ngpve_entities ORDER BY type";
             }
@@ -4152,6 +4264,15 @@ namespace Oxide.Plugins
 
             return new float[] { offsetX, offsetY, offsetX + 0.296f, offsetY + 0.03f };
         }
+
+        // For FLAGS
+        private float[] GetButtonPositionF(int rowNumber, int columnNumber)
+        {
+            float offsetX = 0.05f + (0.156f * columnNumber);
+            float offsetY = (0.77f - (rowNumber * 0.042f));
+
+            return new float[] { offsetX, offsetY, offsetX + 0.296f, offsetY + 0.02f };
+        }
         #endregion
 
         #region Specialized_checks
@@ -4190,6 +4311,15 @@ namespace Oxide.Plugins
                 var pl = player as BasePlayer;
                 return pl.userID < 76560000000000000L && pl.userID > 0L && !pl.IsDestroyed;
             }
+        }
+
+        private bool IsHumanoid(BaseEntity player)
+        {
+            if (Humanoids)
+            {
+                return (bool)Humanoids?.Call("IsHumanoid", player as BasePlayer);
+            }
+            return false;
         }
 
         private bool IsBaseHelicopter(HitInfo hitinfo)
@@ -4289,11 +4419,11 @@ namespace Oxide.Plugins
 //                    else
 //                    {
                     lastConnected.TryGetValue(entity.OwnerID.ToString(), out lc);
-                    if(lc > 0)
+                    if (lc > 0)
                     {
                         long now = ToEpochTime(DateTime.UtcNow);
                         float days = Math.Abs((now - lc) / 86400);
-                        if(days > configData.Options.protectedDays)
+                        if (days > configData.Options.protectedDays)
                         {
                             DoLog($"Allowing damage for offline owner beyond {configData.Options.protectedDays.ToString()} days");
                             return true;
@@ -4654,6 +4784,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'BradleyAPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'HelicopterDebris', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Humanoid', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'HumanNPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
