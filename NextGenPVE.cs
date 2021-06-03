@@ -37,7 +37,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.79")]
+    [Info("NextGen PVE", "RFC1920", "1.0.80")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -4570,7 +4570,7 @@ namespace Oxide.Plugins
                 {
                     if (player.currentTeam != 0)
                     {
-                        RelationshipManager.PlayerTeam playerTeam = RelationshipManager.Instance.FindTeam(player.currentTeam);
+                        RelationshipManager.PlayerTeam playerTeam = RelationshipManager.ServerInstance.FindTeam(player.currentTeam);
                         if (playerTeam != null)
                         {
                             if (playerTeam.members.Contains(ownerid))
