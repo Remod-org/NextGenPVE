@@ -20,7 +20,7 @@
     Optionally you can also view the license at <http://www.gnu.org/licenses/>.
 */
 #endregion License (GPL v3)
-//#define DEBUG
+#define DEBUG
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
@@ -37,7 +37,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.80")]
+    [Info("NextGen PVE", "RFC1920", "1.0.82")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -74,6 +74,7 @@ namespace Oxide.Plugins
         private const string NGPVEVALUEEDIT = "nextgenpve.value";
         private const string NGPVESCHEDULEEDIT = "nextgenpve.schedule";
         private const string NGPVEENTSELECT = "nextgenpve.selectent";
+        private const string NGPVENPCSELECT = "nextgenpve.selectnpc";
         private const string NGPVERULESELECT = "nextgenpve.selectrule";
         private const string NGPVERULEEXCLUSIONS = "nextgenpve.exclusions";
         private const string NGPVECUSTOMSELECT = "nextgenpve.customsel";
@@ -210,6 +211,8 @@ namespace Oxide.Plugins
                 ["nextgenpverule"] = "NextGenPVE Rule",
                 ["nextgenpveruleselect"] = "NextGenPVE Rule Select",
                 ["nextgenpveentselect"] = "NextGenPVE Entity Select",
+                ["nextgenpvenpcselect"] = "NextGenPVE NPC Turret Target Exclusions",
+                ["npcselectnotes"] = "Selected (Disabled) items in orange will be excluded from targeting by turrets, etc.  Items in green will be targeted (Enabled).  Use the Global Flags as a reference.",
                 ["nextgenpveentedit"] = "NextGenPVE Entity Edit",
                 ["nextgenpvevalue"] = "NextGenPVE Ruleset Value",
                 ["nextgenpveexclusions"] = "NextGenPVE Ruleset Exclusions",
@@ -234,6 +237,7 @@ namespace Oxide.Plugins
                 ["setcat"] = "Set Collection",
                 ["clicktoedit"] = "^Click to Edit^",
                 ["editname"] = "Edit Name",
+                ["editnpc"] = "Edit NPC Targeting",
                 ["standard"] = "Standard",
                 ["automated"] = "Automated",
                 ["add"] = "Add",
@@ -313,6 +317,7 @@ namespace Oxide.Plugins
                 CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
                 CuiHelper.DestroyUi(player, NGPVERULESELECT);
                 CuiHelper.DestroyUi(player, NGPVEENTSELECT);
+                CuiHelper.DestroyUi(player, NGPVENPCSELECT);
                 CuiHelper.DestroyUi(player, NGPVEENTEDIT);
                 CuiHelper.DestroyUi(player, NGPVERULEEXCLUSIONS);
                 CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
@@ -1526,6 +1531,32 @@ namespace Oxide.Plugins
                             Message(iplayer, "RestoreAvailable", string.Join("\n\t", files.Select(x => x.Replace($"{Interface.Oxide.DataDirectory}/{Name}/", ""))));
                         }
                         break;
+                    case "editnpcset":
+                        bool bval = GetBoolValue(args[2]);
+                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                        {
+                            c.Open();
+                            switch (bval)
+                            {
+                                case true:
+                                    using (SQLiteCommand en = new SQLiteCommand($"INSERT OR REPLACE INTO ngpve_targetexclusion VALUES('{args[1]}', 1)", c))
+                                    {
+                                        en.ExecuteNonQuery();
+                                    }
+                                    break;
+                                case false:
+                                    using (SQLiteCommand en = new SQLiteCommand($"DELETE FROM ngpve_targetexclusion WHERE name='{args[1]}'", c))
+                                    {
+                                        en.ExecuteNonQuery();
+                                    }
+                                    break;
+                            }
+                        }
+                        GUISelectNPCTypes(player);
+                        break;
+                    case "editnpc":
+                        GUISelectNPCTypes(player);
+                        break;
                     case "customgui":
                         GUICustomSelect(player);
                         break;
@@ -2227,6 +2258,8 @@ namespace Oxide.Plugins
                         CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
                         CuiHelper.DestroyUi(player, NGPVESCHEDULEEDIT);
                         CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
+                        CuiHelper.DestroyUi(player, NGPVEENTSELECT);
+                        CuiHelper.DestroyUi(player, NGPVENPCSELECT);
                         CuiHelper.DestroyUi(player, NGPVERULESELECT);
                         CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
                         break;
@@ -2256,6 +2289,9 @@ namespace Oxide.Plugins
                         break;
                     case "closeentedit":
                         CuiHelper.DestroyUi(player, NGPVEENTEDIT);
+                        break;
+                    case "closenpcselect":
+                        CuiHelper.DestroyUi(player, NGPVENPCSELECT);
                         break;
                     case "closeentselect":
                         CuiHelper.DestroyUi(player, NGPVEENTSELECT);
@@ -2797,6 +2833,28 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Version < new VersionNumber(1, 0, 81))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("DELETE FROM ngpve_entities WHERE type='ScientistNPCNew'", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'ScientistNPCNew', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
+            if (configData.Version < new VersionNumber(1, 0, 82))
+            {
+                LoadNPCTgtExclDb();
+            }
 
             configData.Version = Version;
             SaveConfig(configData);
@@ -2904,6 +2962,7 @@ namespace Oxide.Plugins
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("customedit"), 12, "0.65 0.01", "0.79 0.05", "pverule customgui");
             }
+            UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("editnpc"), 12, "0.7 0.01", "0.79 0.05", "pverule editnpc");
             UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("backup"), 12, "0.8 0.01", "0.9 0.05", "pverule backup");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.04");
 
@@ -3514,6 +3573,71 @@ namespace Oxide.Plugins
             UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#5540d8", 1f), Lang("unknown") + " " + Lang("entities"), 12, "0.49 0.4", "0.73 0.6", $"pverule unknownentities");
             UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#d85540", 1f), Lang("close"),    12,                         "0.75 0.4", "0.89 0.6", $"pverule closecustom");
 
+            CuiHelper.AddUi(player, container);
+        }
+
+        // Used to select NPC types for targeting exclusions (CanBeTargeted)
+        private void GUISelectNPCTypes(BasePlayer player)
+        {
+            IsOpen(player.userID, true);
+            CuiHelper.DestroyUi(player, NGPVENPCSELECT);
+            CuiElementContainer container = UI.Container(NGPVENPCSELECT, UI.Color("232323", 1f), "0.15 0.15", "0.78 0.85", true, "Overlay");
+            UI.Label(ref container, NGPVENPCSELECT, UI.Color("#ffffff", 1f), Lang("nextgenpvenpcselect"), 24, "0.01 0.92", "0.55 1");
+            UI.Label(ref container, NGPVENPCSELECT, UI.Color("#d85540", 1f), Lang("disabled"), 12, "0.66 0.95", "0.72 0.98");
+            UI.Label(ref container, NGPVENPCSELECT, UI.Color("#55d840", 1f), Lang("enabled"), 12, "0.73 0.95", "0.79 0.98");
+            UI.Button(ref container, NGPVENPCSELECT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closenpcselect");
+
+            UI.Label(ref container, NGPVENPCSELECT, UI.Color("#ffffff", 1f), Lang("npcselectnotes"), 12, "0.1 0.01", "0.9 0.1");
+
+            int row = 0; int col = 0;
+            string exq = $"SELECT DISTINCT name FROM ngpve_targetexclusion";
+            List<string> exclusions = new List<string>();
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                using (SQLiteCommand se = new SQLiteCommand(exq, c))
+                {
+                    using (SQLiteDataReader re = se.ExecuteReader())
+                    {
+                        while (re.Read())
+                        {
+                            exclusions.Add(re.GetString(0));
+                        }
+                    }
+                }
+            }
+            string q = $"SELECT DISTINCT type from ngpve_entities WHERE name='npc' ORDER BY type";
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                using (SQLiteCommand se = new SQLiteCommand(q, c))
+                {
+                    using (SQLiteDataReader re = se.ExecuteReader())
+                    {
+                        float[] pb = GetButtonPositionP(row, col);
+                        while (re.Read())
+                        {
+                            string type = re.GetString(0);
+                            if (row > 5)
+                            {
+                                row = 0;
+                                col++;
+                                if (col > 6) break;
+                            }
+                            pb = GetButtonPositionP(row, col);
+                            if (exclusions.Contains(type))
+                            {
+                                UI.Button(ref container, NGPVENPCSELECT, UI.Color("#d85540", 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editnpcset {type} -1");
+                            }
+                            else
+                            {
+                                UI.Button(ref container, NGPVENPCSELECT, UI.Color("#55d840", 1f), type, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editnpcset {type} 1");
+                            }
+                            row++;
+                        }
+                    }
+                }
+            }
             CuiHelper.AddUi(player, container);
         }
 
@@ -4803,6 +4927,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'ScientistNPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'ScientistNPCNew', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Zombie', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npcturret', 'NPCAutoTurret', 0)", sqlConnection);
@@ -4971,6 +5097,14 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('elevator_player', 'Elevator can crush Player', 1, 0, 'elevator', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
+        }
+
+        private void LoadNPCTgtExclDb()
+        {
+            SQLiteCommand cd = new SQLiteCommand("DROP TABLE IF EXISTS ngpve_targetexclusion", sqlConnection);
+            cd.ExecuteNonQuery();
+            cd = new SQLiteCommand("CREATE TABLE ngpve_targetexclusion (name VARCHAR(255), excluded INT(1) DEFAULT 1);", sqlConnection);
+            cd.ExecuteNonQuery();
         }
 
         private void LoadDefaultRuleset(bool drop=true)
