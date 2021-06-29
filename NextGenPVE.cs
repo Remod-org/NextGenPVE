@@ -20,7 +20,7 @@
     Optionally you can also view the license at <http://www.gnu.org/licenses/>.
 */
 #endregion License (GPL v3)
-#define DEBUG
+//#define DEBUG
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
@@ -37,7 +37,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.82")]
+    [Info("NextGen PVE", "RFC1920", "1.0.83")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -559,6 +559,7 @@ namespace Oxide.Plugins
             if (ConVar.Server.pve) ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
             if (!enabled) return null;
             if (entity == null) return null;
+            if (hitinfo == null) return null;
             string majority = hitinfo.damageTypes.GetMajorityDamageType().ToString();
             if (majority == "Decay") return null;
 
@@ -822,7 +823,7 @@ namespace Oxide.Plugins
                     DoLog("Player has building privilege or is not blocked.");
                 }
             }
-            else if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
+            else if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window" || ttype == "BuildingPrivlidge"))
             {
                 isBuilding = true;
                 var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
@@ -833,23 +834,6 @@ namespace Oxide.Plugins
                     if (y == null) continue;
                     DoLog($"Heli targeting player {y.displayName}.  Checking building permission for {target.ShortPrefabName}");
                     if (PlayerOwnsItem(y, target))
-                    {
-                        DoLog("Yes they own that building!");
-                        hasBP = true;
-                    }
-                }
-            }
-            else if (stype == "BaseHelicopter" && ttype == "BuildingPrivlidge")
-            {
-                isBuilding = true;
-                var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
-                hasBP = false;
-                foreach (var x in pl)
-                {
-                    var y = x.ent as BasePlayer;
-                    if (y == null) continue;
-                    DoLog($"Heli targeting player {y.displayName}.  Checking building permission for {target.ShortPrefabName}");
-                    if (PlayerOwnsItem(y, target as BuildingPrivlidge))
                     {
                         DoLog("Yes they own that building!");
                         hasBP = true;
@@ -2960,7 +2944,7 @@ namespace Oxide.Plugins
             }
             if (configData.Options.AllowCustomEdit == true)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("customedit"), 12, "0.65 0.01", "0.79 0.05", "pverule customgui");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("customedit"), 12, "0.6 0.01", "0.69 0.05", "pverule customgui");
             }
             UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("editnpc"), 12, "0.7 0.01", "0.79 0.05", "pverule editnpc");
             UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("backup"), 12, "0.8 0.01", "0.9 0.05", "pverule backup");
