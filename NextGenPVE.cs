@@ -37,7 +37,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.84")]
+    [Info("NextGen PVE", "RFC1920", "1.0.85")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -370,6 +370,20 @@ namespace Oxide.Plugins
                 }
             }
             if (!found) LoadDefaultRuleset();
+
+            found = false;
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                using (SQLiteCommand r = new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_targetexclusion'", c))
+                {
+                    using (SQLiteDataReader rentry = r.ExecuteReader())
+                    {
+                        while (rentry.Read()) { found = true; }
+                    }
+                }
+            }
+            if (!found) LoadNPCTgtExclDb();
 
             ngpvezonemaps = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, NextGenPVEZoneMap>>(Name + "/ngpve_zonemaps");
             lastConnected = Interface.GetMod().DataFileSystem.ReadObject<Dictionary<string, long>>(Name + "/ngpve_lastconnected");
