@@ -152,12 +152,13 @@ The above commands can also be run from console or RCON (without /).
       "HonorBuildingPrivilege": true,
       "UnprotectedBuildingDamage": false,
       "TwigDamage": false,
-      "HonorRelationships": false
+      "HonorRelationships": false,
+      "BlockScrapHeliFallDamage": false
   },
     "Version": {
       "Major": 1,
       "Minor": 0,
-      "Patch": 56
+      "Patch": 88
     }
 }
 ```
@@ -171,6 +172,8 @@ If a player is trying to damage a building, "HonorBuildingPrivilege" determines 
 "UnprotectedDamage" determines whether or not an unprotected building (no TC) can be damaged by players other than the builder.
 
 "HonorRelationships" determines whether or not a player can damage their friend's structures or deployables.
+
+"BlockScrapHeliFallDamage" handles the special case where players flying the scrapheli into other players causes fall damage, killing the target player.
 
 Note that friends support can include Friends, Clans, or Teams.
 
