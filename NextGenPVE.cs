@@ -160,6 +160,7 @@ namespace Oxide.Plugins
 
         private void OnNewSave()
         {
+            Puts("Wipe detected.");
             ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
             SaveData();
             UpdateEnts();
@@ -168,7 +169,7 @@ namespace Oxide.Plugins
         {
             // Populate the entities table with any new entities (Typically only at wipe but can be run manually via pveupdate.)
             // All new ents are added as unknown for manual recategorization.
-            Puts("Wipe detected.  Finding new entity types...");
+            Puts("Finding new entity types...");
             List<string> names = new List<string>();
             foreach (var obj in Resources.FindObjectsOfTypeAll(new BaseCombatEntity().GetType()))
             {
