@@ -37,7 +37,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.87")]
+    [Info("NextGen PVE", "RFC1920", "1.0.88")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -568,6 +568,22 @@ namespace Oxide.Plugins
             return null;
         }
 
+        private bool BlockFallDamage(BaseCombatEntity entity)
+        {
+            // Special case where attack by scrapheli initiates fall damage on a player.  This was often used to kill players and bypass the rules.
+            List<BaseEntity> ents = new List<BaseEntity>();
+            Vis.Entities(entity.transform.position, 5, ents);
+            foreach (BaseEntity ent in ents)
+            {
+                if (ent.ShortPrefabName == "scraptransporthelicopter" && configData.Options.BlockScrapHeliFallDamage)
+                {
+                    DoLog("Fall caused by scrapheli.  Blocking...");
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
             if (ConVar.Server.pve) ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
@@ -576,6 +592,12 @@ namespace Oxide.Plugins
             if (hitinfo == null) return null;
             string majority = hitinfo.damageTypes.GetMajorityDamageType().ToString();
             if (majority == "Decay") return null;
+
+            if (majority == "Fall" && hitinfo.Initiator == null)
+            {
+                DoLog($"Null initiator for attack on {entity.ShortPrefabName} by Fall");
+                if (BlockFallDamage(entity)) return true;
+            }
 
             try
             {
@@ -2184,6 +2206,9 @@ namespace Oxide.Plugins
                             case "HonorRelationships":
                                 configData.Options.HonorRelationships = val;
                                 break;
+                            case "BlockScrapHeliFallDamage":
+                                configData.Options.BlockScrapHeliFallDamage = val;
+                                break;
                             case "RESET":
                                 LoadDefaultFlags();
                                 //LoadConfigVariables();
@@ -2929,6 +2954,36 @@ namespace Oxide.Plugins
             Puts("Creating new config file.");
             var config = new ConfigData
             {
+                Options = new Options()
+                {
+                    useZoneManager = false,
+                    protectedDays = 0f,
+                    useSchedule = false,
+                    useGUIAnnouncements = false,
+                    useMessageBroadcast = false,
+                    useRealTime = false,
+                    useFriends = false,
+                    useClans = false,
+                    useTeams = false,
+                    AllowCustomEdit = false,
+                    AllowDropDatabase = false,
+
+                    NPCAutoTurretTargetsPlayers = true,
+                    NPCAutoTurretTargetsNPCs = true,
+                    AutoTurretTargetsPlayers = false,
+                    HeliTurretTargetsPlayers = true,
+                    AutoTurretTargetsNPCs = false,
+                    NPCSamSitesIgnorePlayers = false,
+                    SamSitesIgnorePlayers = false,
+                    AllowSuicide = false,
+                    TrapsIgnorePlayers = false,
+                    HonorBuildingPrivilege = true,
+                    UnprotectedBuildingDamage = false,
+                    UnprotectedDeployableDamage = false,
+                    TwigDamage = false,
+                    HonorRelationships = false,
+                    BlockScrapHeliFallDamage = false
+                },
                 Version = Version
             };
             SaveConfig(config);
@@ -2946,32 +3001,33 @@ namespace Oxide.Plugins
 
         private class Options
         {
-            public bool useZoneManager = false;
-            public float protectedDays = 0f;
-            public bool useSchedule = false;
-            public bool useGUIAnnouncements = false;
-            public bool useMessageBroadcast = false;
-            public bool useRealTime = true;
-            public bool useFriends = false;
-            public bool useClans = false;
-            public bool useTeams = false;
-            public bool AllowCustomEdit = false;
-            public bool AllowDropDatabase = false;
+            public bool useZoneManager;
+            public float protectedDays;
+            public bool useSchedule;
+            public bool useGUIAnnouncements;
+            public bool useMessageBroadcast;
+            public bool useRealTime;
+            public bool useFriends;
+            public bool useClans;
+            public bool useTeams;
+            public bool AllowCustomEdit;
+            public bool AllowDropDatabase;
 
-            public bool NPCAutoTurretTargetsPlayers = true;
-            public bool NPCAutoTurretTargetsNPCs = true;
-            public bool AutoTurretTargetsPlayers = false;
-            public bool HeliTurretTargetsPlayers = true;
-            public bool AutoTurretTargetsNPCs = false;
-            public bool NPCSamSitesIgnorePlayers = false;
-            public bool SamSitesIgnorePlayers = false;
-            public bool AllowSuicide = false;
-            public bool TrapsIgnorePlayers = false;
-            public bool HonorBuildingPrivilege = true;
-            public bool UnprotectedBuildingDamage = false;
-            public bool UnprotectedDeployableDamage = false;
-            public bool TwigDamage = false;
-            public bool HonorRelationships = false;
+            public bool NPCAutoTurretTargetsPlayers;
+            public bool NPCAutoTurretTargetsNPCs;
+            public bool AutoTurretTargetsPlayers;
+            public bool HeliTurretTargetsPlayers;
+            public bool AutoTurretTargetsNPCs;
+            public bool NPCSamSitesIgnorePlayers;
+            public bool SamSitesIgnorePlayers;
+            public bool AllowSuicide;
+            public bool TrapsIgnorePlayers;
+            public bool HonorBuildingPrivilege;
+            public bool UnprotectedBuildingDamage;
+            public bool UnprotectedDeployableDamage;
+            public bool TwigDamage;
+            public bool HonorRelationships;
+            public bool BlockScrapHeliFallDamage;
         }
         protected void LoadDefaultFlags()
         {
@@ -2988,6 +3044,7 @@ namespace Oxide.Plugins
             configData.Options.HonorBuildingPrivilege = true;
             configData.Options.UnprotectedBuildingDamage = false;
             configData.Options.HonorRelationships = false;
+            configData.Options.BlockScrapHeliFallDamage = false;
         }
         #endregion
 
@@ -3110,6 +3167,16 @@ namespace Oxide.Plugins
             else
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs true");
+            }
+            row++;
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.BlockScrapHeliFallDamage)
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("BlockScrapHeliFallDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig BlockScrapHeliFallDamage false");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("BlockScrapHeliFallDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig BlockScrapHeliFallDamage true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
