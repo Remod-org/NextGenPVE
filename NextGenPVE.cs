@@ -37,7 +37,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.86")]
+    [Info("NextGen PVE", "RFC1920", "1.0.87")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -4629,6 +4629,7 @@ namespace Oxide.Plugins
 
                 if (building != null)
                 {
+                    DoLog($"Checking building privilege for {entity.ShortPrefabName}");
                     var privs = building.GetDominatingBuildingPrivilege();
                     if (privs == null)
                     {
@@ -4663,25 +4664,48 @@ namespace Oxide.Plugins
             }
             else
             {
-                //var priv = entity.GetComponentInParent<BuildingPrivlidge>();
-                if (IsFriend(player.userID, entity.OwnerID))
+                // Item is not a building block.  Could be a door, etc.
+                BuildingPrivlidge privs = entity.GetBuildingPrivilege();
+                bool hasbp = false;
+                if (!configData.Options.HonorBuildingPrivilege) hasbp = true;
+                if (privs != null && configData.Options.HonorBuildingPrivilege)
+                {
+                    foreach (var auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
+                    {
+                        if (player.userID == auth)
+                        {
+                            DoLog($"Player has privilege on {entity.ShortPrefabName}", 2);
+                            hasbp = true;
+                        }
+                        else if (IsFriend(auth, entity.OwnerID))
+                        {
+                            DoLog($"Player is friends with owner of {entity.ShortPrefabName}", 2);
+                            hasbp = true;
+                        }
+                        else
+                        {
+                            DoLog($"Player may own {entity.ShortPrefabName} but is blocked by building privilege.", 2);
+                        }
+                    }
+                }
+
+                if (IsFriend(player.userID, entity.OwnerID) && hasbp)
                 {
                     DoLog($"Player is friends with owner of entity", 2);
-                    //if (priv == null)
-                    //{
-                    //    if (configData.Options.UnprotectedDeployableDamage)
-                    //    {
-                    //        DoLog("Entity not protected by TC.",2);
-                    //        return true;
-                    //    }
-                    //    return false;
-                    //}
                     return true;
                 }
-                else if (entity.OwnerID == player.userID)
+                else if (entity.OwnerID == player.userID && hasbp)
                 {
                     DoLog($"Player owns item", 2);
                     return true;
+                }
+                else if (IsFriend(player.userID, entity.OwnerID) && !hasbp)
+                {
+                    DoLog($"Player is friends with owner of entity but is blocked by building privilege", 2);
+                }
+                else if (entity.OwnerID == player.userID && !hasbp)
+                {
+                    DoLog($"Player owns item but is blocked by building privilege", 2);
                 }
             }
             DoLog("Player does not own or have access to this entity");
