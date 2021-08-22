@@ -160,7 +160,7 @@ namespace Oxide.Plugins
 
         private void OnNewSave()
         {
-            Puts("Wipe detected.");
+            Puts("Wipe detected.  Clearing zone maps...");
             ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
             SaveData();
             UpdateEnts();
