@@ -37,7 +37,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.89")]
+    [Info("NextGen PVE", "RFC1920", "1.0.90")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -2946,6 +2946,31 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 0, 90))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('plant', 'GrowableEntity', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_rules VALUES('player_plant', 'Player can damage Plants', 1, 0, 'player', 'plant')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('npc_building', 'NPC can damage Building', 1, 0, 'npc', 'building')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_plant', null, null, null, null)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
             configData.Version = Version;
             SaveConfig(configData);
         }
@@ -5095,6 +5120,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npcturret', 'NPCAutoTurret', 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('plant', 'GrowableEntity', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('player', 'BasePlayer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('resource', 'BaseCorpse', 0)", sqlConnection);
@@ -5183,9 +5210,13 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('npc_player', 'NPC can damage player', 1, 0, 'npc', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_plant', 'Player can damage Plants', 1, 0, 'player', 'plant')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_npc', 'Player can damage NPC', 1, 0, 'player', 'npc')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_player', 'Player can damage Player', 1, 0, 'player', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('npc_building', 'NPC can damage Building', 1, 0, 'npc', 'building')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_building', 'Player can damage Building', 1, 0, 'player', 'building')", sqlConnection);
             ct.ExecuteNonQuery();
@@ -5306,6 +5337,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_npc', null, null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_plant', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_animal', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
