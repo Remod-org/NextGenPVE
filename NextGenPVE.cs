@@ -37,7 +37,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.0.91")]
+    [Info("NextGen PVE", "RFC1920", "1.1.0")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -260,6 +260,7 @@ namespace Oxide.Plugins
                 ["schedule"] = "Schedule",
                 ["schedulep"] = "Schedule (Active period)",
                 ["schedulei"] = "Schedule (Inactive period)",
+                ["scheduled"] = "Schedule Disabled",
                 ["editing"] = "Editing",
                 ["select"] = "Select",
                 ["damage"] = "Damage",
@@ -279,6 +280,11 @@ namespace Oxide.Plugins
                 ["entities"] = "Entities",
                 ["uentities"] = "Unknown Entities",
                 ["logging"] = "Logging set to {0}",
+                ["day"] = "Day",
+                ["starthour"] = "Start Hour",
+                ["endhour"] = "End Hour",
+                ["startminute"] = "Start Minute",
+                ["endminute"] = "End Minute",
                 ["NPCAutoTurretTargetsPlayers"] = "NPC AutoTurret Targets Players",
                 ["NPCAutoTurretTargetsNPCs"] = "NPC AutoTurret Targets NPCs",
                 ["AutoTurretTargetsPlayers"] = "AutoTurret Targets Players",
@@ -1169,7 +1175,7 @@ namespace Oxide.Plugins
             foreach (KeyValuePair<string, string> scheduleInfo in ngpveschedule)
             {
                 NextGenPVESchedule parsed;
-                if (ParseSchedule(scheduleInfo.Value, out parsed))
+                if (ParseSchedule(scheduleInfo.Key, scheduleInfo.Value, out parsed))
                 {
                     DoLog("Schedule string was parsed correctly...");
                     int i = 0;
@@ -1275,11 +1281,138 @@ namespace Oxide.Plugins
             scheduleTimer = timer.Once(configData.Options.useRealTime ? 30f : 5f, () => RunSchedule(refresh));
         }
 
-        private bool ParseSchedule(string dbschedule, out NextGenPVESchedule parsed)
+        public string EditScheduleHM(string rs, string newval, string tomod)
+        {
+            string sc = "";
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                string query = $"SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rs}' AND schedule != '0'";
+                Puts(query);
+                using (SQLiteCommand use = new SQLiteCommand(query, c))
+                {
+                    using (SQLiteDataReader schedule = use.ExecuteReader())
+                    {
+                        while (schedule.Read())
+                        {
+                            sc = schedule.GetValue(0).ToString();
+                        }
+                    }
+                }
+            }
+
+            string[] scparts = Regex.Split(sc, @"(.*)\;(.*)\:(.*)\;(.*)\:(.*)");
+
+            if (scparts.Length < 5)
+            {
+                return ";0:00;23:59";
+            }
+
+            switch (tomod)
+            {
+                case "sh":
+                    scparts[2] = newval.PadLeft(2, '0');
+                    break;
+                case "sm":
+                    scparts[3] = newval.PadLeft(2, '0');
+                    break;
+                case "eh":
+                    scparts[4] = newval.PadLeft(2, '0');
+                    break;
+                case "em":
+                    scparts[5] = newval.PadLeft(2, '0');
+                    break;
+            }
+            return $"{scparts[1]};{scparts[2]}:{scparts[3]};{scparts[4]}:{scparts[5]}";
+        }
+        public string EditScheduleDay(string rs, string newval)
+        {
+            string sc = "";
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                using (SQLiteCommand use = new SQLiteCommand($"SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rs}' AND schedule != '0'", c))
+                {
+                    using (SQLiteDataReader schedule = use.ExecuteReader())
+                    {
+                        while (schedule.Read())
+                        {
+                            sc = schedule.GetValue(0).ToString();
+                        }
+                    }
+                }
+            }
+            string[] scparts = Regex.Split(sc, @"(.*)\;(.*)\:(.*)\;(.*)\:(.*)");
+
+            if (scparts.Length < 5)
+            {
+                return ";0:00;23:59";
+            }
+
+            string daypart = scparts[1];
+
+            if (newval == "all")
+            {
+                daypart = scparts[1] != "*" ? "*" : "";
+            }
+            else if (newval == "none")
+            {
+                daypart = "";
+            }
+            else
+            {
+                string[] days = daypart.Split(',');
+                string[] newdays = newval.Split(',');
+
+                foreach (var nd in newdays)
+                {
+                    if (days.Contains(nd))
+                    {
+                        daypart = scparts[1].Replace($"{nd},", "").Replace($",{nd}", "");
+                    }
+                    else
+                    {
+                        daypart += $",{nd}";
+                    }
+                }
+            }
+            //return string.Join(";", scparts);
+            return $"{daypart};{scparts[2]}:{scparts[3]};{scparts[4]}:{scparts[5]}".TrimStart(',');
+        }
+        private string ScheduleToString(NextGenPVESchedule schedule)
+        {
+            return $"{schedule.day};{schedule.starthour}:{schedule.startminute};{schedule.endhour}:{schedule.endminute}";
+        }
+
+        private bool ParseSchedule(string rs, string dbschedule, out NextGenPVESchedule parsed)
         {
             DoLog($"ParseSchedule called on string {dbschedule}");
-            int day = 0;
+            int day = -1;
             parsed = new NextGenPVESchedule();
+
+            if (string.IsNullOrEmpty(dbschedule))
+            {
+//                parsed.day.Add("*");
+                //parsed.dayName.Add("");
+                for (int i = 0; i < 7; i++)
+                {
+                    parsed.day.Add(i.ToString());
+                    parsed.dayName.Add(Enum.GetName(typeof(DayOfWeek), i));
+                }
+                parsed.starthour = "0";
+                parsed.startminute = "0";
+                parsed.endhour = "23";
+                parsed.endminute = "59";
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='*;0:00;23:59' WHERE name='{rs}'", c))
+                    {
+                        us.ExecuteNonQuery();
+                    }
+                }
+                return true;
+            }
 
             string[] nextgenschedule = Regex.Split(dbschedule, @"(.*)\;(.*)\:(.*)\;(.*)\:(.*)");
             if (nextgenschedule.Length < 6) return false;
@@ -1302,6 +1435,11 @@ namespace Oxide.Plugins
                     parsed.day.Add(i.ToString());
                     parsed.dayName.Add(Enum.GetName(typeof(DayOfWeek), i));
                 }
+            }
+            else if (tmp == "")
+            {
+                parsed.day.Add("none");
+                parsed.dayName.Add("none");
             }
             else if (days.Length > 0)
             {
@@ -1699,6 +1837,86 @@ namespace Oxide.Plugins
                                         }
                                     }
                                     break;
+                                case "scheduleday":
+                                    string newparts = EditScheduleDay(rs, newval);
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{newparts}' WHERE name='{rs}'", c))
+                                        {
+                                            us.ExecuteNonQuery();
+                                        }
+                                    }
+                                    GUIRulesetEditor(player, rs);
+                                    GUIEditSchedule(player, rs);
+                                    RunSchedule(true);
+                                    return;
+                                case "schedulestarthour":
+                                    {
+                                        //            RS      setting           newval
+                                        //editruleset,default,schedulestarthour,9
+                                        string ns = EditScheduleHM(rs, newval, "sh");
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                        {
+                                            c.Open();
+                                            using (SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c))
+                                            {
+                                                us.ExecuteNonQuery();
+                                            }
+                                        }
+                                        GUIRulesetEditor(player, rs);
+                                        GUIEditSchedule(player, rs);
+                                        RunSchedule(true);
+                                        return;
+                                    }
+                                case "scheduleendhour":
+                                    {
+                                        string ns = EditScheduleHM(rs, newval, "eh");
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                        {
+                                            c.Open();
+                                            using (SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c))
+                                            {
+                                                us.ExecuteNonQuery();
+                                            }
+                                        }
+                                        GUIRulesetEditor(player, rs);
+                                        GUIEditSchedule(player, rs);
+                                        RunSchedule(true);
+                                        return;
+                                    }
+                                case "schedulestartminute":
+                                    {
+                                        string ns = EditScheduleHM(rs, newval, "sm");
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                        {
+                                            c.Open();
+                                            using (SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c))
+                                            {
+                                                us.ExecuteNonQuery();
+                                            }
+                                        }
+                                        GUIRulesetEditor(player, rs);
+                                        GUIEditSchedule(player, rs);
+                                        RunSchedule(true);
+                                        return;
+                                    }
+                                case "scheduleendminute":
+                                    {
+                                        string ns = EditScheduleHM(rs, newval, "em");
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                        {
+                                            c.Open();
+                                            using (SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c))
+                                            {
+                                                us.ExecuteNonQuery();
+                                            }
+                                        }
+                                        GUIRulesetEditor(player, rs);
+                                        GUIEditSchedule(player, rs);
+                                        RunSchedule(true);
+                                        return;
+                                    }
                                 case "schedule":
                                     if (newval == "0")
                                     {
@@ -2228,7 +2446,6 @@ namespace Oxide.Plugins
                                 string mode = args[2];
                                 string mod = args[3];
 
-                                Puts($"UPDATE ngpve_rules SET {mode}='{mod}', damage=1 WHERE name='{rn}'");
                                 //edit
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
@@ -2336,6 +2553,7 @@ namespace Oxide.Plugins
                         break;
                     case "closeruleschedule":
                         CuiHelper.DestroyUi(player, NGPVESCHEDULEEDIT);
+                        GUIRuleSets(player);
                         break;
                     default:
                         GUIRuleSets(player);
@@ -3483,26 +3701,34 @@ namespace Oxide.Plugins
 
             row += 2;
             pb = GetButtonPositionP(row, hdrcol);
-            switch (invert)
-            {
-                case true:
-                    UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedulei"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-                    break;
-                case false:
-                    UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedulep"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-                    break;
-            }
 
-            row += 2;
-            pb = GetButtonPositionP(row, hdrcol);
-            switch (invert)
+            if (configData.Options.useSchedule)
             {
-                case true:
-                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#ff3333", 1f), Lang("sinverted"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} invschedule 0");
-                    break;
-                case false:
-                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("sinvert"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} invschedule 1");
-                    break;
+                switch (invert)
+                {
+                    case true:
+                        UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedulei"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                        break;
+                    case false:
+                        UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("schedulep"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                        break;
+                }
+
+                row += 2;
+                pb = GetButtonPositionP(row, hdrcol);
+                switch (invert)
+                {
+                    case true:
+                        UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#ff3333", 1f), Lang("sinverted"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} invschedule 0");
+                        break;
+                    case false:
+                        UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("sinvert"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} invschedule 1");
+                        break;
+                }
+            }
+            else
+            {
+                UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("scheduled"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
 
             row = 0; hdrcol++;
@@ -3713,18 +3939,18 @@ namespace Oxide.Plugins
 //                UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
 
-            col = 0; row = 5;
-            pb = GetButtonPositionP(row, col);
-            if (schedule != null)
+            if (configData.Options.useSchedule)
             {
-                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
-//                row++;
-//                pb = GetButtonPositionP(row, col);
-//                UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-            }
-            else
-            {
-                UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+                col = 0; row = 5;
+                pb = GetButtonPositionP(row, col);
+                if (!string.IsNullOrEmpty(schedule))
+                {
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule");
+                }
             }
 
             CuiHelper.AddUi(player, container);
@@ -4272,7 +4498,7 @@ namespace Oxide.Plugins
                                 custom = rd.GetBoolean(3);
                                 source = rd.GetValue(4).ToString();
                                 target = rd.GetValue(5).ToString();
-                                Puts($"Found rule {rulename}: {description}, {source}, {target}");
+                                //Puts($"Found rule {rulename}: {description}, {source}, {target}");
                             }
                         }
                     }
@@ -4487,48 +4713,168 @@ namespace Oxide.Plugins
             UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("nextgenpveschedule") + ": " + rulesetname, 24, "0.2 0.92", "0.7 1");
             UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.85 0.01", "0.99 0.04");
 
-            string fmtschedule = null;
-            if (schedule != null)
-            {
-                try
-                {
-                    string[] nextgenschedule = schedule.Split(';');//.ToArray();
-                    //Puts($"Schedule: {nextgenschedule[0]} {nextgenschedule[1]} {nextgenschedule[2]}");
-                    // WTF?
-                    int day = 0;
-                    string dayName = Lang("all") + "(*)";
-                    if (int.TryParse(nextgenschedule[0], out day))
-                    {
-                        dayName = Enum.GetName(typeof(DayOfWeek), day) + "(" + nextgenschedule[0] + ")";
-                    }
-                    fmtschedule = Lang("currentschedule", null, dayName, nextgenschedule[1], nextgenschedule[2]);
-                }
-                catch
-                {
-                    fmtschedule = Lang("noschedule", null, null, null, null);
-                    schedule = "none";
-                }
-            }
-            else
-            {
-                fmtschedule = Lang("noschedule", null, null, null, null);
-                schedule = "none";
-            }
             int col = 0;
             int row = 0;
-
-            float[] pb = GetButtonPositionP(row, col, 5f);
-            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("scheduling"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-
-            row++;
-            pb = GetButtonPositionP(row, col, 3f);
-            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), fmtschedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-
+            float[] pb = GetButtonPositionSchedule(row, col);
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("day"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             col++;
-            pb = GetButtonPositionP(row, 4);
-            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#dddddd", 1f), schedule, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-            UI.Input(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedule ");
+            pb = GetButtonPositionSchedule(row, col);
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("starthour"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            col++; col++;
+            pb = GetButtonPositionSchedule(row, col);
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("startminute"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            col++; col++; col++;
+            pb = GetButtonPositionSchedule(row, col);
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("endhour"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            col++; col++;
+            pb = GetButtonPositionSchedule(row, col);
+            UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("endminute"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
+            var nextgenschedule = new NextGenPVESchedule();
+
+            row = 1;
+            col = 0;
+            if (true)// (!string.IsNullOrEmpty(schedule))
+            {
+                ParseSchedule(rulesetname, schedule, out nextgenschedule);
+
+                pb = GetButtonPositionSchedule(row, col);
+                if (nextgenschedule.day.Contains("*"))
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), Lang("all"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday all");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("all"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday all");
+                }
+
+                row++;
+                int daynum = -1;
+                foreach (DayOfWeek day in Enum.GetValues(typeof(DayOfWeek)).OfType<DayOfWeek>().ToList())
+                {
+                    daynum++;
+                    pb = GetButtonPositionSchedule(row, col);
+                    if (nextgenschedule.day[0] == "")
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang(day.ToString()), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday {daynum.ToString()}");
+                    }
+                    else if ((nextgenschedule.day.Contains(daynum.ToString()) || nextgenschedule.day.Contains("*")))
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), Lang(day.ToString()), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday {daynum.ToString()}");
+                    }
+                    else
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang(day.ToString()), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday {daynum.ToString()}");
+                    }
+                    row++;
+                }
+
+                pb = GetButtonPositionSchedule(row, col);
+                if (nextgenschedule.day.Contains("none"))
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday none");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday none");
+                }
+
+                col++;
+                row = 1;
+                int i = 0;
+                for (int start = 0; start < 24; start++)
+                {
+                    if (i > 11)
+                    {
+                        i = 0;
+                        row = 1;
+                        col++;
+                    }
+                    pb = GetButtonPositionSchedule(row, col);
+                    if (int.Parse(nextgenschedule.starthour).Equals(start))
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestarthour {start.ToString()}");
+                    }
+                    else
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestarthour {start.ToString()}");
+                    }
+                    row++;
+                    i++;
+                }
+
+                col++;
+                row = 1;
+                i = 0;
+                for (int start = 0; start < 60; start++)
+                {
+                    if (i > 19)
+                    {
+                        i = 0;
+                        row = 1;
+                        col++;
+                    }
+                    pb = GetButtonPositionSchedule(row, col);
+                    if (int.Parse(nextgenschedule.startminute).Equals(start))
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestartminute {start.ToString()}");
+                    }
+                    else
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestartminute {start.ToString()}");
+                    }
+                    row++;
+                    i++;
+                }
+
+                col++;
+                row = 1;
+                i = 0;
+                for (int start = 0; start < 24; start++)
+                {
+                    if (i > 11)
+                    {
+                        i = 0;
+                        row = 1;
+                        col++;
+                    }
+                    pb = GetButtonPositionSchedule(row, col);
+                    if (int.Parse(nextgenschedule.endhour).Equals(start))
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendhour {start.ToString()}");
+                    }
+                    else
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendhour {start.ToString()}");
+                    }
+                    row++;
+                    i++;
+                }
+
+                col++;
+                row = 1;
+                i = 0;
+                for (int start = 0; start < 60; start++)
+                {
+                    if (i > 19)
+                    {
+                        i = 0;
+                        row = 1;
+                        col++;
+                    }
+                    pb = GetButtonPositionSchedule(row, col);
+                    if (int.Parse(nextgenschedule.endminute).Equals(start))
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendminute {start.ToString()}");
+                    }
+                    else
+                    {
+                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendminute {start.ToString()}");
+                    }
+                    row++;
+                    i++;
+                }
+            }
             CuiHelper.AddUi(player, container);
         }
 
@@ -4539,6 +4885,14 @@ namespace Oxide.Plugins
             float offsetY = (0.87f - (rowNumber * 0.064f));
 
             return new float[] { offsetX, offsetY, offsetX + (0.226f * colspan), offsetY + 0.03f };
+        }
+
+        private float[] GetButtonPositionSchedule(int rowNumber, int columnNumber, float colspan = 1f)
+        {
+            float offsetX = 0.01f + (0.09f * columnNumber);
+            float offsetY = (0.87f - (rowNumber * 0.04f));
+
+            return new float[] { offsetX, offsetY, offsetX + (0.136f * colspan), offsetY + 0.025f };
         }
 
         private float[] GetButtonPositionS(int rowNumber, int columnNumber, float colspan = 1f)
@@ -4914,8 +5268,8 @@ namespace Oxide.Plugins
 
         public class NextGenPVESchedule
         {
-            public List<string> day;
-            public List<string> dayName;
+            public List<string> day = new List<string>();
+            public List<string> dayName = new List<string>();
             public string starthour;
             public string startminute;
             public string endhour;
