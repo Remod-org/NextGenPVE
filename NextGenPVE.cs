@@ -1,7 +1,7 @@
 #region License (GPL v3)
 /*
     NextGenPVE - Prevent damage to players and objects in a Rust PVE environment
-    Copyright (c) 2020 RFC1920 <desolationoutpostpve@gmail.com>
+    Copyright (c) 2020-2021 RFC1920 <desolationoutpostpve@gmail.com>
 
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License
@@ -37,7 +37,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.1.0")]
+    [Info("NextGen PVE", "RFC1920", "1.1.1")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -60,7 +60,7 @@ namespace Oxide.Plugins
         private string TextColor = "Red";
 
         [PluginReference]
-        private readonly Plugin ZoneManager, Humanoids, HumanNPC, Friends, Clans, RustIO, ZombieHorde, GUIAnnouncements, SAMTargeting;
+        private readonly Plugin ZoneManager, Humanoids, HumanNPC, Friends, Clans, RustIO, GUIAnnouncements, SAMTargeting;
 
         static NextGenPVE Instance;
         private readonly string logfilename = "log";
@@ -788,6 +788,12 @@ namespace Oxide.Plugins
             }
             stype = source.GetType().Name;
             ttype = target.GetType().Name;
+            if (string.IsNullOrEmpty(stype) || string.IsNullOrEmpty(ttype))
+            {
+                stype = null;
+                ttype = null;
+                return false;
+            }
 #if DEBUG
             Puts($"attacker type: {stype}, victim type: {ttype}");
 #endif
@@ -3200,6 +3206,21 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 1, 1))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_fire', 'Player can damage Fire', 1, 0, 'player', 'fire')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_fire', null, null, null, null)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
             configData.Version = Version;
             SaveConfig(configData);
         }
