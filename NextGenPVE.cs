@@ -20,7 +20,6 @@
     Optionally you can also view the license at <http://www.gnu.org/licenses/>.
 */
 #endregion License (GPL v3)
-//#define DEBUG
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
@@ -37,7 +36,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.1.1")]
+    [Info("NextGen PVE", "RFC1920", "1.1.2")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -62,9 +61,9 @@ namespace Oxide.Plugins
         [PluginReference]
         private readonly Plugin ZoneManager, Humanoids, HumanNPC, Friends, Clans, RustIO, GUIAnnouncements, SAMTargeting;
 
-        static NextGenPVE Instance;
+        private static NextGenPVE Instance;
         private readonly string logfilename = "log";
-        private bool dolog = false;
+        private bool dolog;
         private bool enabled = true;
         private Timer scheduleTimer;
         private const string NGPVERULELIST = "nextgenpve.rulelist";
@@ -108,6 +107,7 @@ namespace Oxide.Plugins
             AddCovalenceCommand("pveenable", "CmdNextGenPVEenable");
             AddCovalenceCommand("pvedrop", "CmdNextGenPVEDrop");
             AddCovalenceCommand("pvelog", "CmdNextGenPVElog");
+            AddCovalenceCommand("pvedebug", "CmdNextGenPVEDebug");
 
             permission.RegisterPermission(permNextGenPVEUse, this);
             permission.RegisterPermission(permNextGenPVEAdmin, this);
@@ -117,8 +117,9 @@ namespace Oxide.Plugins
             if (configData.Options.useSchedule) RunSchedule(true);
         }
 
-        void OnUserConnected(IPlayer player) => OnUserDisconnected(player);
-        void OnUserDisconnected(IPlayer player)
+        private void OnUserConnected(IPlayer player) => OnUserDisconnected(player);
+
+        private void OnUserDisconnected(IPlayer player)
         {
             //if (configData.Options.usePlayerDatabase) return;
             long lc = 0;
@@ -138,9 +139,7 @@ namespace Oxide.Plugins
         {
             if (command != "pverule" && isopen.Contains(player.userID))
             {
-#if DEBUG
-                Puts($"OnPlayerCommand: {command} BLOCKED");
-#endif
+                if (configData.Options.debug) Puts($"OnPlayerCommand: {command} BLOCKED");
                 return true;
             }
             return null;
@@ -150,9 +149,7 @@ namespace Oxide.Plugins
         {
             if (command != "pverule" && isopen.Contains(player.userID))
             {
-#if DEBUG
-                Puts($"OnPlayerCommand: {command} BLOCKED");
-#endif
+                if (configData.Options.debug) Puts($"OnPlayerCommand: {command} BLOCKED");
                 return true;
             }
             return null;
@@ -165,6 +162,7 @@ namespace Oxide.Plugins
             SaveData();
             UpdateEnts();
         }
+
         private void UpdateEnts()
         {
             // Populate the entities table with any new entities (Typically only at wipe but can be run manually via pveupdate.)
@@ -280,6 +278,7 @@ namespace Oxide.Plugins
                 ["entities"] = "Entities",
                 ["uentities"] = "Unknown Entities",
                 ["logging"] = "Logging set to {0}",
+                ["debug"] = "Debug set to {0}",
                 ["day"] = "Day",
                 ["starthour"] = "Start Hour",
                 ["endhour"] = "End Hour",
@@ -330,7 +329,7 @@ namespace Oxide.Plugins
                 CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
             }
 
-            if (scheduleTimer != null) scheduleTimer.Destroy();
+            scheduleTimer?.Destroy();
             sqlConnection.Close();
         }
 
@@ -613,16 +612,16 @@ namespace Oxide.Plugins
             }
             catch { }
 
-#if DEBUG
-            Puts($"attacker prefab: {hitinfo.Initiator.ShortPrefabName}, victim prefab: {entity.ShortPrefabName}");
-#endif
+            if (configData.Options.debug) Puts($"attacker prefab: {hitinfo.Initiator.ShortPrefabName}, victim prefab: {entity.ShortPrefabName}");
+
             string stype; string ttype;
             bool canhurt = EvaluateRulesets(hitinfo.Initiator, entity as BaseEntity, out stype, out ttype);
             if (stype == null && ttype == null) return null;
 
             if (stype == "BasePlayer")
             {
-                if ((hitinfo.Initiator as BasePlayer).IPlayer.HasPermission(permNextGenPVEGod))
+                BasePlayer hibp = hitinfo.Initiator as BasePlayer;
+                if (permission.UserHasPermission(hibp.UserIDString, permNextGenPVEGod))
                 {
                     Puts("Admin almighty!");
                     return null;
@@ -631,7 +630,7 @@ namespace Oxide.Plugins
                 {
                     try
                     {
-                        if ((entity as BasePlayer).userID == (hitinfo.Initiator as BasePlayer).userID && configData.Options.AllowSuicide)
+                        if ((entity as BasePlayer)?.userID == (hitinfo.Initiator as BasePlayer)?.userID && configData.Options.AllowSuicide)
                         {
                             DoLog("AllowSuicide TRUE");
                             canhurt = true;
@@ -794,13 +793,12 @@ namespace Oxide.Plugins
                 ttype = null;
                 return false;
             }
-#if DEBUG
-            Puts($"attacker type: {stype}, victim type: {ttype}");
-#endif
+            if (configData.Options.debug) Puts($"attacker type: {stype}, victim type: {ttype}");
+
             // Special case for preventing codelock hacking
             if (stype =="CodeLock" && ttype == "BasePlayer")
             {
-                DoLog($"Allowing codelock damage");
+                DoLog("Allowing codelock damage");
                 return true;
             }
 
@@ -875,7 +873,7 @@ namespace Oxide.Plugins
             else if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window" || ttype == "BuildingPrivlidge"))
             {
                 isBuilding = true;
-                var pl = (source as BaseHelicopter).myAI._targetList.ToArray();
+                var pl = (source as BaseHelicopter)?.myAI._targetList.ToArray();
                 hasBP = false;
                 foreach (var x in pl)
                 {
@@ -985,7 +983,7 @@ namespace Oxide.Plugins
                         rulesetname = readMe.GetString(0);
                         rulesetzone = readMe.GetString(1);
 
-                        if (enabled != true)
+                        if (!enabled)
                         {
                             DoLog($"Skipping ruleset {rulesetname}, which is disabled");
                             continue;
@@ -1104,7 +1102,7 @@ namespace Oxide.Plugins
             return damage;
         }
 
-        void MessageToAll(string key, string ruleset)
+        private void MessageToAll(string key, string ruleset)
         {
             if (!configData.Options.useMessageBroadcast && !configData.Options.useGUIAnnouncements) return;
             foreach (var player in BasePlayer.activePlayerList)
@@ -1331,6 +1329,7 @@ namespace Oxide.Plugins
             }
             return $"{scparts[1]};{scparts[2]}:{scparts[3]};{scparts[4]}:{scparts[5]}";
         }
+
         public string EditScheduleDay(string rs, string newval)
         {
             string sc = "";
@@ -1368,9 +1367,7 @@ namespace Oxide.Plugins
             else
             {
                 string[] days = daypart.Split(',');
-                string[] newdays = newval.Split(',');
-
-                foreach (var nd in newdays)
+                foreach (string nd in newval.Split(','))
                 {
                     if (days.Contains(nd))
                     {
@@ -1385,6 +1382,7 @@ namespace Oxide.Plugins
             //return string.Join(";", scparts);
             return $"{daypart};{scparts[2]}:{scparts[3]};{scparts[4]}:{scparts[5]}".TrimStart(',');
         }
+
         private string ScheduleToString(NextGenPVESchedule schedule)
         {
             return $"{schedule.day};{schedule.starthour}:{schedule.startminute};{schedule.endhour}:{schedule.endminute}";
@@ -1396,10 +1394,9 @@ namespace Oxide.Plugins
             int day = -1;
             parsed = new NextGenPVESchedule();
 
-            if (string.IsNullOrEmpty(dbschedule))
+            if (string.IsNullOrEmpty(dbschedule) || dbschedule == "0")
             {
-//                parsed.day.Add("*");
-                //parsed.dayName.Add("");
+                // Set default values to enable or disable (inverted) always
                 for (int i = 0; i < 7; i++)
                 {
                     parsed.day.Add(i.ToString());
@@ -1442,7 +1439,7 @@ namespace Oxide.Plugins
                     parsed.dayName.Add(Enum.GetName(typeof(DayOfWeek), i));
                 }
             }
-            else if (tmp == "")
+            else if (tmp?.Length == 0)
             {
                 parsed.day.Add("none");
                 parsed.dayName.Add("none");
@@ -1508,7 +1505,7 @@ namespace Oxide.Plugins
         [Command("pvedrop")]
         private void CmdNextGenPVEDrop(IPlayer player, string command, string[] args)
         {
-            if (configData.Options.AllowDropDatabase == true) return;
+            if (configData.Options.AllowDropDatabase) return;
             if (!player.HasPermission(permNextGenPVEAdmin)) { Message(player, "notauthorized"); return; }
 
             LoadDefaultEntities();
@@ -1546,6 +1543,16 @@ namespace Oxide.Plugins
             Message(player, "logging", dolog.ToString());
         }
 
+        [Command("pvedebug")]
+        private void CmdNextGenPVEDebug(IPlayer player, string command, string[] args)
+        {
+            if (!player.HasPermission(permNextGenPVEAdmin)) { Message(player, "notauthorized"); return; }
+
+            configData.Options.debug = !configData.Options.debug;
+            SaveConfig();
+            Message(player, "debug", configData.Options.debug.ToString());
+        }
+
         [Command("pverule")]
         private void CmdNextGenPVEGUI(IPlayer iplayer, string command, string[] args)
         {
@@ -1554,9 +1561,11 @@ namespace Oxide.Plugins
 
             if (args.Length > 0)
             {
-#if DEBUG
-                string debug = string.Join(",", args); Puts($"{debug}");
-#endif
+                if (configData.Options.debug)
+                {
+                    string debug = string.Join(",", args); Puts($"{debug}");
+                }
+
                 switch (args[0])
                 {
                     case "list":
@@ -1573,7 +1582,7 @@ namespace Oxide.Plugins
                                         var rs = crs.GetValue(0).ToString();
                                         var en = crs.GetBoolean(1).ToString();
                                         var zone = crs.GetValue(2).ToString();
-                                        if (zone == "0" || zone == "" || zone == "default") zone = Lang("default");
+                                        if (zone == "0" || zone?.Length == 0 || zone == "default") zone = Lang("default");
                                         if (zone != "") zone = Lang("zone") + ": " + zone;
                                         if (rs != "")
                                         {
@@ -1606,7 +1615,7 @@ namespace Oxide.Plugins
                                             //src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255))
                                             output = Lang("nextgenpveruleset") + ": " + re.GetValue(0).ToString() + ", " + Lang("defaultdamage") + ": " + re.GetBoolean(1).ToString() + ", " + Lang("enabled") + ": " + re.GetBoolean(2).ToString();
                                             zone = re.GetValue(4).ToString();
-                                            if (zone == "0" || zone == "" || zone == "default") zone = Lang("default");
+                                            if (zone == "0" || zone?.Length == 0 || zone == "default") zone = Lang("default");
                                             if (zone != "") zone = ", " + Lang("zone") + ": " + zone;
                                             rules += re.GetValue(5).ToString() + "\n\t";
                                             var s = re.GetValue(6).ToString();
@@ -1729,25 +1738,29 @@ namespace Oxide.Plugins
                         GUISelectRule(player,null,true);
                         break;
                     case "allentities":
-                        string search = "";
-                        string coll = "all";
-                        if (args.Length > 2 && args[1] == "coll")
                         {
-                            coll = args[2];
+                            string search = "";
+                            string coll = "all";
+                            if (args.Length > 2 && args[1] == "coll")
+                            {
+                                coll = args[2];
+                            }
+                            else if (args.Length > 1)
+                            {
+                                search = args[1];
+                            }
+                            GUISelectEntity(player, coll, search);
                         }
-                        else if (args.Length > 1)
-                        {
-                            search = args[1];
-                        }
-                        GUISelectEntity(player, coll, search);
                         break;
                     case "unknownentities":
-                        string searc = "";
-                        if (args.Length > 1)
                         {
-                            search = args[1];
+                            string search = "";
+                            if (args.Length > 1)
+                            {
+                                search = args[1];
+                            }
+                            GUISelectEntity(player, "unknown", search);
                         }
-                        GUISelectEntity(player, "unknown", searc);
                         break;
                     case "addcustomrule":
                         GUIRuleEditor(player, null);
@@ -3243,7 +3256,6 @@ namespace Oxide.Plugins
                     useTeams = false,
                     AllowCustomEdit = false,
                     AllowDropDatabase = false,
-
                     NPCAutoTurretTargetsPlayers = true,
                     NPCAutoTurretTargetsNPCs = true,
                     AutoTurretTargetsPlayers = false,
@@ -3264,6 +3276,7 @@ namespace Oxide.Plugins
             };
             SaveConfig(config);
         }
+
         private void SaveConfig(ConfigData config)
         {
             Config.WriteObject(config, true);
@@ -3271,12 +3284,13 @@ namespace Oxide.Plugins
 
         private class ConfigData
         {
-            public Options Options = new Options();
+            public Options Options;
             public VersionNumber Version;
         }
 
-        private class Options
+        public class Options
         {
+            public bool debug;
             public bool useZoneManager;
             public float protectedDays;
             public bool useSchedule;
@@ -3305,6 +3319,7 @@ namespace Oxide.Plugins
             public bool HonorRelationships;
             public bool BlockScrapHeliFallDamage;
         }
+
         protected void LoadDefaultFlags()
         {
             Puts("Creating new config defaults.");
@@ -3329,15 +3344,14 @@ namespace Oxide.Plugins
         {
             if (set)
             {
-#if DEBUG
-                Puts($"Setting isopen for {uid}");
-#endif
+                if (configData.Options.debug) Puts($"Setting isopen for {uid}");
+
                 if (!isopen.Contains(uid)) isopen.Add(uid);
                 return;
             }
-#if DEBUG
-            Puts($"Clearing isopen for {uid}");
-#endif
+
+            if (configData.Options.debug) Puts($"Clearing isopen for {uid}");
+
             isopen.Remove(uid);
         }
 
@@ -3351,11 +3365,11 @@ namespace Oxide.Plugins
             UI.Label(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("standard"), 12, "0.66 0.95", "0.72 0.98");
             UI.Label(ref container, NGPVERULELIST, UI.Color("#5540d8", 1f), Lang("automated"), 12, "0.73 0.95", "0.79 0.98");
 
-            if (configData.Options.AllowDropDatabase == true)
+            if (configData.Options.AllowDropDatabase)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#ff0000", 1f), Lang("drop"), 12, "0.01 0.01", "0.18 0.05", "pvedrop gui");
             }
-            if (configData.Options.AllowCustomEdit == true)
+            if (configData.Options.AllowCustomEdit)
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("customedit"), 12, "0.6 0.01", "0.69 0.05", "pverule customgui");
             }
@@ -3375,9 +3389,7 @@ namespace Oxide.Plugins
 
             int col = 0;
             int row = 0;
-            float[] pb;
-
-            pb = GetButtonPositionP(row, col);
+            float[] pb = GetButtonPositionP(row, col);
             UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("rulesets"), 14, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             row++;
 
@@ -3707,8 +3719,8 @@ namespace Oxide.Plugins
             }
             UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeruleset");
 
-            string dicolor = "#333333";
-            string encolor = "#ff3333";
+            const string dicolor = "#333333";
+            const string encolor = "#ff3333";
             int col = 0;
             int hdrcol = 0;
             int row = 0;
@@ -3788,9 +3800,9 @@ namespace Oxide.Plugins
                     {
                         while (rsread.Read())
                         {
-                            string except = rsread.GetValue(0).ToString() ?? null;
+                            string except = rsread.GetValue(0).ToString();
                             //Puts($"Found exception: {except}");
-                            if (except == "") continue;
+                            if (except?.Length == 0) continue;
                             if (row > 11)
                             {
                                 row = 1;
@@ -3843,7 +3855,7 @@ namespace Oxide.Plugins
                             while (rsread.Read())
                             {
                                 string exclude = rsread.GetValue(0).ToString();
-                                if (exclude == "") continue;
+                                if (exclude?.Length == 0) continue;
                                 noExclusions = false;
                                 if (row > 11)
                                 {
@@ -3896,7 +3908,7 @@ namespace Oxide.Plugins
                             while (rsread.Read())
                             {
                                 string exclude = rsread.GetValue(0).ToString();
-                                if (exclude == "") continue;
+                                if (exclude?.Length == 0) continue;
                                 noExclusions = false;
                                 if (row > 11)
                                 {
@@ -4096,9 +4108,7 @@ namespace Oxide.Plugins
                 q = $"SELECT DISTINCT name, type FROM ngpve_entities WHERE name LIKE '%{cat}%' ORDER BY type";
             }
 
-#if DEBUG
-            Puts($"QUERY IS {q}, COLLECTION IS {cat}, SEARCH IS {search}");
-#endif
+            if (configData.Options.debug) Puts($"QUERY IS {q}, COLLECTION IS {cat}, SEARCH IS {search}");
 
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
@@ -4354,7 +4364,7 @@ namespace Oxide.Plugins
                         {
                             string nm = ntd.GetString(0);
                             string tp = ntd.GetString(1);
-                            if (nm == "" || tp == "") continue;
+                            if (nm?.Length == 0 || tp?.Length == 0) continue;
                             bool cs = ntd.GetBoolean(2);
                             //Puts($"Adding {nm} {tp} to entities list");
                             if (nm != "" && tp != "")
@@ -4385,11 +4395,11 @@ namespace Oxide.Plugins
                         while (crd.Read())
                         {
                             string rulename = crd.GetValue(0).ToString();
-                            if (rulename == "") continue;
+                            if (rulename?.Length == 0) continue;
                             string src = null;
                             string tgt = null;
 
-                            if (rulename != null && rulename != "")
+                            if (!string.IsNullOrEmpty(rulename))
                             {
                                 string[] st = rulename.Split('_');
                                 src = st[0]; tgt = st[1];
@@ -4403,7 +4413,7 @@ namespace Oxide.Plugins
                                     foreach (string type in ngpveentities[src].types)
                                     {
                                         //Puts($"Checking for '{type}'");
-                                        if (type == "") continue;
+                                        if (type?.Length == 0) continue;
                                         if (foundsrc.Contains(type)) continue;
                                         foundsrc.Add(type);
                                         if (row > 13)
@@ -4432,7 +4442,7 @@ namespace Oxide.Plugins
                                     foreach (var type in ngpveentities[tgt].types)
                                     {
                                         //Puts($"Checking for '{type}'");
-                                        if (type == "") continue;
+                                        if (type?.Length == 0) continue;
                                         if (foundtgt.Contains(type)) continue;
                                         foundtgt.Add(type);
                                         if (row > 13)
@@ -4686,16 +4696,16 @@ namespace Oxide.Plugins
                             if (ngpvezonemaps[rulesetname].map.Contains(zoneID)) zColor = "#55d840";
                             labelonly = true;
                         }
-                        if (zoneID.ToString() == zone) zColor = "#55d840";
+                        if (zoneID == zone) zColor = "#55d840";
 
                         pb = GetButtonPositionZ(row, col);
                         if (labelonly)
                         {
-                            UI.Label(ref container, NGPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+                            UI.Label(ref container, NGPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                         }
                         else
                         {
-                            UI.Button(ref container, NGPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID.ToString() + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zoneID}");
+                            UI.Button(ref container, NGPVEVALUEEDIT, UI.Color(zColor, 1f), zName + "(" + zoneID + ")", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone {zoneID}");
                         }
                         row++;
                     }
@@ -4755,151 +4765,149 @@ namespace Oxide.Plugins
 
             row = 1;
             col = 0;
-            if (true)// (!string.IsNullOrEmpty(schedule))
+            ParseSchedule(rulesetname, schedule, out nextgenschedule);
+
+            pb = GetButtonPositionSchedule(row, col);
+            if (nextgenschedule.day.Contains("*"))
             {
-                ParseSchedule(rulesetname, schedule, out nextgenschedule);
+                UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), Lang("all"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday all");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("all"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday all");
+            }
 
+            row++;
+            int daynum = -1;
+            foreach (DayOfWeek day in Enum.GetValues(typeof(DayOfWeek)).OfType<DayOfWeek>().ToList())
+            {
+                daynum++;
                 pb = GetButtonPositionSchedule(row, col);
-                if (nextgenschedule.day.Contains("*"))
+                if (nextgenschedule.day[0]?.Length == 0)
                 {
-                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), Lang("all"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday all");
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang(day.ToString()), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday {daynum.ToString()}");
+                }
+                else if (nextgenschedule.day.Contains(daynum.ToString()) || nextgenschedule.day.Contains("*"))
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), Lang(day.ToString()), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday {daynum.ToString()}");
                 }
                 else
                 {
-                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("all"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday all");
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang(day.ToString()), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday {daynum.ToString()}");
                 }
-
                 row++;
-                int daynum = -1;
-                foreach (DayOfWeek day in Enum.GetValues(typeof(DayOfWeek)).OfType<DayOfWeek>().ToList())
-                {
-                    daynum++;
-                    pb = GetButtonPositionSchedule(row, col);
-                    if (nextgenschedule.day[0] == "")
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang(day.ToString()), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday {daynum.ToString()}");
-                    }
-                    else if ((nextgenschedule.day.Contains(daynum.ToString()) || nextgenschedule.day.Contains("*")))
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), Lang(day.ToString()), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday {daynum.ToString()}");
-                    }
-                    else
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang(day.ToString()), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday {daynum.ToString()}");
-                    }
-                    row++;
-                }
+            }
 
-                pb = GetButtonPositionSchedule(row, col);
-                if (nextgenschedule.day.Contains("none"))
+            pb = GetButtonPositionSchedule(row, col);
+            if (nextgenschedule.day.Contains("none"))
+            {
+                UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday none");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday none");
+            }
+
+            col++;
+            row = 1;
+            int i = 0;
+            for (int start = 0; start < 24; start++)
+            {
+                if (i > 11)
                 {
-                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday none");
+                    i = 0;
+                    row = 1;
+                    col++;
+                }
+                pb = GetButtonPositionSchedule(row, col);
+                if (int.Parse(nextgenschedule.starthour).Equals(start))
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestarthour {start.ToString()}");
                 }
                 else
                 {
-                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleday none");
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestarthour {start.ToString()}");
                 }
+                row++;
+                i++;
+            }
 
-                col++;
-                row = 1;
-                int i = 0;
-                for (int start = 0; start < 24; start++)
+            col++;
+            row = 1;
+            i = 0;
+            for (int start = 0; start < 60; start++)
+            {
+                if (i > 19)
                 {
-                    if (i > 11)
-                    {
-                        i = 0;
-                        row = 1;
-                        col++;
-                    }
-                    pb = GetButtonPositionSchedule(row, col);
-                    if (int.Parse(nextgenschedule.starthour).Equals(start))
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestarthour {start.ToString()}");
-                    }
-                    else
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestarthour {start.ToString()}");
-                    }
-                    row++;
-                    i++;
+                    i = 0;
+                    row = 1;
+                    col++;
                 }
+                pb = GetButtonPositionSchedule(row, col);
+                if (int.Parse(nextgenschedule.startminute).Equals(start))
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestartminute {start.ToString()}");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#404040", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestartminute {start.ToString()}");
+                }
+                row++;
+                i++;
+            }
 
-                col++;
-                row = 1;
-                i = 0;
-                for (int start = 0; start < 60; start++)
+            col++;
+            row = 1;
+            i = 0;
+            for (int start = 0; start < 24; start++)
+            {
+                if (i > 11)
                 {
-                    if (i > 19)
-                    {
-                        i = 0;
-                        row = 1;
-                        col++;
-                    }
-                    pb = GetButtonPositionSchedule(row, col);
-                    if (int.Parse(nextgenschedule.startminute).Equals(start))
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestartminute {start.ToString()}");
-                    }
-                    else
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} schedulestartminute {start.ToString()}");
-                    }
-                    row++;
-                    i++;
+                    i = 0;
+                    row = 1;
+                    col++;
                 }
+                pb = GetButtonPositionSchedule(row, col);
+                if (int.Parse(nextgenschedule.endhour).Equals(start))
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendhour {start.ToString()}");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendhour {start.ToString()}");
+                }
+                row++;
+                i++;
+            }
 
-                col++;
-                row = 1;
-                i = 0;
-                for (int start = 0; start < 24; start++)
+            col++;
+            row = 1;
+            i = 0;
+            for (int start = 0; start < 60; start++)
+            {
+                if (i > 19)
                 {
-                    if (i > 11)
-                    {
-                        i = 0;
-                        row = 1;
-                        col++;
-                    }
-                    pb = GetButtonPositionSchedule(row, col);
-                    if (int.Parse(nextgenschedule.endhour).Equals(start))
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendhour {start.ToString()}");
-                    }
-                    else
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendhour {start.ToString()}");
-                    }
-                    row++;
-                    i++;
+                    i = 0;
+                    row = 1;
+                    col++;
                 }
-
-                col++;
-                row = 1;
-                i = 0;
-                for (int start = 0; start < 60; start++)
+                pb = GetButtonPositionSchedule(row, col);
+                if (int.Parse(nextgenschedule.endminute).Equals(start))
                 {
-                    if (i > 19)
-                    {
-                        i = 0;
-                        row = 1;
-                        col++;
-                    }
-                    pb = GetButtonPositionSchedule(row, col);
-                    if (int.Parse(nextgenschedule.endminute).Equals(start))
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendminute {start.ToString()}");
-                    }
-                    else
-                    {
-                        UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#d85540", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendminute {start.ToString()}");
-                    }
-                    row++;
-                    i++;
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#55d840", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendminute {start.ToString()}");
                 }
+                else
+                {
+                    UI.Button(ref container, NGPVESCHEDULEEDIT, UI.Color("#404040", 1f), start.ToString(), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} scheduleendminute {start.ToString()}");
+                }
+                row++;
+                i++;
             }
             CuiHelper.AddUi(player, container);
         }
 
         private int RowNumber(int max, int count) => Mathf.FloorToInt(count / max);
+
         private float[] GetButtonPositionP(int rowNumber, int columnNumber, float colspan = 1f)
         {
             float offsetX = 0.05f + (0.126f * columnNumber);
@@ -4996,7 +5004,6 @@ namespace Oxide.Plugins
             {
                 return true;
             }
-
             else if (hitinfo.WeaponPrefab != null)
             {
                 if (hitinfo.WeaponPrefab.ShortPrefabName.Equals("rocket_heli") || hitinfo.WeaponPrefab.ShortPrefabName.Equals("rocket_heli_napalm"))
@@ -5104,7 +5111,7 @@ namespace Oxide.Plugins
 
                 if (!configData.Options.HonorBuildingPrivilege) return true;
 
-                BuildingManager.Building building = (entity as BuildingBlock).GetBuilding();
+                BuildingManager.Building building = (entity as BuildingBlock)?.GetBuilding();
 
                 if (building != null)
                 {
@@ -5112,14 +5119,7 @@ namespace Oxide.Plugins
                     var privs = building.GetDominatingBuildingPrivilege();
                     if (privs == null)
                     {
-                        if (configData.Options.UnprotectedBuildingDamage)
-                        {
-                            return true;
-                        }
-                        else
-                        {
-                            return false;
-                        }
+                        return configData.Options.UnprotectedBuildingDamage;
                     }
                     foreach (var auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                     {
@@ -5196,15 +5196,14 @@ namespace Oxide.Plugins
         {
             var date = dateTime.ToUniversalTime();
             var ticks = date.Ticks - new DateTime(1970, 1, 1, 0, 0, 0, 0).Ticks;
-            var ts = ticks / TimeSpan.TicksPerSecond;
-            return ts;
+            return ticks / TimeSpan.TicksPerSecond;
         }
 
         public static string StringToBinary(string data)
         {
             StringBuilder sb = new StringBuilder();
 
-            foreach (char c in data.ToCharArray())
+            foreach (char c in data)
             {
                 sb.Append(Convert.ToString(c, 2).PadLeft(8, '0'));
             }
@@ -5245,31 +5244,22 @@ namespace Oxide.Plugins
             {
                 string playerclan = (string)Clans?.CallHook("GetClanOf", playerid);
                 string ownerclan = (string)Clans?.CallHook("GetClanOf", ownerid);
-                if (playerclan != null && ownerclan != null)
+                if (playerclan != null && ownerclan != null && playerclan == ownerclan)
                 {
-                    if (playerclan == ownerclan)
-                    {
-                        DoLog($"Clans plugin reports that {playerid.ToString()} and {ownerid.ToString()} are clanmates.");
-                        return true;
-                    }
+                    DoLog($"Clans plugin reports that {playerid.ToString()} and {ownerid.ToString()} are clanmates.");
+                    return true;
                 }
             }
             if (configData.Options.useTeams)
             {
                 BasePlayer player = BasePlayer.FindByID(playerid);
-                if (player != null)
+                if (player != null && player.currentTeam != 0)
                 {
-                    if (player.currentTeam != 0)
+                    RelationshipManager.PlayerTeam playerTeam = RelationshipManager.ServerInstance.FindTeam(player.currentTeam);
+                    if (playerTeam?.members.Contains(ownerid) == true)
                     {
-                        RelationshipManager.PlayerTeam playerTeam = RelationshipManager.ServerInstance.FindTeam(player.currentTeam);
-                        if (playerTeam != null)
-                        {
-                            if (playerTeam.members.Contains(ownerid))
-                            {
-                                DoLog($"Rust teams reports that {playerid.ToString()} and {ownerid.ToString()} are on the same team.");
-                                return true;
-                            }
-                        }
+                        DoLog($"Rust teams reports that {playerid.ToString()} and {ownerid.ToString()} are on the same team.");
+                        return true;
                     }
                 }
             }
@@ -5313,7 +5303,7 @@ namespace Oxide.Plugins
         {
             public static CuiElementContainer Container(string panel, string color, string min, string max, bool useCursor = false, string parent = "Overlay")
             {
-                CuiElementContainer container = new CuiElementContainer()
+                return new CuiElementContainer()
                 {
                     {
                         new CuiPanel
@@ -5326,8 +5316,8 @@ namespace Oxide.Plugins
                         panel
                     }
                 };
-                return container;
             }
+
             public static void Panel(ref CuiElementContainer container, string panel, string color, string min, string max, bool cursor = false)
             {
                 container.Add(new CuiPanel
@@ -5338,6 +5328,7 @@ namespace Oxide.Plugins
                 },
                 panel);
             }
+
             public static void Label(ref CuiElementContainer container, string panel, string color, string text, int size, string min, string max, TextAnchor align = TextAnchor.MiddleCenter)
             {
                 container.Add(new CuiLabel
@@ -5346,8 +5337,8 @@ namespace Oxide.Plugins
                     RectTransform = { AnchorMin = min, AnchorMax = max }
                 },
                 panel);
-
             }
+
             public static void Button(ref CuiElementContainer container, string panel, string color, string text, int size, string min, string max, string command, TextAnchor align = TextAnchor.MiddleCenter)
             {
                 container.Add(new CuiButton
@@ -5358,6 +5349,7 @@ namespace Oxide.Plugins
                 },
                 panel);
             }
+
             public static void Input(ref CuiElementContainer container, string panel, string color, string text, int size, string min, string max, string command, TextAnchor align = TextAnchor.MiddleCenter)
             {
                 container.Add(new CuiElement
@@ -5381,6 +5373,7 @@ namespace Oxide.Plugins
                     }
                 });
             }
+
             public static void Icon(ref CuiElementContainer container, string panel, string color, string imageurl, string min, string max)
             {
                 container.Add(new CuiElement
@@ -5403,6 +5396,7 @@ namespace Oxide.Plugins
                     }
                 });
             }
+
             public static string Color(string hexColor, float alpha)
             {
                 if (hexColor.StartsWith("#"))
@@ -5658,6 +5652,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('fire_player', 'Fire can damage Player', 1, 0, 'fire', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_fire', 'Player can damage Fire', 1, 0, 'player', 'fire')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('fire_resource', 'Fire can damage Resource', 1, 0, 'fire', 'resource')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_animal', 'Helicopter can damage animal', 1, 0, 'helicopter', 'animal')", sqlConnection);
@@ -5761,6 +5757,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'trap_trap', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_player', null, null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_fire', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_resource', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();

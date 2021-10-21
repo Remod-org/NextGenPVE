@@ -81,6 +81,7 @@ The following commands have been implemented:
 
     - `/pveenable` - Toggles the enabled status of the plugin
     - `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
+    - `/pvedebug` - Toggles the logging of attacker/target and some other minor information to rcon and oxide logs.  This is saved in the config.
     - `/pverule` - Starts the GUI for editing, creating, and deleting rulesets
 
 #### Sub-commands for /pverule
@@ -130,40 +131,43 @@ The above commands can also be run from console or RCON (without /).
 ```json
 {
   "Options": {
+    "debug": false,
     "useZoneManager": false,
-      "useSchedule": false,
-      "protectedDays": 0f,
-      "useGUIAnnouncements": false,
-      "useMessageBroadcast": false,
-      "useRealtime": true,
-      "useFriends": false,
-      "useClans": false,
-      "useTeams": false,
-      "AllowCustomEdit": false,
-      "AllowDropDatabase": false,
-      "NPCAutoTurretTargetsPlayers": true,
-      "NPCAutoTurretTargetsNPCs": true,
-      "AutoTurretTargetsPlayers": false,
-      "AutoTurretTargetsNPCs": false,
-      "NPCSamSitesIgnorePlayers": false,
-      "SamSitesIgnorePlayers": false,
-      "AllowSuicide": false,
-      "TrapsIgnorePlayers": false,
-      "HonorBuildingPrivilege": true,
-      "UnprotectedBuildingDamage": false,
-      "TwigDamage": false,
-      "HonorRelationships": false,
-      "BlockScrapHeliFallDamage": false
+    "protectedDays": 0.0,
+    "useSchedule": false,
+    "useGUIAnnouncements": false,
+    "useMessageBroadcast": false,
+    "useRealTime": false,
+    "useFriends": false,
+    "useClans": false,
+    "useTeams": false,
+    "AllowCustomEdit": false,
+    "AllowDropDatabase": false,
+    "NPCAutoTurretTargetsPlayers": true,
+    "NPCAutoTurretTargetsNPCs": true,
+    "AutoTurretTargetsPlayers": false,
+    "HeliTurretTargetsPlayers": true,
+    "AutoTurretTargetsNPCs": false,
+    "NPCSamSitesIgnorePlayers": false,
+    "SamSitesIgnorePlayers": false,
+    "AllowSuicide": false,
+    "TrapsIgnorePlayers": false,
+    "HonorBuildingPrivilege": true,
+    "UnprotectedBuildingDamage": false,
+    "UnprotectedDeployableDamage": false,
+    "TwigDamage": false,
+    "HonorRelationships": false,
+    "BlockScrapHeliFallDamage": false
   },
-    "Version": {
-      "Major": 1,
-      "Minor": 0,
-      "Patch": 88
-    }
+  "Version": {
+    "Major": 1,
+    "Minor": 1,
+    "Patch": 2
+  }
 }
 ```
 
-ZoneManager or LiteZones can be used to associate a ruleset with a zone.
+ZoneManager can be used to associate a ruleset with a zone.
 
 A few global flags are currently available to limit NPC AutoTurret and trap damage.
 
@@ -255,5 +259,4 @@ Example 3:
     In short, any rulesets you copy or create should be isolated by time and/or area using schedules or zones.  If your intention is to simply modify what types of damage is to be allowed globally, delete the extra rulesets and edit the default ruleset instead. 
 
 ### TODO
-1. Improve the schedule editor.
-2. Performance tweaks as needed.
+1. Performance tweaks as needed.
