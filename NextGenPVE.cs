@@ -36,7 +36,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.1.2")]
+    [Info("NextGen PVE", "RFC1920", "1.1.3")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -169,7 +169,7 @@ namespace Oxide.Plugins
             // All new ents are added as unknown for manual recategorization.
             Puts("Finding new entity types...");
             List<string> names = new List<string>();
-            foreach (var obj in Resources.FindObjectsOfTypeAll(new BaseCombatEntity().GetType()))
+            foreach (UnityEngine.Object obj in Resources.FindObjectsOfTypeAll(new BaseCombatEntity().GetType()))
             {
                 string objname = obj.GetType().ToString();
                 if (objname.Contains("Entity")) continue;
@@ -406,10 +406,10 @@ namespace Oxide.Plugins
         private object OnTrapTrigger(BaseTrap trap, GameObject go)
         {
             if (!enabled) return null;
-            var player = go.GetComponent<BasePlayer>();
+            BasePlayer player = go.GetComponent<BasePlayer>();
             if (trap == null || player == null) return null;
 
-            var cantraptrigger = Interface.CallHook("CanEntityTrapTrigger", new object[] { trap, player });
+            object cantraptrigger = Interface.CallHook("CanEntityTrapTrigger", new object[] { trap, player });
             if (cantraptrigger != null && cantraptrigger is bool && (bool)cantraptrigger) return null;
 
             if (configData.Options.TrapsIgnorePlayers) return false;
@@ -426,9 +426,9 @@ namespace Oxide.Plugins
 
             if (mount as BaseVehicle)
             {
-                var vehicle = mount as BaseVehicle;
+                BaseVehicle vehicle = mount as BaseVehicle;
 
-                foreach (var point in vehicle.mountPoints)
+                foreach (BaseVehicle.MountPointInfo point in vehicle.mountPoints)
                 {
                     if (point.mountable.IsValid() && point.mountable.GetMounted())
                     {
@@ -446,7 +446,7 @@ namespace Oxide.Plugins
 
             if (sam == null) return null;
             if (mountable == null) return null;
-            var player = GetMountedPlayer(mountable);
+            BasePlayer player = GetMountedPlayer(mountable);
 
             if (player.IsValid())
             {
@@ -592,7 +592,7 @@ namespace Oxide.Plugins
 
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
-            if (ConVar.Server.pve) ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
+            //if (ConVar.Server.pve) ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
             if (!enabled) return null;
             if (entity == null) return null;
             if (hitinfo == null) return null;
@@ -759,7 +759,7 @@ namespace Oxide.Plugins
 
             if (foundrs.Count > 0)
             {
-                foreach (var found in foundrs)
+                foreach (string found in foundrs)
                 {
                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                     {
@@ -873,11 +873,10 @@ namespace Oxide.Plugins
             else if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window" || ttype == "BuildingPrivlidge"))
             {
                 isBuilding = true;
-                var pl = (source as BaseHelicopter)?.myAI._targetList.ToArray();
                 hasBP = false;
-                foreach (var x in pl)
+                foreach (PatrolHelicopterAI.targetinfo x in (source as BaseHelicopter)?.myAI._targetList.ToArray())
                 {
-                    var y = x.ent as BasePlayer;
+                    BasePlayer y = x.ent as BasePlayer;
                     if (y == null) continue;
                     DoLog($"Heli targeting player {y.displayName}.  Checking building permission for {target.ShortPrefabName}");
                     if (PlayerOwnsItem(y, target))
@@ -1105,7 +1104,7 @@ namespace Oxide.Plugins
         private void MessageToAll(string key, string ruleset)
         {
             if (!configData.Options.useMessageBroadcast && !configData.Options.useGUIAnnouncements) return;
-            foreach (var player in BasePlayer.activePlayerList)
+            foreach (BasePlayer player in BasePlayer.activePlayerList)
             {
                 if (configData.Options.useMessageBroadcast)
                 {
@@ -1113,7 +1112,7 @@ namespace Oxide.Plugins
                 }
                 if (GUIAnnouncements && configData.Options.useGUIAnnouncements)
                 {
-                    var ann = Lang(key, null, ruleset);
+                    string ann = Lang(key, null, ruleset);
                     switch(key)
                     {
                         case "pveenabled":
@@ -1183,7 +1182,7 @@ namespace Oxide.Plugins
                 {
                     DoLog("Schedule string was parsed correctly...");
                     int i = 0;
-                    foreach (var x in parsed.day)
+                    foreach (string x in parsed.day)
                     {
                         DoLog($"Schedule day == {x} {parsed.dayName[i]} {parsed.starthour} to {parsed.endhour}");
                         i++;
@@ -1246,7 +1245,7 @@ namespace Oxide.Plugins
                                 {
                                     while (crs.Read())
                                     {
-                                        var was = crs.GetValue(0).ToString();
+                                        string was = crs.GetValue(0).ToString();
                                         if (was != "0") MessageToAll("pvedisabled", doenable.Key);
                                     }
                                 }
@@ -1268,7 +1267,7 @@ namespace Oxide.Plugins
                                 {
                                     while (crs.Read())
                                     {
-                                        var was = crs.GetValue(0).ToString();
+                                        string was = crs.GetValue(0).ToString();
                                         if (was != "1") MessageToAll("pveenabled", doenable.Key);
                                     }
                                 }
@@ -1446,7 +1445,7 @@ namespace Oxide.Plugins
             }
             else if (days.Length > 0)
             {
-                foreach (var d in days)
+                foreach (string d in days)
                 {
                     int.TryParse(d, out day);
                     parsed.day.Add(day.ToString());
@@ -1557,7 +1556,7 @@ namespace Oxide.Plugins
         private void CmdNextGenPVEGUI(IPlayer iplayer, string command, string[] args)
         {
             if (!iplayer.HasPermission(permNextGenPVEAdmin)) { Message(iplayer, "notauthorized"); return; }
-            var player = iplayer.Object as BasePlayer;
+            BasePlayer player = iplayer.Object as BasePlayer;
 
             if (args.Length > 0)
             {
@@ -1579,9 +1578,9 @@ namespace Oxide.Plugins
                                 {
                                     while (crs.Read())
                                     {
-                                        var rs = crs.GetValue(0).ToString();
-                                        var en = crs.GetBoolean(1).ToString();
-                                        var zone = crs.GetValue(2).ToString();
+                                        string rs = crs.GetValue(0).ToString();
+                                        string en = crs.GetBoolean(1).ToString();
+                                        string zone = crs.GetValue(2).ToString();
                                         if (zone == "0" || zone?.Length == 0 || zone == "default") zone = Lang("default");
                                         if (zone != "") zone = Lang("zone") + ": " + zone;
                                         if (rs != "")
@@ -1618,8 +1617,8 @@ namespace Oxide.Plugins
                                             if (zone == "0" || zone?.Length == 0 || zone == "default") zone = Lang("default");
                                             if (zone != "") zone = ", " + Lang("zone") + ": " + zone;
                                             rules += re.GetValue(5).ToString() + "\n\t";
-                                            var s = re.GetValue(6).ToString();
-                                            var t = re.GetValue(7).ToString();
+                                            string s = re.GetValue(6).ToString();
+                                            string t = re.GetValue(7).ToString();
                                             if (s != "" && !src.Contains(s))
                                             {
                                                 src.Add(s);
@@ -1663,7 +1662,7 @@ namespace Oxide.Plugins
                         }
                         break;
                     case "restore":
-                        var files = Interface.Oxide.DataFileSystem.GetFiles($"{Interface.Oxide.DataDirectory}/{Name}");
+                        string[] files = Interface.Oxide.DataFileSystem.GetFiles($"{Interface.Oxide.DataDirectory}/{Name}");
                         files = Array.FindAll(files, x => x.EndsWith(".db"));
                         files = Array.FindAll(files, x => !x.EndsWith("nextgenpve.db"));
 
@@ -3234,6 +3233,18 @@ namespace Oxide.Plugins
                     }
                 }
             }
+
+            if (configData.Version < new VersionNumber(1, 1, 3))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'FrankensteinPet', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
             configData.Version = Version;
             SaveConfig(configData);
         }
@@ -3241,7 +3252,7 @@ namespace Oxide.Plugins
         protected override void LoadDefaultConfig()
         {
             Puts("Creating new config file.");
-            var config = new ConfigData
+            ConfigData config = new ConfigData
             {
                 Options = new Options()
                 {
@@ -3677,7 +3688,7 @@ namespace Oxide.Plugins
                             isEnabled = rsread.GetBoolean(1);
                             damage = rsread.GetBoolean(2);
                             zone = rsread.GetString(4);
-                            var inv = rsread.GetValue(5);
+                            object inv = rsread.GetValue(5);
                             if (inv is DBNull) inv = 0;
                             invert = Convert.ToBoolean(inv);
                             zName = (string)ZoneManager?.Call("GetZoneName", zone);
@@ -4439,7 +4450,7 @@ namespace Oxide.Plugins
                                     break;
                                 case "tgt_exclude":
                                     if (tgt == null || !ngpveentities.ContainsKey(tgt)) break;
-                                    foreach (var type in ngpveentities[tgt].types)
+                                    foreach (string type in ngpveentities[tgt].types)
                                     {
                                         //Puts($"Checking for '{type}'");
                                         if (type?.Length == 0) continue;
@@ -4761,7 +4772,7 @@ namespace Oxide.Plugins
             pb = GetButtonPositionSchedule(row, col);
             UI.Label(ref container, NGPVESCHEDULEEDIT, UI.Color("#ffffff", 1f), Lang("endminute"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
-            var nextgenschedule = new NextGenPVESchedule();
+            NextGenPVESchedule nextgenschedule = new NextGenPVESchedule();
 
             row = 1;
             col = 0;
@@ -4983,7 +4994,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                var pl = player as BasePlayer;
+                BasePlayer pl = player as BasePlayer;
                 return pl.userID < 76560000000000000L && pl.userID > 0L && !pl.IsDestroyed;
             }
         }
@@ -5026,7 +5037,7 @@ namespace Oxide.Plugins
             BuildingManager.Building building = privilege.GetBuilding();
             if (building != null)
             {
-                var privs = building.GetDominatingBuildingPrivilege();
+                BuildingPrivlidge privs = building.GetDominatingBuildingPrivilege();
                 if (privs == null)
                 {
                     if (configData.Options.UnprotectedBuildingDamage)
@@ -5041,7 +5052,7 @@ namespace Oxide.Plugins
                     }
                 }
 
-                foreach (var auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
+                foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                 {
                     if (privilege.OwnerID == player.userID)
                     {
@@ -5073,7 +5084,7 @@ namespace Oxide.Plugins
                 {
                     try
                     {
-                        var block = entity as BuildingBlock;
+                        BuildingBlock block = entity as BuildingBlock;
                         if (block.grade == BuildingGrade.Enum.Twigs)
                         {
                             DoLog("Allowing twig destruction...");
@@ -5116,12 +5127,12 @@ namespace Oxide.Plugins
                 if (building != null)
                 {
                     DoLog($"Checking building privilege for {entity.ShortPrefabName}");
-                    var privs = building.GetDominatingBuildingPrivilege();
+                    BuildingPrivlidge privs = building.GetDominatingBuildingPrivilege();
                     if (privs == null)
                     {
                         return configData.Options.UnprotectedBuildingDamage;
                     }
-                    foreach (var auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
+                    foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                     {
                         if (entity.OwnerID == player.userID)
                         {
@@ -5149,7 +5160,7 @@ namespace Oxide.Plugins
                 if (!configData.Options.HonorBuildingPrivilege) hasbp = true;
                 if (privs != null && configData.Options.HonorBuildingPrivilege)
                 {
-                    foreach (var auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
+                    foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                     {
                         if (player.userID == auth)
                         {
@@ -5194,8 +5205,8 @@ namespace Oxide.Plugins
         // From PlayerDatabase
         private long ToEpochTime(DateTime dateTime)
         {
-            var date = dateTime.ToUniversalTime();
-            var ticks = date.Ticks - new DateTime(1970, 1, 1, 0, 0, 0, 0).Ticks;
+            DateTime date = dateTime.ToUniversalTime();
+            long ticks = date.Ticks - new DateTime(1970, 1, 1, 0, 0, 0, 0).Ticks;
             return ticks / TimeSpan.TicksPerSecond;
         }
 
@@ -5233,7 +5244,7 @@ namespace Oxide.Plugins
             if (!configData.Options.HonorRelationships) return false;
             if (configData.Options.useFriends && Friends != null)
             {
-                var fr = Friends?.CallHook("AreFriends", playerid, ownerid);
+                object fr = Friends?.CallHook("AreFriends", playerid, ownerid);
                 if (fr != null && (bool)fr)
                 {
                     DoLog($"Friends plugin reports that {playerid.ToString()} and {ownerid.ToString()} are friends.");
