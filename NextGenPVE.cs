@@ -36,7 +36,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.1.3")]
+    [Info("NextGen PVE", "RFC1920", "1.1.4")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -615,7 +615,7 @@ namespace Oxide.Plugins
             if (configData.Options.debug) Puts($"attacker prefab: {hitinfo.Initiator.ShortPrefabName}, victim prefab: {entity.ShortPrefabName}");
 
             string stype; string ttype;
-            bool canhurt = EvaluateRulesets(hitinfo.Initiator, entity as BaseEntity, out stype, out ttype);
+            bool canhurt = EvaluateRulesets(hitinfo, entity as BaseEntity, out stype, out ttype);
             if (stype == null && ttype == null) return null;
 
             if (stype == "BasePlayer")
@@ -777,17 +777,28 @@ namespace Oxide.Plugins
         #endregion
 
         #region Main
-        private bool EvaluateRulesets(BaseEntity source, BaseEntity target, out string stype, out string ttype)
+        private bool EvaluateRulesets(HitInfo source, BaseEntity target, out string stype, out string ttype)
         {
             if (source == null || target == null)
             {
+                DoLog("EvaluateRulesets: NULL in source or target...");
                 stype = null;
                 ttype = null;
                 return false;
             }
-            stype = source.GetType().Name;
+
+            // Special case for MLRS
+            if (IsMLRS(source))
+            {
+                stype = "MLRS";
+            }
+            else
+            {
+                stype = source.Initiator.GetType().Name;
+            }
             ttype = target.GetType().Name;
-            if (string.IsNullOrEmpty(stype) || string.IsNullOrEmpty(ttype))
+
+            if (stype.Length == 0 || ttype.Length == 0)
             {
                 stype = null;
                 ttype = null;
@@ -810,8 +821,8 @@ namespace Oxide.Plugins
             // Special case since Humanoids/HumanNPC contains a BasePlayer object
             if (stype == "BasePlayer")
             {
-                if (Humanoids && IsHumanoid(source)) stype = "Humanoid";
-                if (HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
+                if (Humanoids && IsHumanoid(source.Initiator)) stype = "Humanoid";
+                if (HumanNPC && IsHumanNPC(source.Initiator)) stype = "HumanNPC";
             }
             if (ttype == "BasePlayer")
             {
@@ -823,7 +834,7 @@ namespace Oxide.Plugins
             if (stype == "BasePlayer" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
             {
                 isBuilding = true;
-                if (!PlayerOwnsItem(source as BasePlayer, target))
+                if (!PlayerOwnsItem(source.Initiator as BasePlayer, target))
                 {
                     DoLog("No building block access.");
                     hasBP = false;
@@ -835,7 +846,7 @@ namespace Oxide.Plugins
             }
             else if (stype == "BasePlayer" && ttype == "BuildingPrivlidge")
             {
-                if (!PlayerOwnsTC(source as BasePlayer, target as BuildingPrivlidge))
+                if (!PlayerOwnsTC(source.Initiator as BasePlayer, target as BuildingPrivlidge))
                 {
                     DoLog("No building privilege.");
                     hasBP = false;
@@ -874,7 +885,7 @@ namespace Oxide.Plugins
             {
                 isBuilding = true;
                 hasBP = false;
-                foreach (PatrolHelicopterAI.targetinfo x in (source as BaseHelicopter)?.myAI._targetList.ToArray())
+                foreach (PatrolHelicopterAI.targetinfo x in (source.Initiator as BaseHelicopter)?.myAI._targetList.ToArray())
                 {
                     BasePlayer y = x.ent as BasePlayer;
                     if (y == null) continue;
@@ -889,7 +900,7 @@ namespace Oxide.Plugins
 
             if (ZoneManager && configData.Options.useZoneManager)
             {
-                string[] sourcezone = GetEntityZones(source);
+                string[] sourcezone = GetEntityZones(source.Initiator);
                 string[] targetzone = GetEntityZones(target);
 
                 if (sourcezone.Length > 0 && targetzone.Length > 0)
@@ -973,14 +984,14 @@ namespace Oxide.Plugins
             {
                 using (SQLiteDataReader readMe = findIt.ExecuteReader())
                 {
-                    DoLog("QUERY START");
+                    DoLog("\nQUERY START");
                     while (readMe.Read())
                     {
-                        DoLog("READING...");
                         if (foundmatch) break; // Breaking due to match found in previously checked ruleset
                         enabled = readMe.GetBoolean(3);
                         rulesetname = readMe.GetString(0);
                         rulesetzone = readMe.GetString(1);
+                        DoLog($"READING RULESET {rulesetname}");
 
                         if (!enabled)
                         {
@@ -2448,7 +2459,6 @@ namespace Oxide.Plugins
                                 break;
                             case "RESET":
                                 LoadDefaultFlags();
-                                //LoadConfigVariables();
                                 break;
                         }
                         SaveConfig(configData);
@@ -3240,6 +3250,38 @@ namespace Oxide.Plugins
                 {
                     c.Open();
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'FrankensteinPet', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
+            if (configData.Version < new VersionNumber(1, 1, 4))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("DELETE FROM ngpve_entities WHERE type='MLRS'", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('mlrs', 'MLRS', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('mlrs_building', 'MLRS can damage Building', 1, 0, 'mlrs', 'building')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('mlrs_npc', 'MLRS can damage NPC', 1, 0, 'mlrs', 'npc')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('mlrs_player', 'MLRS can damage Player', 1, 0, 'mlrs', 'player')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('mlrs_resource', 'MLRS can damage Resource', 1, 0, 'mlrs', 'resource')", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -5008,6 +5050,21 @@ namespace Oxide.Plugins
             return false;
         }
 
+        private bool IsMLRS(HitInfo hitinfo)
+        {
+            try
+            {
+                if (hitinfo.WeaponPrefab.ShortPrefabName.Equals("rocket_mlrs"))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+            return false;
+        }
+
         private bool IsBaseHelicopter(HitInfo hitinfo)
         {
             if (hitinfo.Initiator is BaseHelicopter
@@ -5583,6 +5640,8 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('elevator', 'ElevatorLift', 0)", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('mlrs', 'MLRS', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
         }
 
         // Default rules which can be applied
@@ -5690,6 +5749,14 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('vehicle_trap', 'Vehicle can damage Trap', 1, 0, 'vehicle', 'trap')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('elevator_player', 'Elevator can crush Player', 1, 0, 'elevator', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('mlrs_building', 'MLRS can damage Building', 1, 0, 'mlrs', 'building')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('mlrs_npc', 'MLRS can damage NPC', 1, 0, 'mlrs', 'npc')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('mlrs_player', 'MLRS can damage Player', 1, 0, 'mlrs', 'player')", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('mlrs_resource', 'MLRS can damage Resource', 1, 0, 'mlrs', 'resource')", sqlConnection);
             ct.ExecuteNonQuery();
         }
 
