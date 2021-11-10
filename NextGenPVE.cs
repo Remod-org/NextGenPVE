@@ -36,7 +36,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.1.4")]
+    [Info("NextGen PVE", "RFC1920", "1.1.5")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -59,7 +59,7 @@ namespace Oxide.Plugins
         private string TextColor = "Red";
 
         [PluginReference]
-        private readonly Plugin ZoneManager, Humanoids, HumanNPC, Friends, Clans, RustIO, GUIAnnouncements, SAMTargeting;
+        private readonly Plugin ZoneManager, Humanoids, HumanNPC, Friends, Clans, RustIO, GUIAnnouncements;
 
         private static NextGenPVE Instance;
         private readonly string logfilename = "log";
@@ -442,8 +442,6 @@ namespace Oxide.Plugins
 
         private object OnSamSiteTarget(SamSite sam, BaseMountable mountable)
         {
-            if (SAMTargeting != null) return null;
-
             if (sam == null) return null;
             if (mountable == null) return null;
             BasePlayer player = GetMountedPlayer(mountable);
@@ -576,6 +574,7 @@ namespace Oxide.Plugins
 
         private bool BlockFallDamage(BaseCombatEntity entity)
         {
+            if (entity == null) return false;
             // Special case where attack by scrapheli initiates fall damage on a player.  This was often used to kill players and bypass the rules.
             List<BaseEntity> ents = new List<BaseEntity>();
             Vis.Entities(entity.transform.position, 5, ents);
@@ -592,7 +591,6 @@ namespace Oxide.Plugins
 
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
-            //if (ConVar.Server.pve) ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
             if (!enabled) return null;
             if (entity == null) return null;
             if (hitinfo == null) return null;
@@ -620,8 +618,7 @@ namespace Oxide.Plugins
 
             if (stype == "BasePlayer")
             {
-                BasePlayer hibp = hitinfo.Initiator as BasePlayer;
-                if (permission.UserHasPermission(hibp.UserIDString, permNextGenPVEGod))
+                if (permission.UserHasPermission(hitinfo.InitiatorPlayer?.UserIDString, permNextGenPVEGod))
                 {
                     Puts("Admin almighty!");
                     return null;
@@ -630,7 +627,7 @@ namespace Oxide.Plugins
                 {
                     try
                     {
-                        if ((entity as BasePlayer)?.userID == (hitinfo.Initiator as BasePlayer)?.userID && configData.Options.AllowSuicide)
+                        if ((entity as BasePlayer)?.userID == hitinfo.InitiatorPlayer?.userID && configData.Options.AllowSuicide)
                         {
                             DoLog("AllowSuicide TRUE");
                             canhurt = true;
@@ -647,131 +644,6 @@ namespace Oxide.Plugins
             }
 
             DoLog($"DAMAGE BLOCKED for {stype} attacking {ttype}, majority damage type {majority}");
-            return true;
-        }
-        #endregion
-
-        #region inbound_hooks
-        private bool TogglePVE(bool on = true) => enabled = on;
-
-        private bool TogglePVERuleset(string rulesetname, bool on = true)
-        {
-            string enable = "0";
-            if (on) enable = "1";
-            using (SQLiteConnection c = new SQLiteConnection(connStr))
-            {
-                c.Open();
-                using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='{enable}", c))
-                {
-                    cmd.ExecuteNonQuery();
-                }
-            }
-            return true;
-        }
-
-        private bool AddOrUpdateMapping(string key, string rulesetname)
-        {
-            if (string.IsNullOrEmpty(key)) return false;
-            if (rulesetname == null) return false;
-
-            DoLog($"AddOrUpdateMapping called for ruleset: {rulesetname}, zone: {key}", 0);
-            bool foundrs = false;
-            using (SQLiteConnection c = new SQLiteConnection(connStr))
-            {
-                c.Open();
-                using (SQLiteCommand au = new SQLiteCommand($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
-                {
-                    using (SQLiteDataReader ar = au.ExecuteReader())
-                    {
-                        while (ar.Read())
-                        {
-                            foundrs = true;
-                        }
-                    }
-                }
-            }
-            if (foundrs)
-            {
-                if (ngpvezonemaps.ContainsKey(rulesetname) && !ngpvezonemaps[rulesetname].map.Contains(key))
-                {
-                    ngpvezonemaps[rulesetname].map.Add(key);
-                }
-                else
-                {
-                    ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap() { map = new List<string>() { key } });
-                }
-                SaveData();
-                using (SQLiteConnection c = new SQLiteConnection(connStr))
-                {
-                    c.Open();
-                    DoLog($"UPDATE ngpve_rulesets SET zone='lookup' WHERE rulesetname='{rulesetname}'");
-                    using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='lookup' WHERE name='{rulesetname}'", c))
-                    {
-                        cmd.ExecuteNonQuery();
-                    }
-                }
-                return true;
-            }
-            else
-            {
-                using (SQLiteConnection c = new SQLiteConnection(connStr))
-                {
-                    c.Open();
-                    DoLog($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0)");
-
-                    using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0)", c))
-                    {
-                        cmd.ExecuteNonQuery();
-                    }
-                }
-                if (ngpvezonemaps.ContainsKey(rulesetname)) ngpvezonemaps.Remove(rulesetname);
-                ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap() { map = new List<string>() { key } });
-                SaveData();
-                return true;
-            }
-        }
-
-        private bool RemoveMapping(string key)
-        {
-            if (string.IsNullOrEmpty(key)) return false;
-            List<string> foundrs = new List<string>();
-
-            DoLog($"RemoveMapping called for zone: {key}", 0);
-
-            using (SQLiteConnection c = new SQLiteConnection(connStr))
-            {
-                c.Open();
-                //Puts($"SELECT name FROM ngpve_rulesets WHERE zone='{key}'");
-                using (SQLiteCommand rm = new SQLiteCommand($"SELECT name FROM ngpve_rulesets WHERE zone='{key}'", c))
-                {
-                    using (SQLiteDataReader rd = rm.ExecuteReader())
-                    {
-                        while (rd.Read())
-                        {
-                            string rn = rd.GetString(0);
-                            foundrs.Add(rn);
-                            ngpvezonemaps.Remove(rn);
-                            SaveData();
-                        }
-                    }
-                }
-            }
-
-            if (foundrs.Count > 0)
-            {
-                foreach (string found in foundrs)
-                {
-                    using (SQLiteConnection c = new SQLiteConnection(connStr))
-                    {
-                        c.Open();
-                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='0' WHERE name='{found}'", c))
-                        {
-                            cmd.ExecuteNonQuery();
-                        }
-                    }
-                }
-            }
-
             return true;
         }
         #endregion
@@ -819,22 +691,22 @@ namespace Oxide.Plugins
             bool isBuilding = false;
 
             // Special case since Humanoids/HumanNPC contains a BasePlayer object
-            if (stype == "BasePlayer")
+            if (stype == "BasePlayer" && source.InitiatorPlayer != null)
             {
-                if (Humanoids && IsHumanoid(source.Initiator)) stype = "Humanoid";
-                if (HumanNPC && IsHumanNPC(source.Initiator)) stype = "HumanNPC";
+                if (Humanoids && IsHumanoid(source.InitiatorPlayer)) stype = "Humanoid";
+                else if (HumanNPC && IsHumanNPC(source.InitiatorPlayer)) stype = "HumanNPC";
             }
             if (ttype == "BasePlayer")
             {
                 if (Humanoids && IsHumanoid(target)) ttype = "Humanoid";
-                if (HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
+                else if (HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
             }
 
             // Special cases for building damage requiring owner or auth access
-            if (stype == "BasePlayer" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
+            if (stype == "BasePlayer" && source.InitiatorPlayer != null && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
             {
                 isBuilding = true;
-                if (!PlayerOwnsItem(source.Initiator as BasePlayer, target))
+                if (!PlayerOwnsItem(source.InitiatorPlayer, target))
                 {
                     DoLog("No building block access.");
                     hasBP = false;
@@ -844,9 +716,9 @@ namespace Oxide.Plugins
                     DoLog("Player has privilege to block or is not blocked by TC.");
                 }
             }
-            else if (stype == "BasePlayer" && ttype == "BuildingPrivlidge")
+            else if (stype == "BasePlayer" && source.InitiatorPlayer != null && ttype == "BuildingPrivlidge")
             {
-                if (!PlayerOwnsTC(source.Initiator as BasePlayer, target as BuildingPrivlidge))
+                if (!PlayerOwnsTC(source.InitiatorPlayer, target as BuildingPrivlidge))
                 {
                     DoLog("No building privilege.");
                     hasBP = false;
@@ -885,15 +757,23 @@ namespace Oxide.Plugins
             {
                 isBuilding = true;
                 hasBP = false;
-                foreach (PatrolHelicopterAI.targetinfo x in (source.Initiator as BaseHelicopter)?.myAI._targetList.ToArray())
+                BaseHelicopter bh = source.Initiator as BaseHelicopter;
+                if (bh != null)
                 {
-                    BasePlayer y = x.ent as BasePlayer;
-                    if (y == null) continue;
-                    DoLog($"Heli targeting player {y.displayName}.  Checking building permission for {target.ShortPrefabName}");
-                    if (PlayerOwnsItem(y, target))
+                    List<PatrolHelicopterAI.targetinfo> targetList = bh?.myAI._targetList;
+                    if (targetList.Count > 0)
                     {
-                        DoLog("Yes they own that building!");
-                        hasBP = true;
+                        foreach (PatrolHelicopterAI.targetinfo x in targetList.ToArray())
+                        {
+                            BasePlayer y = x.ent as BasePlayer;
+                            if (y == null) continue;
+                            DoLog($"Heli targeting player {y.displayName}.  Checking building permission for {target.ShortPrefabName}");
+                            if (PlayerOwnsItem(y, target))
+                            {
+                                DoLog("Yes they own that building!");
+                                hasBP = true;
+                            }
+                        }
                     }
                 }
             }
@@ -1477,6 +1357,131 @@ namespace Oxide.Plugins
             if (!enabled) return;
             if (message.Contains("Turret")) return; // Log volume FIXME
             if (dolog) LogToFile(logfilename, "".PadLeft(indent, ' ') + message, this);
+        }
+        #endregion
+
+        #region inbound_hooks
+        private bool TogglePVE(bool on = true) => enabled = on;
+
+        private bool TogglePVERuleset(string rulesetname, bool on = true)
+        {
+            string enable = "0";
+            if (on) enable = "1";
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='{enable}", c))
+                {
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            return true;
+        }
+
+        private bool AddOrUpdateMapping(string key, string rulesetname)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            if (rulesetname == null) return false;
+
+            DoLog($"AddOrUpdateMapping called for ruleset: {rulesetname}, zone: {key}", 0);
+            bool foundrs = false;
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                using (SQLiteCommand au = new SQLiteCommand($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{rulesetname}'", c))
+                {
+                    using (SQLiteDataReader ar = au.ExecuteReader())
+                    {
+                        while (ar.Read())
+                        {
+                            foundrs = true;
+                        }
+                    }
+                }
+            }
+            if (foundrs)
+            {
+                if (ngpvezonemaps.ContainsKey(rulesetname) && !ngpvezonemaps[rulesetname].map.Contains(key))
+                {
+                    ngpvezonemaps[rulesetname].map.Add(key);
+                }
+                else
+                {
+                    ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap() { map = new List<string>() { key } });
+                }
+                SaveData();
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    DoLog($"UPDATE ngpve_rulesets SET zone='lookup' WHERE rulesetname='{rulesetname}'");
+                    using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='lookup' WHERE name='{rulesetname}'", c))
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+                return true;
+            }
+            else
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    DoLog($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0)");
+
+                    using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0)", c))
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+                if (ngpvezonemaps.ContainsKey(rulesetname)) ngpvezonemaps.Remove(rulesetname);
+                ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap() { map = new List<string>() { key } });
+                SaveData();
+                return true;
+            }
+        }
+
+        private bool RemoveMapping(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            List<string> foundrs = new List<string>();
+
+            DoLog($"RemoveMapping called for zone: {key}", 0);
+
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                //Puts($"SELECT name FROM ngpve_rulesets WHERE zone='{key}'");
+                using (SQLiteCommand rm = new SQLiteCommand($"SELECT name FROM ngpve_rulesets WHERE zone='{key}'", c))
+                {
+                    using (SQLiteDataReader rd = rm.ExecuteReader())
+                    {
+                        while (rd.Read())
+                        {
+                            string rn = rd.GetString(0);
+                            foundrs.Add(rn);
+                            ngpvezonemaps.Remove(rn);
+                            SaveData();
+                        }
+                    }
+                }
+            }
+
+            if (foundrs.Count > 0)
+            {
+                foreach (string found in foundrs)
+                {
+                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                    {
+                        c.Open();
+                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='0' WHERE name='{found}'", c))
+                        {
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+            }
+
+            return true;
         }
         #endregion
 
@@ -2397,24 +2402,6 @@ namespace Oxide.Plugins
                         bool val = GetBoolValue(args[2]);
                         switch (cfg)
                         {
-                            case "SamSitesTargetPlayers":
-                                SAMTargeting?.CallHook("SetSamTargeting", "player", val);
-                                break;
-                            case "SamSitesTargetNPCs":
-                                SAMTargeting?.CallHook("SetSamTargeting", "npc", val);
-                                break;
-                            case "SamSitesTargetAnimals":
-                                SAMTargeting?.CallHook("SetSamTargeting", "animal", val);
-                                break;
-                            case "NPCSamSitesTargetPlayers":
-                                SAMTargeting?.CallHook("SetSamTargeting", "player", val, true);
-                                break;
-                            case "NPCSamSitesTargetNPCs":
-                                SAMTargeting?.CallHook("SetSamTargeting", "npc", val, true);
-                                break;
-                            case "NPCSamSitesTargetAnimals":
-                                SAMTargeting?.CallHook("SetSamTargeting", "animal", val, true);
-                                break;
                             case "NPCAutoTurretTargetsPlayers":
                                 configData.Options.NPCAutoTurretTargetsPlayers = val;
                                 break;
@@ -3549,94 +3536,27 @@ namespace Oxide.Plugins
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
             }
-            if (SAMTargeting == null)
+            row++;
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.NPCSamSitesIgnorePlayers)
             {
-                row++;
-                pb = GetButtonPositionF(row, col);
-                if (configData.Options.NPCSamSitesIgnorePlayers)
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers false");
-                }
-                else
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers true");
-                }
-                row++;
-                pb = GetButtonPositionF(row, col);
-                if (configData.Options.SamSitesIgnorePlayers)
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers false");
-                }
-                else
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers true");
-                }
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers false");
             }
             else
             {
-                row++;
-                pb = GetButtonPositionF(row, col);
-                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "npc", true))
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesTargetNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetNPCs false");
-                }
-                else
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesTargetNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetNPCs true");
-                }
-                row++;
-                pb = GetButtonPositionF(row, col);
-                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "npc"))
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesTargetNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetNPCs false");
-                }
-                else
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesTargetNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetNPCs true");
-                }
-
-                row++;
-                pb = GetButtonPositionF(row, col);
-                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "player", true))
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesTargetPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetPlayers false");
-                }
-                else
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesTargetPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetPlayers true");
-                }
-                row++;
-                pb = GetButtonPositionF(row, col);
-                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "player"))
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesTargetPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetPlayers false");
-                }
-                else
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesTargetPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetPlayers true");
-                }
-
-                row++;
-                pb = GetButtonPositionF(row, col);
-                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "animal", true))
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesTargetAnimals"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetAnimals false");
-                }
-                else
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesTargetAnimals"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesTargetAnimals true");
-                }
-                row++;
-                pb = GetButtonPositionF(row, col);
-                if ((bool)SAMTargeting?.CallHook("CheckSamTargeting", "animal"))
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesTargetAnimals"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetAnimals false");
-                }
-                else
-                {
-                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesTargetAnimals"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesTargetAnimals true");
-                }
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers true");
             }
+            row++;
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.SamSitesIgnorePlayers)
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers false");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers true");
+            }
+
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.TrapsIgnorePlayers)
@@ -5017,16 +4937,18 @@ namespace Oxide.Plugins
                     return (string[])ZoneManager?.Call("GetEntityZoneIDs", new object[] { entity });
                 }
             }
-            return null;
+            return new string[0];
         }
 
-        private bool IsHumanNPC(BaseEntity player)
+        private bool IsHumanNPC(BaseEntity entity)
         {
+            BasePlayer player = entity as BasePlayer;
+            if (player == null) return false;
             if (HumanNPC)
             {
                 try
                 {
-                    return (bool)HumanNPC?.Call("IsHumanNPC", player as BasePlayer);
+                    return (bool)HumanNPC?.Call("IsHumanNPC", player);
                 }
                 catch
                 {
@@ -5036,16 +4958,17 @@ namespace Oxide.Plugins
             }
             else
             {
-                BasePlayer pl = player as BasePlayer;
-                return pl.userID < 76560000000000000L && pl.userID > 0L && !pl.IsDestroyed;
+                return player.userID < 76560000000000000L && player.userID > 0L && !player.IsDestroyed;
             }
         }
 
-        private bool IsHumanoid(BaseEntity player)
+        private bool IsHumanoid(BaseEntity entity)
         {
+            BasePlayer player = entity as BasePlayer;
+            if (player == null) return false;
             if (Humanoids)
             {
-                return (bool)Humanoids?.Call("IsHumanoid", player as BasePlayer);
+                return (bool)Humanoids?.Call("IsHumanoid", player);
             }
             return false;
         }
@@ -5067,6 +4990,7 @@ namespace Oxide.Plugins
 
         private bool IsBaseHelicopter(HitInfo hitinfo)
         {
+            if (hitinfo.Initiator == null) return false;
             if (hitinfo.Initiator is BaseHelicopter
                || (hitinfo.Initiator != null && (hitinfo.Initiator.ShortPrefabName.Equals("oilfireballsmall") || hitinfo.Initiator.ShortPrefabName.Equals("napalm"))))
             {
@@ -5134,6 +5058,9 @@ namespace Oxide.Plugins
 
         private bool PlayerOwnsItem(BasePlayer player, BaseEntity entity)
         {
+            if (player == null) return false;
+            if (entity == null) return false;
+
             DoLog($"Does player {player.displayName} own {entity.ShortPrefabName}?");
             if (entity is BuildingBlock)
             {
