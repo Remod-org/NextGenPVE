@@ -36,7 +36,7 @@ using Oxide.Core.Configuration;
 using System.Text;
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.1.5")]
+    [Info("NextGen PVE", "RFC1920", "1.1.6")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -95,7 +95,6 @@ namespace Oxide.Plugins
 
             connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nextgenpve.db;";
             sqlConnection = new SQLiteConnection(connStr);
-            //Puts("Opening...");
             sqlConnection.Open();
 
             LoadConfigVariables();
@@ -298,6 +297,7 @@ namespace Oxide.Plugins
                 ["NPCSamSitesTargetAnimals"] = "(ext) NPC SamSites Target Animals",
                 ["SamSitesTargetAnimals"] = "(ext) SamSites Target Animals",
                 ["AllowSuicide"] = "Allow Player Suicide",
+                ["AllowFriendlyFire"] = "Allow Friendly Fire",
                 ["TrapsIgnorePlayers"] = "Traps Ignore Players",
                 ["HonorBuildingPrivilege"] = "Honor Building Privilege",
                 ["UnprotectedBuildingDamage"] = "Unprotected Building Damage",
@@ -575,17 +575,21 @@ namespace Oxide.Plugins
         private bool BlockFallDamage(BaseCombatEntity entity)
         {
             if (entity == null) return false;
+            if (configData.Options.debug) Puts("Checking fall damage");
             // Special case where attack by scrapheli initiates fall damage on a player.  This was often used to kill players and bypass the rules.
             List<BaseEntity> ents = new List<BaseEntity>();
             Vis.Entities(entity.transform.position, 5, ents);
             foreach (BaseEntity ent in ents)
             {
-                if (ent.ShortPrefabName == "scraptransporthelicopter" && configData.Options.BlockScrapHeliFallDamage)
+                //if (ent.ShortPrefabName == "scraptransporthelicopter" && configData.Options.BlockScrapHeliFallDamage)
+                if (ent is ScrapTransportHelicopter && configData.Options.BlockScrapHeliFallDamage)
                 {
                     DoLog("Fall caused by scrapheli.  Blocking...");
+                    if (configData.Options.debug) Puts("Checking fall damage PASSED: YES");
                     return true;
                 }
             }
+            if (configData.Options.debug) Puts("Checking fall damage PASSED: NO");
             return false;
         }
 
@@ -594,56 +598,91 @@ namespace Oxide.Plugins
             if (!enabled) return null;
             if (entity == null) return null;
             if (hitinfo == null) return null;
+            if (configData.Options.debug) Puts("ENTRY: Checking majority damage type");
             string majority = hitinfo.damageTypes.GetMajorityDamageType().ToString();
-            if (majority == "Decay") return null;
+            if (configData.Options.debug) Puts($"Checking majority damage type PASSED: {majority}");
+            if (majority == "Decay")
+            {
+                if (configData.Options.debug) Puts(":EXIT");
+                return null;
+            }
 
+            if (configData.Options.debug) Puts("Checking for fall damage");
             if (majority == "Fall" && hitinfo.Initiator == null)
             {
                 DoLog($"Null initiator for attack on {entity.ShortPrefabName} by Fall");
-                if (BlockFallDamage(entity)) return true;
+                if (BlockFallDamage(entity))
+                {
+                    if (configData.Options.debug) Puts(":EXIT");
+                    return true;
+                }
             }
+            if (configData.Options.debug) Puts("Checking for fall damage PASSED");
 
+            if (configData.Options.debug) Puts("Calling external damage hook");
             try
             {
                 object CanTakeDamage = Interface.CallHook("CanEntityTakeDamage", new object[] { entity, hitinfo });
-                if (CanTakeDamage != null && CanTakeDamage is bool && (bool)CanTakeDamage) return null;
+                if (CanTakeDamage != null && CanTakeDamage is bool && (bool)CanTakeDamage)
+                {
+                    if (configData.Options.debug) Puts("Calling external damage hook PASSED: ALLOW\n:EXIT");
+                    return null;
+                }
+                if (configData.Options.debug) Puts("Calling external damage hook PASSED: NO RESULT");
             }
-            catch { }
+            catch
+            {
+                if (configData.Options.debug) Puts("Calling external damage hook FAILED");
+            }
 
-            if (configData.Options.debug) Puts($"attacker prefab: {hitinfo.Initiator.ShortPrefabName}, victim prefab: {entity.ShortPrefabName}");
+            if (configData.Options.debug) Puts($"attacker prefab: {hitinfo.Initiator?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
 
+            if (configData.Options.debug) Puts("Calling EvaluateRulesets");
             string stype; string ttype;
             bool canhurt = EvaluateRulesets(hitinfo, entity as BaseEntity, out stype, out ttype);
             if (stype == null && ttype == null) return null;
+            if (configData.Options.debug) Puts("Calling EvaluateRulesets PASSED");
 
             if (stype == "BasePlayer")
             {
+                if (configData.Options.debug) Puts("Checking for god perms");
                 if (permission.UserHasPermission(hitinfo.InitiatorPlayer?.UserIDString, permNextGenPVEGod))
                 {
-                    Puts("Admin almighty!");
+                    if (configData.Options.debug) Puts("Admin almighty!");
                     return null;
                 }
+                if (configData.Options.debug) Puts("Checking for god perms PASSED");
                 if (ttype == "BasePlayer")
                 {
-                    try
+                    if (configData.Options.debug) Puts("Checking for suicide flag or friendly fire");
+                    ulong sid = hitinfo.InitiatorPlayer?.userID ?? 0;
+                    ulong tid = (entity as BasePlayer)?.userID ?? 0;
+                    if (sid > 0 && tid > 0)
                     {
-                        if ((entity as BasePlayer)?.userID == hitinfo.InitiatorPlayer?.userID && configData.Options.AllowSuicide)
+                        if (sid == tid && configData.Options.AllowSuicide)
                         {
                             DoLog("AllowSuicide TRUE");
                             canhurt = true;
                         }
+                        else if (IsFriend(sid, tid) && configData.Options.AllowFriendlyFire)
+                        {
+                            DoLog("AllowFriendlyFire TRUE");
+                            canhurt = true;
+                        }
                     }
-                    catch { }
+                    if (configData.Options.debug) Puts("Checking for suicide flag or friendly fire PASSED");
                 }
             }
 
             if (canhurt)
             {
                 DoLog($"DAMAGE ALLOWED for {stype} attacking {ttype}, majority damage type {majority}");
+                if (configData.Options.debug) Puts(":EXIT");
                 return null;
             }
 
             DoLog($"DAMAGE BLOCKED for {stype} attacking {ttype}, majority damage type {majority}");
+            if (configData.Options.debug) Puts(":EXIT");
             return true;
         }
         #endregion
@@ -659,6 +698,7 @@ namespace Oxide.Plugins
                 return false;
             }
 
+            if (configData.Options.debug) Puts("Getting source type");
             // Special case for MLRS
             if (IsMLRS(source))
             {
@@ -668,7 +708,10 @@ namespace Oxide.Plugins
             {
                 stype = source.Initiator.GetType().Name;
             }
+            if (configData.Options.debug) Puts($"Getting source type PASSED: {stype}");
+            if (configData.Options.debug) Puts("Getting target type");
             ttype = target.GetType().Name;
+            if (configData.Options.debug) Puts($"Getting target type PASSED: {ttype}");
 
             if (stype.Length == 0 || ttype.Length == 0)
             {
@@ -690,6 +733,7 @@ namespace Oxide.Plugins
             bool hasBP = true;
             bool isBuilding = false;
 
+            if (configData.Options.debug) Puts("Checking NPC plugins");
             // Special case since Humanoids/HumanNPC contains a BasePlayer object
             if (stype == "BasePlayer" && source.InitiatorPlayer != null)
             {
@@ -701,7 +745,10 @@ namespace Oxide.Plugins
                 if (Humanoids && IsHumanoid(target)) ttype = "Humanoid";
                 else if (HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
             }
+            if (configData.Options.debug) Puts("Checking NPC plugins PASSED");
+            if (configData.Options.debug) Puts($"attacker type: {stype}, victim type: {ttype}");
 
+            if (configData.Options.debug) Puts("Checking player/heli building damage");
             // Special cases for building damage requiring owner or auth access
             if (stype == "BasePlayer" && source.InitiatorPlayer != null && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window"))
             {
@@ -777,7 +824,9 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Options.debug) Puts("Checking player/heli building damage PASSED");
 
+            if (configData.Options.debug) Puts("Checking zonemanager");
             if (ZoneManager && configData.Options.useZoneManager)
             {
                 string[] sourcezone = GetEntityZones(source.Initiator);
@@ -796,6 +845,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Options.debug) Puts($"Checking zonemanager PASSED: {zone}");
 
             bool foundmatch = false;
             bool foundexception = false;
@@ -1036,7 +1086,7 @@ namespace Oxide.Plugins
                 }
                 catch
                 {
-                    Puts("TOD_Sky failure...");
+                    if (configData.Options.debug) Puts("TOD_Sky failure...");
                     refresh = true;
                 }
             }
@@ -1182,7 +1232,7 @@ namespace Oxide.Plugins
             {
                 c.Open();
                 string query = $"SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rs}' AND schedule != '0'";
-                Puts(query);
+                if (configData.Options.debug) Puts(query);
                 using (SQLiteCommand use = new SQLiteCommand(query, c))
                 {
                     using (SQLiteDataReader schedule = use.ExecuteReader())
@@ -1561,10 +1611,14 @@ namespace Oxide.Plugins
         [Command("pvedebug")]
         private void CmdNextGenPVEDebug(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(permNextGenPVEAdmin)) { Message(player, "notauthorized"); return; }
+            if (!player.HasPermission(permNextGenPVEAdmin) && !player.IsServer)
+            {
+                Message(player, "notauthorized");
+                return;
+            }
 
             configData.Options.debug = !configData.Options.debug;
-            SaveConfig();
+            SaveConfig(configData);
             Message(player, "debug", configData.Options.debug.ToString());
         }
 
@@ -2426,6 +2480,10 @@ namespace Oxide.Plugins
                             case "AllowSuicide":
                                 configData.Options.AllowSuicide = val;
                                 break;
+                            case "AllowFriendlyFire":
+                                configData.Options.AllowFriendlyFire = val;
+                                if (val) configData.Options.HonorRelationships = true;
+                                break;
                             case "TrapsIgnorePlayers":
                                 configData.Options.TrapsIgnorePlayers = val;
                                 break;
@@ -2440,6 +2498,7 @@ namespace Oxide.Plugins
                                 break;
                             case "HonorRelationships":
                                 configData.Options.HonorRelationships = val;
+                                if (!val) configData.Options.AllowFriendlyFire = false;
                                 break;
                             case "BlockScrapHeliFallDamage":
                                 configData.Options.BlockScrapHeliFallDamage = val;
@@ -3274,8 +3333,16 @@ namespace Oxide.Plugins
                     }
                 }
             }
+
+            if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
+
             configData.Version = Version;
             SaveConfig(configData);
+        }
+
+        private bool CheckRelEnables()
+        {
+            return configData.Options.useClans || configData.Options.useFriends || configData.Options.useTeams;
         }
 
         protected override void LoadDefaultConfig()
@@ -3304,6 +3371,7 @@ namespace Oxide.Plugins
                     NPCSamSitesIgnorePlayers = false,
                     SamSitesIgnorePlayers = false,
                     AllowSuicide = false,
+                    AllowFriendlyFire = false,
                     TrapsIgnorePlayers = false,
                     HonorBuildingPrivilege = true,
                     UnprotectedBuildingDamage = false,
@@ -3351,6 +3419,7 @@ namespace Oxide.Plugins
             public bool NPCSamSitesIgnorePlayers;
             public bool SamSitesIgnorePlayers;
             public bool AllowSuicide;
+            public bool AllowFriendlyFire;
             public bool TrapsIgnorePlayers;
             public bool HonorBuildingPrivilege;
             public bool UnprotectedBuildingDamage;
@@ -3371,6 +3440,7 @@ namespace Oxide.Plugins
             configData.Options.NPCSamSitesIgnorePlayers = false;
             configData.Options.SamSitesIgnorePlayers = false;
             configData.Options.AllowSuicide = false;
+            configData.Options.AllowFriendlyFire = false;
             configData.Options.TrapsIgnorePlayers = false;
             configData.Options.HonorBuildingPrivilege = true;
             configData.Options.UnprotectedBuildingDamage = false;
@@ -3463,7 +3533,7 @@ namespace Oxide.Plugins
             }
 
             pb = GetButtonPositionP(row, col);
-            UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset add");
+            UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editruleset add");
             if (!ZoneManager)
             {
                 row++;
@@ -3480,147 +3550,184 @@ namespace Oxide.Plugins
             pb = GetButtonPositionF(row, col);
             if (configData.Options.AutoTurretTargetsPlayers)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig AutoTurretTargetsPlayers false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsPlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig AutoTurretTargetsPlayers true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.AutoTurretTargetsNPCs)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig AutoTurretTargetsNPCs false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AutoTurretTargetsNPCs true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig AutoTurretTargetsNPCs true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.BlockScrapHeliFallDamage)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("BlockScrapHeliFallDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig BlockScrapHeliFallDamage false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("BlockScrapHeliFallDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig BlockScrapHeliFallDamage false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("BlockScrapHeliFallDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig BlockScrapHeliFallDamage true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("BlockScrapHeliFallDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig BlockScrapHeliFallDamage true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.HeliTurretTargetsPlayers)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HeliTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HeliTurretTargetsPlayers false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HeliTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig HeliTurretTargetsPlayers false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HeliTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HeliTurretTargetsPlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HeliTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig HeliTurretTargetsPlayers true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.NPCAutoTurretTargetsPlayers)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig NPCAutoTurretTargetsPlayers false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsPlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsPlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig NPCAutoTurretTargetsPlayers true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.NPCAutoTurretTargetsNPCs)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig NPCAutoTurretTargetsNPCs false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCAutoTurretTargetsNPCs true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCAutoTurretTargetsNPCs"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig NPCAutoTurretTargetsNPCs true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.NPCSamSitesIgnorePlayers)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig NPCSamSitesIgnorePlayers false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig NPCSamSitesIgnorePlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("NPCSamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig NPCSamSitesIgnorePlayers true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.SamSitesIgnorePlayers)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig SamSitesIgnorePlayers false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig SamSitesIgnorePlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("SamSitesIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig SamSitesIgnorePlayers true");
             }
 
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.TrapsIgnorePlayers)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig TrapsIgnorePlayers false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TrapsIgnorePlayers true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("TrapsIgnorePlayers"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig TrapsIgnorePlayers true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.HonorBuildingPrivilege)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig HonorBuildingPrivilege false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorBuildingPrivilege true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HonorBuildingPrivilege"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig HonorBuildingPrivilege true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.UnprotectedBuildingDamage)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig UnprotectedBuildingDamage false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig UnprotectedBuildingDamage true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("UnprotectedBuildingDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig UnprotectedBuildingDamage true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.TwigDamage)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("TwigDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TwigDamage false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("TwigDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig TwigDamage false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("TwigDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig TwigDamage true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("TwigDamage"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig TwigDamage true");
             }
             row++;
             pb = GetButtonPositionF(row, col);
-            if (configData.Options.HonorRelationships)
+            if (CheckRelEnables())
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships false");
+                if (configData.Options.HonorRelationships)
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig HonorRelationships false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig HonorRelationships true");
+                }
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig HonorRelationships true");
+                if (configData.Options.HonorRelationships)
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#33b628", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#cccccc", 1f), Lang("HonorRelationships"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "");
+                }
+            }
+            row++;
+            pb = GetButtonPositionF(row, col);
+            if (CheckRelEnables())
+            {
+                if (configData.Options.AllowFriendlyFire)
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AllowFriendlyFire"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig AllowFriendlyFire false");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AllowFriendlyFire"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig AllowFriendlyFire true");
+                }
+            }
+            else
+            {
+                if (configData.Options.AllowFriendlyFire)
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#33b628", 1f), Lang("AllowFriendlyFire"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "");
+                }
+                else
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#cccccc", 1f), Lang("AllowFriendlyFire"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "");
+                }
             }
             row++;
             pb = GetButtonPositionF(row, col);
             if (configData.Options.AllowSuicide)
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AllowSuicide"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AllowSuicide false");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("AllowSuicide"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig AllowSuicide false");
             }
             else
             {
-                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AllowSuicide"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig AllowSuicide true");
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AllowSuicide"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig AllowSuicide true");
             }
-
             row++;
             pb = GetButtonPositionF(row, col);
-            UI.Button(ref container, NGPVERULELIST, UI.Color("#d82222", 1f), Lang("deflag"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editconfig RESET true");
+            UI.Button(ref container, NGPVERULELIST, UI.Color("#d82222", 1f), Lang("deflag"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig RESET true");
 
             CuiHelper.AddUi(player, container);
         }
