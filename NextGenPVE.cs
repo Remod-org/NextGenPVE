@@ -37,7 +37,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.1.9")]
+    [Info("NextGen PVE", "RFC1920", "1.2.0")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -232,6 +232,7 @@ namespace Oxide.Plugins
                 ["block"] = "Block",
                 ["save"] = "Save",
                 ["edit"] = "Edit",
+                ["delete"] = "Delete",
                 ["new"] = "new",
                 ["newcat"] = "New Collection",
                 ["setcat"] = "Set Collection",
@@ -2567,6 +2568,17 @@ namespace Oxide.Plugins
                         if (args.Length > 2)
                         {
                             string newcat = args[2];
+                            if (newcat == "DELETE")
+                            {
+                                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                {
+                                    c.Open();
+                                    using (SQLiteCommand cmd = new SQLiteCommand($"DELETE FROM ngpve_entities WHERE type='{entname}'", c))
+                                    {
+                                        cmd.ExecuteNonQuery();
+                                    }
+                                }
+                            }
                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                             {
                                 c.Open();
@@ -3341,6 +3353,19 @@ namespace Oxide.Plugins
                         ct.ExecuteNonQuery();
                     }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
+            if (configData.Version < new VersionNumber(1, 2, 0))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("DELETE FROM ngpve_entities WHERE type='ScientistNPCNew'", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -4243,7 +4268,8 @@ namespace Oxide.Plugins
             UI.Label(ref container, NGPVEENTEDIT, UI.Color("#ffffff", 1f), Lang("nextgenpveentedit") + ": " + entname + " : " + Lang("setcat"), 24, "0.2 0.92", "0.8 1");
             UI.Label(ref container, NGPVEENTEDIT, UI.Color("#ffffff", 1f), Name + " " + Version.ToString(), 12, "0.9 0.01", "0.99 0.04");
 
-            UI.Button(ref container, NGPVEENTEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", $"pverule closeentedit");
+            UI.Button(ref container, NGPVEENTEDIT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", "pverule closeentedit");
+            UI.Button(ref container, NGPVEENTEDIT, UI.Color("#ff3333", 1f), Lang("delete"), 12, "0.93 0.05","0.99 0.08", $"pverule editent {entname} DELETE");
 
             int row = 0; int col = 0;
             string name = "";
@@ -4299,9 +4325,11 @@ namespace Oxide.Plugins
             }
             pb = GetButtonPositionP(row, col);
             UI.Button(ref container, NGPVEENTEDIT, UI.Color("#777777", 1f), "unknown", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editent {entname} unknown");
+
             col++; row = 0;
             pb = GetButtonPositionP(row, col);
             UI.Label(ref container, NGPVEENTEDIT, UI.Color("#db5540", 1f), Lang("newcat") + ": ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
             col++;
             pb = GetButtonPositionP(row, col);
             UI.Label(ref container, NGPVEENTEDIT, UI.Color("#535353", 1f), Lang("new"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
@@ -5601,8 +5629,6 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Scientist', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'ScientistNPC', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'ScientistNPCNew', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'Zombie', 0)", sqlConnection);
             ct.ExecuteNonQuery();
