@@ -34,9 +34,10 @@ using System.IO;
 using System.Text.RegularExpressions;
 using Oxide.Core.Configuration;
 using System.Text;
+
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.1.8")]
+    [Info("NextGen PVE", "RFC1920", "1.1.9")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1123,7 +1124,7 @@ namespace Oxide.Plugins
             }
             if (hasBP && isBuilding)
             {
-                DoLog($"Player has building privilege and is attacking a BuildingBlock.  Or, heli is attacking a building owned by a targeted player.");
+                DoLog("Player has building privilege and is attacking a BuildingBlock.  Or, heli is attacking a building owned by a targeted player.");
                 return true;
             }
             else if (!hasBP && isBuilding)
@@ -1146,7 +1147,7 @@ namespace Oxide.Plugins
                 DoLog($"No Ruleset match or exclusions: Setting damage to {damage.ToString()}");
                 return damage;
             }
-            DoLog($"NO RULESET MATCH!");
+            DoLog("NO RULESET MATCH!");
             return damage;
         }
 
@@ -3320,6 +3321,26 @@ namespace Oxide.Plugins
                 {
                     c.Open();
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'ZombieNPC', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 1, 9))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+
+                    using (SQLiteCommand ct = new SQLiteCommand("DELETE FROM ngpve_entities WHERE type='NPCPlayerApex'", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("DELETE FROM ngpve_entities WHERE type='NPCPlayer'", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -5555,9 +5576,7 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('minicopter', 'MiniCopter', 0)", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
-            ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayerApex', 0)", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'BradleyAPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
