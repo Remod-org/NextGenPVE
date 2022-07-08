@@ -37,7 +37,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.2.6")]
+    [Info("NextGen PVE", "RFC1920", "1.2.7")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -96,8 +96,6 @@ namespace Oxide.Plugins
 
             connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nextgenpve.db;";
             sqlConnection = new SQLiteConnection(connStr);
-            //Puts("Opening...");
-            sqlConnection.Open();
 
             LoadConfigVariables();
             LoadData();
@@ -161,7 +159,7 @@ namespace Oxide.Plugins
             Puts("Wipe detected.  Clearing zone maps...");
             ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
             SaveData();
-            UpdateEnts();
+            //UpdateEnts();
         }
 
         private void UpdateEnts()
@@ -193,6 +191,9 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
+            //Puts("Opening...");
+            sqlConnection.Open();
+
             ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
         }
 
@@ -1109,7 +1110,6 @@ namespace Oxide.Plugins
                             }
 
                             // Special override to HonorBuildingPrivilege since we are NOT seeing a XXX_building exception and damage is true.
-                            // Note that this also overrides HonorBuildingPrivilege checks since we are apparently in a damage zone.
                             if (!foundexception && damage && isBuilding)
                             {
                                 DoLog($"Setting damage allow for building based on ruleset {rulesetname} damage value {damage}");
