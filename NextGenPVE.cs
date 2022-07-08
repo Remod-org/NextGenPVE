@@ -95,10 +95,6 @@ namespace Oxide.Plugins
             dataFile.Save();
 
             connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nextgenpve.db;";
-
-            LoadConfigVariables();
-            LoadData();
-
             AddCovalenceCommand("pveupdate", "CmdUpdateEnts");
             AddCovalenceCommand("pvebackup", "CmdNextGenPVEbackup");
             AddCovalenceCommand("pverule", "CmdNextGenPVEGUI");
@@ -111,6 +107,17 @@ namespace Oxide.Plugins
             permission.RegisterPermission(permNextGenPVEAdmin, this);
             permission.RegisterPermission(permNextGenPVEGod, this);
             enabled = true;
+        }
+
+        private void OnServerInitialized()
+        {
+            ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
+            //Puts("Opening...");
+            sqlConnection = new SQLiteConnection(connStr);
+            sqlConnection.Open();
+
+            LoadConfigVariables();
+            LoadData();
 
             if (configData.Options.useSchedule) RunSchedule(true);
         }
@@ -186,15 +193,6 @@ namespace Oxide.Plugins
                 }
             }
             Puts("Done!");
-        }
-
-        private void OnServerInitialized()
-        {
-            //Puts("Opening...");
-            sqlConnection = new SQLiteConnection(connStr);
-            sqlConnection.Open();
-
-            ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
         }
 
         protected override void LoadDefaultMessages()
