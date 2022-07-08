@@ -95,7 +95,6 @@ namespace Oxide.Plugins
             dataFile.Save();
 
             connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nextgenpve.db;";
-            sqlConnection = new SQLiteConnection(connStr);
 
             LoadConfigVariables();
             LoadData();
@@ -192,6 +191,7 @@ namespace Oxide.Plugins
         private void OnServerInitialized()
         {
             //Puts("Opening...");
+            sqlConnection = new SQLiteConnection(connStr);
             sqlConnection.Open();
 
             ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
