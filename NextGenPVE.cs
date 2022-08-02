@@ -37,14 +37,14 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.2.7")]
+    [Info("NextGen PVE", "RFC1920", "1.2.8")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
         #region vars
         // Ruleset to multiple zones
         private Dictionary<string, NextGenPVEZoneMap> ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
-        private Dictionary<string, string> ngpveschedule = new Dictionary<string, string>();
+        private Dictionary<int, NGPVE_Schedule> ngpveschedule = new Dictionary<int, NGPVE_Schedule>();
         private Dictionary<string, long> lastConnected = new Dictionary<string, long>();
 
         private const string permNextGenPVEUse = "nextgenpve.use";
@@ -66,6 +66,8 @@ namespace Oxide.Plugins
         private readonly string logfilename = "log";
         private bool dolog;
         private bool enabled = true;
+        private bool inPurge;
+        private bool purgeLast;
         private Timer scheduleTimer;
         private const string NGPVERULELIST = "nextgenpve.rulelist";
         private const string NGPVEEDITRULESET = "nextgenpve.ruleseteditor";
@@ -254,6 +256,8 @@ namespace Oxide.Plugins
                 ["genabled"] = "Globally Enabled",
                 ["gdisabled"] = "Globally Disabled",
                 ["zone"] = "Zone",
+                ["purgeactive"] = "PURGE ACTIVE",
+                ["purgeinactive"] = "PURGE IS OVER",
                 ["sinvert"] = "Invert Schedule",
                 ["sinverted"] = "Schedule Inverted",
                 ["schedule"] = "Schedule",
@@ -856,6 +860,7 @@ namespace Oxide.Plugins
             string rulesetzone = "";
             bool hasBP = true;
             bool isBuilding = false;
+            //bool isHeli = false;
 
             // Special case since Humanoids/HumanNPC contains a BasePlayer object
             if (stype == "BasePlayer")
@@ -937,6 +942,8 @@ namespace Oxide.Plugins
                 }
             }
 
+            //if (stype == "BaseHelicopter") isHeli = true;
+
             if (ZoneManager && configData.Options.useZoneManager)
             {
                 string[] sourcezone = GetEntityZones(source);
@@ -1015,7 +1022,7 @@ namespace Oxide.Plugins
                     if (!zonefound)
                     {
                         // No rules found matching this zone, revert to default...
-                        mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
+                        mquery = "SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
                     }
                     break;
             }
@@ -1084,6 +1091,8 @@ namespace Oxide.Plugins
 
                                         string foundsrc = entry.GetValue(0).ToString();
                                         string foundtgt = entry.GetValue(1).ToString();
+                                        // Following check to prevent exception for heli fireball damage
+                                        //foundexception = foundsrc != "fireball" || !isHeli;
                                         foundexception = true;
 
                                         if (foundsrc.Contains(stype))
@@ -1184,35 +1193,73 @@ namespace Oxide.Plugins
             }
         }
 
+        private bool CheckPurgeSchedule()
+        {
+            if (!configData.Options.purgeEnabled) return false;
+            if (configData.Options.purgeStart != null && configData.Options.purgeEnd != null)
+            {
+                // This is done here to ensure updates from config changes
+                DateTime today = DateTime.Now;
+                DateTime pstart = Convert.ToDateTime(configData.Options.purgeStart, new CultureInfo("en-US", true));
+                DateTime pend = Convert.ToDateTime(configData.Options.purgeEnd, new CultureInfo("en-US", true));
+                if (pstart < today && today < pend)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private void RunSchedule(bool refresh = false)
         {
             Dictionary<string, bool> enables = new Dictionary<string, bool>();
             TimeSpan ts = new TimeSpan();
             bool invert = false;
-
-            if (configData.Options.useRealTime)
+            Dictionary<string, bool> ngpveinvert = new Dictionary<string, bool>();
+            inPurge = CheckPurgeSchedule();
+            if (inPurge != purgeLast)
             {
-                ts = new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay);
+                switch (purgeLast)
+                {
+                    case true:
+                        string end = string.IsNullOrEmpty(configData.Options.purgeEndMessage) ? Lang("purgeinactive") : configData.Options.purgeEndMessage;
+                        MessageToAll(end, "");
+                        DoLog(Lang("purgeinactive"));
+                        break;
+                    default:
+                        string start = string.IsNullOrEmpty(configData.Options.purgeStartMessage) ? Lang("purgeactive") : configData.Options.purgeStartMessage;
+                        MessageToAll(start, "");
+                        DoLog(Lang("purgeactive"));
+                        break;
+                }
+                purgeLast = inPurge;
             }
-            else
+
+            switch (configData.Options.useRealTime)
             {
-                try
-                {
-                    ts = TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
-                }
-                catch
-                {
-                    Puts("TOD_Sky failure...");
-                    refresh = true;
-                }
+                case true:
+                    ts = new TimeSpan((int)DateTime.Now.DayOfWeek, 0, 0, 0).Add(DateTime.Now.TimeOfDay);
+                    break;
+                default:
+                    try
+                    {
+                        ts = TOD_Sky.Instance.Cycle.DateTime.TimeOfDay;
+                    }
+                    catch
+                    {
+                        Puts("TOD_Sky failure...");
+                        refresh = true;
+                    }
+                    break;
             }
             if (refresh)// && configData.Options.useSchedule)
             {
-                ngpveschedule = new Dictionary<string, string>();
+                ngpveschedule = new Dictionary<int, NGPVE_Schedule>();
+                int i = 0;
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    using (SQLiteCommand use = new SQLiteCommand($"SELECT DISTINCT name, schedule, invschedule FROM ngpve_rulesets WHERE schedule != '0'", c))
+                    using (SQLiteCommand use = new SQLiteCommand("SELECT DISTINCT name, schedule, invschedule FROM ngpve_rulesets WHERE schedule != '0'", c))
                     {
                         using (SQLiteDataReader schedule = use.ExecuteReader())
                         {
@@ -1223,7 +1270,14 @@ namespace Oxide.Plugins
                                 invert = Convert.ToBoolean(schedule.GetBoolean(2));
                                 if (nm != "" && sc != "")
                                 {
-                                    ngpveschedule.Add(nm, sc);
+                                    ngpveschedule.Add(i, new NGPVE_Schedule()
+                                    {
+                                        name = nm,
+                                        schedule = sc,
+                                        invert = invert
+                                    });
+                                    ngpveinvert.Add(nm, invert);
+                                    i++;
                                 }
                             }
                         }
@@ -1232,11 +1286,12 @@ namespace Oxide.Plugins
             }
 
             // Actual schedule processing here...
-            foreach (KeyValuePair<string, string> scheduleInfo in ngpveschedule)
+            foreach (KeyValuePair<int, NGPVE_Schedule> scheduleInfo in ngpveschedule)
             {
                 NextGenPVESchedule parsed;
-                if (ParseSchedule(scheduleInfo.Key, scheduleInfo.Value, out parsed))
+                if (ParseSchedule(scheduleInfo.Value.name, scheduleInfo.Value.schedule, out parsed))
                 {
+                    invert = inPurge || scheduleInfo.Value.invert;
                     DoLog("Schedule string was parsed correctly...");
                     int i = 0;
                     foreach (string x in parsed.day)
@@ -1253,28 +1308,28 @@ namespace Oxide.Plugins
                                 if (ts.Hours == Convert.ToInt32(parsed.starthour) && ts.Minutes >= Convert.ToInt32(parsed.startminute))
                                 {
                                     DoLog("Matched START hour and minute.", 2);
-                                    enables[scheduleInfo.Key] = !invert;
+                                    enables[scheduleInfo.Value.name] = !invert;
                                 }
                                 else if (ts.Hours == Convert.ToInt32(parsed.endhour) && ts.Minutes <= Convert.ToInt32(parsed.endminute))
                                 {
                                     DoLog("Matched END hour and minute.", 2);
-                                    enables[scheduleInfo.Key] = !invert;
+                                    enables[scheduleInfo.Value.name] = !invert;
                                 }
                                 else if (ts.Hours > Convert.ToInt32(parsed.starthour) && ts.Hours < Convert.ToInt32(parsed.endhour))
                                 {
                                     DoLog("Between start and end hours.", 2);
-                                    enables[scheduleInfo.Key] = !invert;
+                                    enables[scheduleInfo.Value.name] = !invert;
                                 }
                                 else
                                 {
                                     DoLog("Minute mismatch for START OR END.", 2);
-                                    enables[scheduleInfo.Key] = invert;
+                                    enables[scheduleInfo.Value.name] = invert;
                                 }
                             }
                             else
                             {
                                 DoLog($"Hours NOT matched for ruleset {scheduleInfo.Key}", 1);
-                                enables[scheduleInfo.Key] = invert;
+                                enables[scheduleInfo.Value.name] = invert;
                             }
                         }
 //                        else
@@ -1288,11 +1343,11 @@ namespace Oxide.Plugins
 
             foreach (KeyValuePair<string, bool> doenable in enables)
             {
-                DoLog($"Enable = {doenable.ToString()}, invert = {invert.ToString()}");
+                DoLog($"Enable = {doenable.Key}: {doenable.Value.ToString()}, invert = {ngpveinvert[doenable.Key].ToString()}");
                 switch (doenable.Value)// & !invert)
                 {
                     case false:
-                        DoLog($"Disabling ruleset {doenable.Key} (inverted={invert.ToString()})", 3);
+                        DoLog($"Disabling ruleset {doenable.Key} (inverted={ngpveinvert[doenable.Key].ToString()})", 3);
                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                         {
                             c.Open();
@@ -1303,7 +1358,7 @@ namespace Oxide.Plugins
                                     while (crs.Read())
                                     {
                                         string was = crs.GetValue(0).ToString();
-                                        if (was != "0") MessageToAll("pvedisabled", doenable.Key);
+                                        //if (was != "0") MessageToAll("pvedisabled", doenable.Key);
                                     }
                                 }
                             }
@@ -1314,7 +1369,7 @@ namespace Oxide.Plugins
                         }
                         break;
                     case true:
-                        DoLog($"Enabling ruleset {doenable.Key} (inverted={invert.ToString()})", 3);
+                        DoLog($"Enabling ruleset {doenable.Key} (inverted={ngpveinvert[doenable.Key].ToString()})", 3);
                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                         {
                             c.Open();
@@ -1325,7 +1380,7 @@ namespace Oxide.Plugins
                                     while (crs.Read())
                                     {
                                         string was = crs.GetValue(0).ToString();
-                                        if (was != "1") MessageToAll("pveenabled", doenable.Key);
+                                        //if (was != "1") MessageToAll("pveenabled", doenable.Key);
                                     }
                                 }
                             }
@@ -1524,9 +1579,9 @@ namespace Oxide.Plugins
             if (message.Contains("Turret")) return; // Log volume FIXME
             if (dolog) LogToFile(logfilename, "".PadLeft(indent, ' ') + message, this);
         }
-        #endregion
+#endregion
 
-        #region Commands
+#region Commands
         [Command("pveupdate")]
         private void CmdUpdateEnts(IPlayer player, string command, string[] args)
         {
@@ -2639,9 +2694,9 @@ namespace Oxide.Plugins
                 GUIRuleSets(player);
             }
         }
-        #endregion
+#endregion
 
-        #region config
+#region config
         private void LoadConfigVariables()
         {
             configData = Config.ReadObject<ConfigData>();
@@ -2806,6 +2861,15 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 2, 8))
+            {
+                configData.Options.purgeEnabled = false;
+                configData.Options.purgeStartMessage = "";
+                configData.Options.purgeEndMessage = "";
+                configData.Options.purgeStart = "12/31/1969 12:01";
+                configData.Options.purgeEnd = "1/1/1970 14:20";
+            }
+
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
 
             configData.Version = Version;
@@ -2873,6 +2937,11 @@ namespace Oxide.Plugins
             public bool debug;
             public bool useZoneManager;
             public float protectedDays;
+            public bool purgeEnabled;
+            public string purgeStart;
+            public string purgeEnd;
+            public string purgeStartMessage;
+            public string purgeEndMessage;
             public bool useSchedule;
             public bool useGUIAnnouncements;
             public bool useMessageBroadcast;
@@ -2919,9 +2988,9 @@ namespace Oxide.Plugins
             configData.Options.HonorRelationships = false;
             configData.Options.BlockScrapHeliFallDamage = false;
         }
-        #endregion
+#endregion
 
-        #region GUI
+#region GUI
         private void IsOpen(ulong uid, bool set=false)
         {
             if (set)
@@ -4505,9 +4574,9 @@ namespace Oxide.Plugins
 
             return new float[] { offsetX, offsetY, offsetX + 0.296f, offsetY + 0.02f };
         }
-        #endregion
+#endregion
 
-        #region Specialized_checks
+#region Specialized_checks
         private string[] GetEntityZones(BaseEntity entity)
         {
             if (ZoneManager && configData.Options.useZoneManager)
@@ -4837,9 +4906,9 @@ namespace Oxide.Plugins
             }
             return false;
         }
-        #endregion
+#endregion
 
-        #region classes
+#region classes
         public class NextGenPVERule
         {
             public string description;
@@ -4858,6 +4927,14 @@ namespace Oxide.Plugins
             public string endhour;
             public string endminute;
             public bool enabled = true;
+        }
+
+        // Used only within RunSchedule
+        private class NGPVE_Schedule
+        {
+            public string name;
+            public string schedule;
+            public bool invert;
         }
 
         public class NextGenPVEEntities
@@ -4981,9 +5058,9 @@ namespace Oxide.Plugins
                 return $"{(double)red / 255} {(double)green / 255} {(double)blue / 255} {alpha}";
             }
         }
-        #endregion
+#endregion
 
-        #region load_defaults
+#region load_defaults
         // Default entity categories and types to consider
         private void LoadDefaultEntities()
         {
@@ -5365,6 +5442,6 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'highwall_player', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
         }
-        #endregion
+#endregion
     }
 }
