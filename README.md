@@ -7,6 +7,8 @@ Works with DynamicPVP.
 
 Don't let the documentation trouble you.  In most cases all you should need to do is install the plugin.  The rest is optional.
 
+NEW FOR 1.2.8: There are 3 new configurations for scheduling a purge based on date and time.  Currently, this must be set in the config file.  Set purgeEnabled to true and useSchedule to true.  Set a start date (and time if desired) and end date (and time).  Note that you must update these values each month for them to be effective.  This can currently only happen once per month.
+
 NEW FOR 1.0.52: Custom rule and entity collection editor - You must set AllowCustomEdit true in the configuration to enable this feature.  To go along with this, new entity types will be detected at wipe and should be available to set into existing or new collections for inclusion in rulesets.
 
 ### Overview
@@ -135,6 +137,9 @@ The above commands can also be run from console or RCON (without /).
     "useZoneManager": false,
     "protectedDays": 0.0,
     "useSchedule": false,
+    "purgeEnabled": false,
+    "purgeStart": "12/31/1969 12:00",
+    "purgeEnd": "1/1/1970 14:00",
     "useGUIAnnouncements": false,
     "useMessageBroadcast": false,
     "useRealTime": false,
