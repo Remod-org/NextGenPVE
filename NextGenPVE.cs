@@ -37,7 +37,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.2.8")]
+    [Info("NextGen PVE", "RFC1920", "1.2.9")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -465,18 +465,22 @@ namespace Oxide.Plugins
                     return true; // block
                 }
 
-                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { player, sam });
-                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool)
+                try
                 {
-                    if ((bool)extCanEntityBeTargeted)
+                    object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { player, sam });
+                    if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool)
                     {
-                        return null; // allow
-                    }
-                    else
-                    {
-                        return true; // block
+                        if ((bool)extCanEntityBeTargeted)
+                        {
+                            return null; // allow
+                        }
+                        else
+                        {
+                            return true; // block
+                        }
                     }
                 }
+                catch { }
             }
             return null; // allow
         }
@@ -486,11 +490,15 @@ namespace Oxide.Plugins
             if (target == null || turret == null) return null;
             if (!enabled) return null;
 
-            object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
-            if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+            try
             {
-                return null;
+                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
+                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                {
+                    return null;
+                }
             }
+            catch { }
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
@@ -508,11 +516,15 @@ namespace Oxide.Plugins
             if (target == null || turret == null) return null;
             if (!enabled) return null;
 
-            object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
-            if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+            try
             {
-                return null;
+                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
+                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                {
+                    return null;
+                }
             }
+            catch { }
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
@@ -539,11 +551,15 @@ namespace Oxide.Plugins
             if (target == null || turret == null) return null;
             if (!enabled) return null;
 
-            object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
-            if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+            try
             {
-                return null;
+                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
+                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                {
+                    return null;
+                }
             }
+            catch { }
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
@@ -561,11 +577,15 @@ namespace Oxide.Plugins
             if (target == null || turret == null) return null;
             if (!enabled) return null;
 
-            object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
-            if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+            try
             {
-                return null;
+                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret as BaseEntity });
+                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                {
+                    return null;
+                }
             }
+            catch { }
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
