@@ -37,7 +37,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.3.0")]
+    [Info("NextGen PVE", "RFC1920", "1.3.1")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -166,6 +166,7 @@ namespace Oxide.Plugins
         {
             Puts("Wipe detected.  Clearing zone maps...");
             ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
+            NewPurgeSchedule();
             SaveData();
             //UpdateEnts();
         }
@@ -1213,11 +1214,44 @@ namespace Oxide.Plugins
             }
         }
 
+        public static IEnumerable<DateTime> AllDatesInMonth(int year, int month)
+        {
+            int days = DateTime.DaysInMonth(year, month);
+            for (int day = 1; day <= days; day++)
+            {
+                yield return new DateTime(year, month, day);
+            }
+        }
+
+        private void NewPurgeSchedule()
+        {
+            if (!configData.Options.autoCalcPurge) return;
+
+            int month = DateTime.Now.Month + 1;
+            int year = DateTime.Now.Year;
+
+            if (month > 12 || month < 1)
+            {
+                month = 1;
+                year++;
+            }
+            if (month == 12) year++;
+
+            IEnumerable<DateTime> thursdays = AllDatesInMonth(year, month).Where(i => i.DayOfWeek == DayOfWeek.Thursday);
+            DoLog($"Next force wipe day will be {thursdays.First().ToShortDateString()}");
+
+            configData.Options.purgeStart = thursdays.First().Subtract(TimeSpan.FromDays(configData.Options.autoCalcPurgeDays)).ToShortDateString() + " 0:00";
+            configData.Options.purgeEnd = thursdays.First().ToShortDateString() + " 0:00";
+            SaveConfig(configData);
+        }
+
         private bool CheckPurgeSchedule()
         {
             if (!configData.Options.purgeEnabled) return false;
+            bool foundPurge = false;
             if (configData.Options.purgeStart != null && configData.Options.purgeEnd != null)
             {
+                foundPurge = true;
                 // This is done here to ensure updates from config changes
                 DateTime today = DateTime.Now;
                 DateTime pstart = Convert.ToDateTime(configData.Options.purgeStart, new CultureInfo("en-US", true));
@@ -1227,6 +1261,7 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
+            if (!foundPurge) NewPurgeSchedule();
             return false;
         }
 
@@ -2895,6 +2930,12 @@ namespace Oxide.Plugins
                 configData.Options.purgeEnd = "1/1/1970 14:20";
             }
 
+            if (configData.Version < new VersionNumber(1, 3, 1))
+            {
+                configData.Options.autoCalcPurge = false;
+                configData.Options.autoCalcPurgeDays = 2;
+            }
+
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
 
             configData.Version = Version;
@@ -2967,6 +3008,8 @@ namespace Oxide.Plugins
             public string purgeEnd;
             public string purgeStartMessage;
             public string purgeEndMessage;
+            public bool autoCalcPurge;
+            public int autoCalcPurgeDays;
             public bool useSchedule;
             public bool useGUIAnnouncements;
             public bool useMessageBroadcast;
