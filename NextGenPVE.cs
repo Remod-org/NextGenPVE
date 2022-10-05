@@ -37,7 +37,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.2.9")]
+    [Info("NextGen PVE", "RFC1920", "1.3.0")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1239,17 +1239,21 @@ namespace Oxide.Plugins
             inPurge = CheckPurgeSchedule();
             if (inPurge != purgeLast)
             {
-                switch (purgeLast)
+                switch (inPurge)
                 {
                     case true:
+                        enabled = true;
                         string end = string.IsNullOrEmpty(configData.Options.purgeEndMessage) ? Lang("purgeinactive") : configData.Options.purgeEndMessage;
                         MessageToAll(end, "");
                         DoLog(Lang("purgeinactive"));
+                        Interface.CallHook("EnableMe");
                         break;
                     default:
+                        enabled = false;
                         string start = string.IsNullOrEmpty(configData.Options.purgeStartMessage) ? Lang("purgeactive") : configData.Options.purgeStartMessage;
                         MessageToAll(start, "");
                         DoLog(Lang("purgeactive"));
+                        Interface.CallHook("DisableMe");
                         break;
                 }
                 purgeLast = inPurge;
@@ -1311,7 +1315,8 @@ namespace Oxide.Plugins
                 NextGenPVESchedule parsed;
                 if (ParseSchedule(scheduleInfo.Value.name, scheduleInfo.Value.schedule, out parsed))
                 {
-                    invert = inPurge || scheduleInfo.Value.invert;
+                    //invert = inPurge || scheduleInfo.Value.invert;
+                    invert = scheduleInfo.Value.invert;
                     DoLog("Schedule string was parsed correctly...");
                     int i = 0;
                     foreach (string x in parsed.day)
