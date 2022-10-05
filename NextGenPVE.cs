@@ -1239,7 +1239,7 @@ namespace Oxide.Plugins
             inPurge = CheckPurgeSchedule();
             if (inPurge != purgeLast)
             {
-                switch (inPurge)
+                switch (purgeLast)
                 {
                     case true:
                         enabled = true;
