@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.3.2")]
+    [Info("NextGen PVE", "RFC1920", "1.3.3")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -4692,8 +4692,15 @@ namespace Oxide.Plugins
             }
             else
             {
-                BasePlayer pl = player as BasePlayer;
-                return pl.userID < 76560000000000000L && pl.userID > 0L && !pl.IsDestroyed;
+                try
+                {
+                    BasePlayer pl = player as BasePlayer;
+                    return pl.userID < 76560000000000000L && pl.userID > 0L && !pl.IsDestroyed;
+                }
+                catch
+                {
+                    return false;
+                }
             }
         }
 
