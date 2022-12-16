@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.3.3")]
+    [Info("NextGen PVE", "RFC1920", "1.3.4")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -60,7 +60,7 @@ namespace Oxide.Plugins
         [PluginReference]
         private readonly Plugin ZoneManager, Humanoids, HumanNPC, Friends, Clans, RustIO, GUIAnnouncements;
 
-        private static NextGenPVE Instance;
+        //private static NextGenPVE Instance;
         private readonly string logfilename = "log";
         private bool dolog;
         private bool enabled = true;
@@ -89,7 +89,7 @@ namespace Oxide.Plugins
         #region init
         private void Init()
         {
-            Instance = this;
+            //Instance = this;
             //Puts("Creating database connection for main thread.");
             DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/nextgenpve");
             dataFile.Save();
@@ -632,6 +632,53 @@ namespace Oxide.Plugins
             return true;
         }
 
+        private bool IsInPVEZone(BaseCombatEntity target)
+        {
+            string zone = "default";
+            if (ZoneManager && configData.Options.useZoneManager)
+            {
+                string[] targetzone = GetEntityZones(target);
+
+                //DoLog($"Found {sourcezone.Length} source zone(s) and {targetzone.Length} target zone(s).");
+                if (targetzone.Length > 0)
+                {
+                    foreach (string z in targetzone)
+                    {
+                        zone = z;
+                        DoLog($"Found zone {zone}", 1);
+                        break;
+                    }
+                }
+            }
+
+            string mquery;
+            switch (zone)
+            {
+                case "default":
+                    DoLog("Default ruleset query");
+                    mquery = "SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
+                    break;
+                default:
+                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup'";
+
+                    using (SQLiteCommand findIt = new SQLiteCommand(mquery, sqlConnection))
+                    {
+                        using (SQLiteDataReader readMe = findIt.ExecuteReader())
+                        {
+                            while (readMe.Read())
+                            {
+                                if (readMe.GetBoolean(2) && readMe.GetBoolean(3))
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    break;
+            }
+            return false;
+        }
+
         private bool AddOrUpdateMapping(string key, string rulesetname)
         {
             if (string.IsNullOrEmpty(key)) return false;
@@ -850,7 +897,7 @@ namespace Oxide.Plugins
             }
 
             if (configData.Options.debug) Puts("Getting source type");
-            if (source.ShortPrefabName == "rocket_mlrs")
+            if (source?.ShortPrefabName == "rocket_mlrs")
             {
                 stype = "MLRS";
             }
@@ -2937,6 +2984,17 @@ namespace Oxide.Plugins
                 configData.Options.autoCalcPurge = false;
                 configData.Options.autoCalcPurgeDays = 2;
             }
+            if (configData.Version < new VersionNumber(1, 3, 4))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'GingerbreadNPC', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
 
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
 
@@ -4706,6 +4764,7 @@ namespace Oxide.Plugins
 
         private bool IsHumanoid(BaseEntity player)
         {
+            if (player == null) return false;
             if (Humanoids)
             {
                 return (bool)Humanoids?.Call("IsHumanoid", player as BasePlayer);
@@ -4715,6 +4774,7 @@ namespace Oxide.Plugins
 
         private bool IsBaseHelicopter(BaseEntity entity)
         {
+            if (entity == null) return false;
             if ((entity is BaseHelicopter) || entity.ShortPrefabName.Equals("oilfireballsmall") || entity.ShortPrefabName.Equals("napalm"))
             {
                 return true;
@@ -4724,8 +4784,9 @@ namespace Oxide.Plugins
 
         private bool IsBaseHelicopter(HitInfo hitinfo)
         {
-            if (hitinfo.Initiator is BaseHelicopter
-               || (hitinfo.Initiator != null && (hitinfo.Initiator.ShortPrefabName.Equals("oilfireballsmall") || hitinfo.Initiator.ShortPrefabName.Equals("napalm"))))
+            if (hitinfo?.Initiator == null) return false;
+            if (hitinfo?.Initiator is BaseHelicopter
+               || (hitinfo?.Initiator != null && (hitinfo.Initiator.ShortPrefabName.Equals("oilfireballsmall") || hitinfo.Initiator.ShortPrefabName.Equals("napalm"))))
             {
                 return true;
             }
@@ -4746,8 +4807,9 @@ namespace Oxide.Plugins
                 DoLog("HonorBuildingPrivilege set to false.  Skipping owner checks...");
                 return true;
             }
-            DoLog($"Does player {player.displayName} own {privilege.ShortPrefabName}?");
+            //if (player == null || privilege == null) return false;
 
+            DoLog($"Does player {player.displayName} own {privilege.ShortPrefabName}?");
             BuildingManager.Building building = privilege.GetBuilding();
             if (building != null)
             {
@@ -4791,7 +4853,8 @@ namespace Oxide.Plugins
 
         private bool PlayerOwnsItem(BasePlayer player, BaseEntity entity)
         {
-            DoLog($"Does player {player.displayName} own {entity.ShortPrefabName}?");
+            if (player == null || entity == null) return false;
+            DoLog($"Does player {player?.displayName} own {entity?.ShortPrefabName}?");
             if (entity is BuildingBlock)
             {
                 if (configData.Options.TwigDamage)
@@ -5218,6 +5281,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'UnderwaterDweller', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'BaseNpc', 0)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'GingerbreadNPC', 0)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_entities VALUES('npc', 'HTNPlayer', 0)", sqlConnection);
             ct.ExecuteNonQuery();
