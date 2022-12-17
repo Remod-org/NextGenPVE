@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.3.4")]
+    [Info("NextGen PVE", "RFC1920", "1.3.5")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -166,30 +166,34 @@ namespace Oxide.Plugins
             ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
             NewPurgeSchedule();
             SaveData();
-            //UpdateEnts();
+            UpdateEnts();
         }
 
         private void UpdateEnts()
         {
             // Populate the entities table with any new entities (Typically only at wipe but can be run manually via pveupdate.)
-            // All new ents are added as unknown for manual recategorization.
+            // All new ents are added as unknown for manual recategorization (except those containing 'NPC').
             Puts("Finding new entity types...");
             List<string> names = new List<string>();
             foreach (UnityEngine.Object obj in Resources.FindObjectsOfTypeAll(new BaseCombatEntity().GetType()))
             {
-                string objname = obj.GetType().ToString();
+                string objname = obj?.GetType().ToString();
+                if (string.IsNullOrEmpty(objname)) continue;
                 if (objname.Contains("Entity")) continue;
                 if (names.Contains(objname)) continue; // Saves 20-30 seconds of processing time.
+                string category = objname.ToLower().Contains("npc") ? "npc" : "unknown";
                 names.Add(objname);
-                //Puts($"{objname}");
 
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    string query = $"INSERT INTO ngpve_entities (name, type) SELECT 'unknown', '{objname}' WHERE NOT EXISTS (SELECT * FROM ngpve_entities WHERE type='{objname}')";
+                    string query = $"INSERT INTO ngpve_entities (name, type) SELECT '{category}', '{objname}' WHERE NOT EXISTS (SELECT * FROM ngpve_entities WHERE type='{objname}')";
                     using (SQLiteCommand us = new SQLiteCommand(query, c))
                     {
-                        us.ExecuteNonQuery();
+                        if (us.ExecuteNonQuery() > 0)
+                        {
+                            Puts($"Added {objname} as {category}.");
+                        }
                     }
                 }
             }
@@ -321,6 +325,7 @@ namespace Oxide.Plugins
         {
             foreach (BasePlayer player in BasePlayer.activePlayerList)
             {
+                if (!permission.UserHasPermission(player?.UserIDString, permNextGenPVEAdmin)) continue;
                 CuiHelper.DestroyUi(player, NGPVERULELIST);
                 CuiHelper.DestroyUi(player, NGPVERULEEDIT);
                 CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
@@ -335,7 +340,7 @@ namespace Oxide.Plugins
             }
 
             scheduleTimer?.Destroy();
-            sqlConnection.Close();
+            sqlConnection?.Close();
         }
 
         private void LoadData()
