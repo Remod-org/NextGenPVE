@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.3.5")]
+    [Info("NextGen PVE", "RFC1920", "1.3.6")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1047,6 +1047,8 @@ namespace Oxide.Plugins
             string rulesetname = null;
 
             string src = null; string tgt = null;
+            bool foundSrcInDB = false;
+            bool foundTgtInDB = false;
             //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'");
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection))
             {
@@ -1055,9 +1057,23 @@ namespace Oxide.Plugins
                     while (readMe.Read())
                     {
                         src = readMe.GetString(0);
+                        foundSrcInDB = true;
                         break;
                     }
                 }
+            }
+            if (configData.Options.AutoPopulateUnknownEntitities && !foundSrcInDB)
+            {
+                string newtype = stype;
+                string category = stype.ToLower().Contains("npc") ? "npc" : "unknown";
+                NextTick(() =>
+                {
+                    Puts($"Adding discovered source type {newtype} as unknown");
+                    using (SQLiteCommand ct = new SQLiteCommand($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0)", sqlConnection))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                });
             }
 
             //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'");
@@ -1068,9 +1084,23 @@ namespace Oxide.Plugins
                     while (readMe.Read())
                     {
                         tgt = readMe.GetString(0);
+                        foundTgtInDB = true;
                         break;
                     }
                 }
+            }
+            if (configData.Options.AutoPopulateUnknownEntitities && !foundTgtInDB)
+            {
+                string newtype = ttype;
+                string category = ttype.ToLower().Contains("npc") ? "npc" : "unknown";
+                NextTick(() =>
+                {
+                    Puts($"Adding discovered target type {newtype} as unknown");
+                    using (SQLiteCommand ct = new SQLiteCommand($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0)", sqlConnection))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                });
             }
 
             string mquery;
@@ -3000,6 +3030,10 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Version < new VersionNumber(1, 3, 6))
+            {
+                configData.Options.AutoPopulateUnknownEntitities = true;
+            }
 
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
 
@@ -3045,7 +3079,8 @@ namespace Oxide.Plugins
                     UnprotectedDeployableDamage = false,
                     TwigDamage = false,
                     HonorRelationships = false,
-                    BlockScrapHeliFallDamage = false
+                    BlockScrapHeliFallDamage = false,
+                    AutoPopulateUnknownEntitities = true
                 },
                 Version = Version
             };
@@ -3084,6 +3119,7 @@ namespace Oxide.Plugins
             public bool useTeams;
             public bool AllowCustomEdit;
             public bool AllowDropDatabase;
+            public bool AutoPopulateUnknownEntitities;
 
             public bool NPCAutoTurretTargetsPlayers;
             public bool NPCAutoTurretTargetsNPCs;
