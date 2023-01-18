@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.3.6")]
+    [Info("NextGen PVE", "RFC1920", "1.3.7")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -140,9 +140,9 @@ namespace Oxide.Plugins
             SaveData();
         }
 
-        private object OnUserCommand(BasePlayer player, string command, string[] args)
+        private object OnUserCommand(IPlayer player, string command, string[] args)
         {
-            if (command != "pverule" && isopen.Contains(player.userID))
+            if (command != "pverule" && isopen.Contains(ulong.Parse(player.Id)))
             {
                 if (configData.Options.debug) Puts($"OnPlayerCommand: {command} BLOCKED");
                 return true;
@@ -150,23 +150,27 @@ namespace Oxide.Plugins
             return null;
         }
 
-        private object OnPlayerCommand(BasePlayer player, string command, string[] args)
-        {
-            if (command != "pverule" && isopen.Contains(player.userID))
-            {
-                if (configData.Options.debug) Puts($"OnPlayerCommand: {command} BLOCKED");
-                return true;
-            }
-            return null;
-        }
+        //private object OnPlayerCommand(BasePlayer player, string command, string[] args)
+        //{
+        //    if (command != "pverule" && isopen.Contains(player.userID))
+        //    {
+        //        if (configData.Options.debug) Puts($"OnPlayerCommand: {command} BLOCKED");
+        //        return true;
+        //    }
+        //    return null;
+        //}
 
         private void OnNewSave()
         {
             Puts("Wipe detected.  Clearing zone maps...");
             ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
-            NewPurgeSchedule();
-            SaveData();
-            UpdateEnts();
+            LoadConfig();
+            NextTick(() =>
+            {
+                NewPurgeSchedule();
+                SaveData();
+                UpdateEnts();
+            });
         }
 
         private void UpdateEnts()
@@ -181,7 +185,7 @@ namespace Oxide.Plugins
                 if (string.IsNullOrEmpty(objname)) continue;
                 if (objname.Contains("Entity")) continue;
                 if (names.Contains(objname)) continue; // Saves 20-30 seconds of processing time.
-                string category = objname.ToLower().Contains("npc") ? "npc" : "unknown";
+                string category = objname.Contains("npc", CompareOptions.OrdinalIgnoreCase) ? "npc" : "unknown";
                 names.Add(objname);
 
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
@@ -796,12 +800,12 @@ namespace Oxide.Plugins
             if (!enabled) return null;
             if (entity == null) return null;
             if (hitinfo == null) return null;
-            string majority = hitinfo.damageTypes.GetMajorityDamageType().ToString();
-            if (majority == "Decay") return null;
+            Rust.DamageType majority = hitinfo.damageTypes.GetMajorityDamageType();
+            if (majority == Rust.DamageType.Decay) return null;
 
             if (configData.Options.debug) Puts("ENTRY:");
             if (configData.Options.debug) Puts("Checking for fall damage");
-            if (majority == "Fall" && hitinfo.Initiator == null)
+            if (majority == Rust.DamageType.Fall && hitinfo.Initiator == null)
             {
                 DoLog($"Null initiator for attack on {entity.ShortPrefabName} by Fall");
                 if (BlockFallDamage(entity))
@@ -832,13 +836,13 @@ namespace Oxide.Plugins
             {
                 if (configData.Options.debug) Puts($"attacker prefab: {hitinfo.WeaponPrefab?.ShortPrefabName}, victim prefab: {entity.ShortPrefabName}");
                 if (configData.Options.debug) Puts("Calling EvaluateRulesets: MLRS");
-                canhurt = EvaluateRulesets(hitinfo.WeaponPrefab, entity, out stype, out ttype);
+                canhurt = EvaluateRulesets(hitinfo?.WeaponPrefab, entity, out stype, out ttype);
             }
             else
             {
                 if (configData.Options.debug) Puts($"attacker prefab: {hitinfo.Initiator?.ShortPrefabName}, victim prefab: {entity.ShortPrefabName}");
                 if (configData.Options.debug) Puts("Calling EvaluateRulesets: Standard");
-                canhurt = EvaluateRulesets(hitinfo.Initiator, entity, out stype, out ttype);
+                canhurt = EvaluateRulesets(hitinfo?.Initiator, entity, out stype, out ttype);
             }
             if (stype.Length == 0 && ttype.Length == 0)
             {
@@ -849,7 +853,7 @@ namespace Oxide.Plugins
 
             if (stype == "BasePlayer")
             {
-                BasePlayer hibp = hitinfo.Initiator as BasePlayer;
+                BasePlayer hibp = hitinfo?.Initiator as BasePlayer;
                 if (configData.Options.debug) Puts("Checking for god perms");
                 if (hibp != null && permission.UserHasPermission(hibp.UserIDString, permNextGenPVEGod))
                 {
@@ -912,11 +916,11 @@ namespace Oxide.Plugins
             }
             else
             {
-                stype = source?.GetType().Name;
+                stype = source?.GetType()?.Name;
             }
 
             if (configData.Options.debug) Puts("Getting target type");
-            ttype = target?.GetType().Name;
+            ttype = target?.GetType()?.Name;
             if (string.IsNullOrEmpty(stype) || string.IsNullOrEmpty(ttype))
             {
                 if (configData.Options.debug) Puts("Type detection failure.  Bailing out.");
@@ -938,14 +942,27 @@ namespace Oxide.Plugins
             bool isBuilding = false;
             //bool isHeli = false;
 
-            // Special case since Humanoids/HumanNPC contains a BasePlayer object
+            // Check for permission blocking player on player damage
+            // Also check for special cases since Humanoids/HumanNPC contain a BasePlayer object
             if (stype == "BasePlayer")
             {
+                // EXPERIMENTAL check for player permission if requirePermissionForPlayerProtection is true.
+                if (PlayerIsProtected(source as BasePlayer) && target is BasePlayer)
+                {
+                    DoLog("DAMAGE BLOCKED! Source player has protection.  Blocking damage to target player.  Fair is fair...");
+                    return false;
+                }
                 if (Humanoids && IsHumanoid(source)) stype = "Humanoid";
                 if (HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
             }
             if (ttype == "BasePlayer")
             {
+                // EXPERIMENTAL check for player permission if requirePermissionForPlayerProtection is true.
+                if (PlayerIsProtected(target as BasePlayer) && source is BasePlayer)
+                {
+                    DoLog("DAMAGE BLOCKED! Targeted player has protection.  Blocking damage from source player.");
+                    return false;
+                }
                 if (Humanoids && IsHumanoid(target)) ttype = "Humanoid";
                 if (HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
             }
@@ -1065,7 +1082,7 @@ namespace Oxide.Plugins
             if (configData.Options.AutoPopulateUnknownEntitities && !foundSrcInDB)
             {
                 string newtype = stype;
-                string category = stype.ToLower().Contains("npc") ? "npc" : "unknown";
+                string category = stype.Contains("npc", CompareOptions.OrdinalIgnoreCase) ? "npc" : "unknown";
                 NextTick(() =>
                 {
                     Puts($"Adding discovered source type {newtype} as unknown");
@@ -1092,7 +1109,7 @@ namespace Oxide.Plugins
             if (configData.Options.AutoPopulateUnknownEntitities && !foundTgtInDB)
             {
                 string newtype = ttype;
-                string category = ttype.ToLower().Contains("npc") ? "npc" : "unknown";
+                string category = ttype.Contains("npc", CompareOptions.OrdinalIgnoreCase) ? "npc" : "unknown";
                 NextTick(() =>
                 {
                     Puts($"Adding discovered target type {newtype} as unknown");
@@ -3035,6 +3052,22 @@ namespace Oxide.Plugins
                 configData.Options.AutoPopulateUnknownEntitities = true;
             }
 
+            if (configData.Version < new VersionNumber(1, 3, 7))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_helicopter', 'Helicopter can damage Helicopter', 1, 0, 'helicopter', 'helicopter')", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_helicopter', null, null, null, null)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
 
             configData.Version = Version;
@@ -3080,7 +3113,8 @@ namespace Oxide.Plugins
                     TwigDamage = false,
                     HonorRelationships = false,
                     BlockScrapHeliFallDamage = false,
-                    AutoPopulateUnknownEntitities = true
+                    AutoPopulateUnknownEntitities = true,
+                    requirePermissionForPlayerProtection = false // DO NOT SET UNLESS YOU KNOW WHAT YOU'RE DOING
                 },
                 Version = Version
             };
@@ -3120,6 +3154,7 @@ namespace Oxide.Plugins
             public bool AllowCustomEdit;
             public bool AllowDropDatabase;
             public bool AutoPopulateUnknownEntitities;
+            public bool requirePermissionForPlayerProtection;
 
             public bool NPCAutoTurretTargetsPlayers;
             public bool NPCAutoTurretTargetsNPCs;
@@ -4794,7 +4829,7 @@ namespace Oxide.Plugins
                 try
                 {
                     BasePlayer pl = player as BasePlayer;
-                    return pl.userID < 76560000000000000L && pl.userID > 0L && !pl.IsDestroyed;
+                    return !pl.userID.IsSteamId() && !pl.IsDestroyed;
                 }
                 catch
                 {
@@ -4999,25 +5034,31 @@ namespace Oxide.Plugins
 
                 if (IsFriend(player.userID, entity.OwnerID) && hasbp)
                 {
-                    DoLog($"Player is friends with owner of entity", 2);
+                    DoLog("Player is friends with owner of entity and has building privilege.", 2);
                     return true;
                 }
                 else if (entity.OwnerID == player.userID && hasbp)
                 {
-                    DoLog($"Player owns item", 2);
+                    DoLog("Player owns item and has building privilege.", 2);
                     return true;
                 }
                 else if (IsFriend(player.userID, entity.OwnerID) && !hasbp)
                 {
-                    DoLog($"Player is friends with owner of entity but is blocked by building privilege", 2);
+                    DoLog("Player is friends with owner of entity but is blocked by building privilege", 2);
                 }
                 else if (entity.OwnerID == player.userID && !hasbp)
                 {
-                    DoLog($"Player owns item but is blocked by building privilege", 2);
+                    DoLog("Player owns item but is blocked by building privilege", 2);
                 }
             }
             DoLog("Player does not own or have access to this entity");
             return false;
+        }
+
+        // EXPERIMENTAL check for player permission if requirePermissionForPlayerProtection is true.
+        private bool PlayerIsProtected(BasePlayer player)
+        {
+            return configData.Options.requirePermissionForPlayerProtection && permission.UserHasPermission(player?.UserIDString, permNextGenPVEUse);
         }
 
         // From PlayerDatabase
@@ -5469,9 +5510,11 @@ namespace Oxide.Plugins
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('animal_animal', 'Animal can damage Animal', 1, 0, 'animal', 'animal')", sqlConnection);
             ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_building', 'Helicopter can damage Building', 1, 0, 'helicopter', 'building')", sqlConnection);
+            ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_player', 'Helicopter can damage Player', 1, 0, 'helicopter', 'player')", sqlConnection);
             ct.ExecuteNonQuery();
-            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_building', 'Helicopter can damage Building', 1, 0, 'helicopter', 'building')", sqlConnection);
+            ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('helicopter_helicopter', 'Helicopter can damage Helicopter', 1, 0, 'helicopter', 'helicopter')", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('player_minicopter', 'Player can damage MiniCopter', 1, 0, 'player', 'minicopter')", sqlConnection);
             ct.ExecuteNonQuery();
@@ -5606,6 +5649,8 @@ namespace Oxide.Plugins
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_animal', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_building', null, null, null, null)", sqlConnection);
+            ct.ExecuteNonQuery();
+            ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_helicopter', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
             ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null, null)", sqlConnection);
             ct.ExecuteNonQuery();
