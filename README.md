@@ -6,7 +6,7 @@ Uses ZoneManager, Friends, Clans, RustIO, GUIAnnouncements, HumanNPC (from remod
 Works with DynamicPVP.
 
 
-NOTE: 1.3.8 is a PRERELEASE VERSION.  It should be an improvement for overall performance, null reference exceptions, and other errors.  However, this was a big change and there could be issues.  Please report any problems at Codefling.
+NOTE: <b>1.3.8 is a PRERELEASE VERSION</b>.  It should be an improvement for overall performance, null reference exceptions, and other errors.  However, this was a big change and there could be issues.  Please report any problems at Codefling.
 
 
 Don't let the documentation trouble you.  In most cases all you should need to do is install the plugin.  The rest is optional.
