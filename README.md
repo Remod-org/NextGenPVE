@@ -5,6 +5,10 @@ Uses ZoneManager, Friends, Clans, RustIO, GUIAnnouncements, HumanNPC (from remod
 
 Works with DynamicPVP.
 
+
+NOTE: 1.3.8 is a PRERELEASE VERSION.  It should be an improvement for overall performance, null reference exceptions, and other errors.  However, this was a big change and there could be issues.  Please report any problems at Codefling.
+
+
 Don't let the documentation trouble you.  In most cases all you should need to do is install the plugin.  The rest is optional.
 
 NEW FOR 1.2.8: There are 3 new configurations for scheduling a purge based on date and time.  Currently, this must be set in the config file.  Set purgeEnabled to true and useSchedule to true.  Set a start date (and time if desired) and end date (and time).  Note that you must update these values each month for them to be effective.  This can currently only happen once per month.
@@ -162,12 +166,15 @@ The above commands can also be run from console or RCON (without /).
     "UnprotectedDeployableDamage": false,
     "TwigDamage": false,
     "HonorRelationships": false,
-    "BlockScrapHeliFallDamage": false
+    "BlockScrapHeliFallDamage": false,
+    "requirePermissionForPlayerProtection": false,
+    "enableDebugOnErrors": false,
+    "autoDebugTime": 0.0
   },
   "Version": {
     "Major": 1,
-    "Minor": 1,
-    "Patch": 2
+    "Minor": 3,
+    "Patch": 8
   }
 }
 ```
@@ -191,6 +198,10 @@ AllowCustomEdit - Enables the editing of custom rulesets and setting collections
 AllowDropDatabase - Enables pvedrop command and GUI button to reset the database to defaults.  This wipes everything!!!
 
 If protectedDays is set to any value other than zero, player buildings, etc. will only be protected if the user has been online sometime within that number of days.
+
+"requirePermissionForPlayerProtection" - ONLY set this true if you want a default PVP setting with specific users or groups having protection.  In this case, perhaps the default rule damage would be set to true with no exceptions.  Or, you could make exception for player vs. deployables, etc.  Then, each player getting protection from player on player damage would need to have the nextgenpve.use permission.
+
+"enableDebugOnErrors" - ONLY set this to automatically enable full debug for "autoDebugTime" seconds whenever we experience an NRE.  This requires the plugin NREHook, available at https://github.com/Remod-org/NREHook.  This is mostly useful only when diagnosing a problem with the developer.  As noted elsewhere, full debug (pvelog and pvedebug) can negatively impact performance.
 
 ### Details
 
