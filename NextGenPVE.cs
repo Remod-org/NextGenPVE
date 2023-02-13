@@ -1,7 +1,7 @@
 #region License (GPL v2)
 /*
     NextGenPVE - Prevent damage to players and objects in a Rust PVE environment
-    Copyright (c) 2020-2021 RFC1920 <desolationoutpostpve@gmail.com>
+    Copyright (c) 2020-2023 RFC1920 <desolationoutpostpve@gmail.com>
 
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License v2.0.
@@ -647,6 +647,7 @@ namespace Oxide.Plugins
                     configData.Options.debug = false;
                     dolog = false;
                     onfoundnre = false;
+                    Puts("AUTOMATED DEBUG NOW DISABLED..........");
                 });
             }
         }
@@ -1053,13 +1054,15 @@ namespace Oxide.Plugins
                 foreach (PatrolHelicopterAI.targetinfo heliTarget in (source as BaseHelicopter)?.myAI._targetList.ToArray())
                 {
                     BasePlayer htarget = heliTarget?.ent as BasePlayer;
-                    if (htarget == null) continue;
-                    DoLog($"Heli targeting player {htarget?.displayName}.  Checking building permission for {target?.ShortPrefabName}");
-                    object ploi = PlayerOwnsItem(htarget, target);
-                    if (ploi != null && ploi is bool && !(bool)ploi)
+                    if (htarget != null)
                     {
-                        DoLog("Yes they own that building!");
-                        hasBP = true;
+                        DoLog($"Heli targeting player {htarget?.displayName}.  Checking building permission for {target?.ShortPrefabName}");
+                        object ploi = PlayerOwnsItem(htarget, target);
+                        if (ploi != null && ploi is bool && !(bool)ploi)
+                        {
+                            DoLog("Yes they own that building!");
+                            hasBP = true;
+                        }
                     }
                 }
             }
@@ -1456,7 +1459,7 @@ namespace Oxide.Plugins
                                     schedule = sc,
                                     invert = invert
                                 });
-                                ngpveinvert.Add(nm, invert);
+                                if (!ngpveinvert.ContainsKey(nm)) ngpveinvert.Add(nm, invert);
                                 i++;
                             }
                         }
@@ -1940,8 +1943,8 @@ namespace Oxide.Plugins
                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                         {
                             c.Open();
-                            //string bkup = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
-                            string bkup = $"Data Source={Path.Combine(Interface.Oxide.DataDirectory,Name,backupfile)};";
+                            //string bkup = $"Data Source={Path.Combine(Interface.Oxide.DataDirectory,Name,backupfile)};";
+                            string bkup = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
                             using (SQLiteConnection d = new SQLiteConnection(bkup))
                             {
                                 d.Open();
@@ -1957,12 +1960,14 @@ namespace Oxide.Plugins
 
                         if (args.Length > 1)
                         {
+                            //string restorefile = Path.Combine(Interface.Oxide.DataDirectory, Name, args[1]);
                             string restorefile = $"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{args[1]}";
                             if (files.Contains(restorefile) && restorefile.EndsWith(".db"))
                             {
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
+                                    //string target = Path.Combine(Interface.Oxide.DataDirectory, Name, "nexgenpve.db");
                                     string target = $"{Interface.Oxide.DataDirectory}/{Name}/nexgenpve.db";
                                     string restore = $"Data Source={restorefile}";
                                     using (SQLiteConnection d = new SQLiteConnection(restore))
@@ -5031,7 +5036,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        // EXPERIMENTAL check for player permission if requirePermissionForPlayerProtection is true.
+        // Check for player permission if requirePermissionForPlayerProtection is true.
         private bool PlayerIsProtected(BasePlayer player)
         {
             return configData.Options.requirePermissionForPlayerProtection && permission.UserHasPermission(player?.UserIDString, permNextGenPVEUse);
