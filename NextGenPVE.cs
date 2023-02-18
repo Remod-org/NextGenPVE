@@ -2719,55 +2719,69 @@ namespace Oxide.Plugins
                         break;
                     case "addrule":
                     case "editrule":
-                        string rn = args[1];
-                        if (args[0] == "editrule" && rn != null)
                         {
-                            if (args.Length > 3)
+                            string rn = args[1];
+                            string cs = args[2];
+                            if (args[0] == "editrule" && rn != null)
                             {
-                                string mode = args[2];
-                                string mod = args[3];
+                                if (args.Length > 3)
+                                {
+                                    string mode = args[2];
+                                    string mod = args[3];
 
-                                //edit
+                                    //edit
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rules SET {mode}='{mod}', damage=1 WHERE name='{rn}'", c))
+                                        {
+                                            cmd.ExecuteNonQuery();
+                                        }
+                                    }
+                                }
+                            }
+                            else if (args[0] == "addrule" && rn != null)
+                            {
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
-                                    using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rules SET {mode}='{mod}', damage=1 WHERE name='{rn}'", c))
+                                    using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rules VALUES ('{rn}','', 1, 1, null, null)", c))
                                     {
                                         cmd.ExecuteNonQuery();
                                     }
                                 }
                             }
-                        }
-                        else if (args[0] == "addrule" && rn != null)
-                        {
-                            using (SQLiteConnection c = new SQLiteConnection(connStr))
-                            {
-                                c.Open();
-                                using (SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rules VALUES ('{rn}','', 1, 1, null, null)", c))
-                                {
-                                    cmd.ExecuteNonQuery();
-                                }
-                            }
-                        }
 
-                        GUIRuleEditor(player, rn);
+                            GUIRuleEditor(player, rn, GetBoolValue(cs));
+                        }
                         break;
                     case "deleterule":
-                        if (args.Length > 1)
                         {
-                            using (SQLiteConnection c = new SQLiteConnection(connStr))
+                            string rn = args[1];
+                            int custom = 0;
+                            try
                             {
-                                c.Open();
-                                using (SQLiteCommand cmd = new SQLiteCommand($"DELETE FROM ngpve_rules WHERE name='{args[1]}'", c))
-                                {
-                                    cmd.ExecuteNonQuery();
-                                }
+                                string cs = args[2];
+                                custom = GetBoolValue(cs) ? 1 : 0;
                             }
-                            GUISelectRule(player, null, true);
-                        }
-                        else
-                        {
-                            CuiHelper.DestroyUi(player, NGPVERULEEDIT);
+                            catch { }
+                            if (args.Length > 1)
+                            {
+                                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                {
+                                    c.Open();
+                                    using (SQLiteCommand cmd = new SQLiteCommand($"DELETE FROM ngpve_rules WHERE name='{rn}' AND custom={custom}", c))
+                                    {
+                                        cmd.ExecuteNonQuery();
+                                    }
+                                }
+                                CuiHelper.DestroyUi(player, NGPVERULEEDIT);
+                                GUISelectRule(player, null, true);
+                            }
+                            else
+                            {
+                                CuiHelper.DestroyUi(player, NGPVERULEEDIT);
+                            }
                         }
                         break;
                     case "closecustom":
@@ -4095,7 +4109,7 @@ namespace Oxide.Plugins
                         pb = GetButtonPositionP(row, col);
                         if (docustom)
                         {
-                            UI.Button(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename}");
+                            UI.Button(ref container, NGPVERULESELECT, UI.Color("#55d840", 1f), rulename, 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} {custom}");
                         }
                         else if (exc.Contains(rulename))
                         {
@@ -4282,7 +4296,7 @@ namespace Oxide.Plugins
             CuiHelper.AddUi(player, container);
         }
 
-        private void GUIRuleEditor(BasePlayer player, string rulename = "")
+        private void GUIRuleEditor(BasePlayer player, string rulename = "", bool custom = false)
         {
             IsOpen(player.userID, true);
             CuiHelper.DestroyUi(player, NGPVERULEEDIT);
@@ -4304,8 +4318,8 @@ namespace Oxide.Plugins
             string description = "";
             string source = "";
             string target = "";
+            int cs = custom ? 1 : 0;
             bool damage = false;
-            bool custom = false;
             if (rulename != null)
             {
                 row++;
@@ -4321,7 +4335,7 @@ namespace Oxide.Plugins
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT * FROM ngpve_rules WHERE name='{rulename}'", c))
+                    using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT * FROM ngpve_rules WHERE name='{rulename}' AND custom={cs}", c))
                     using (SQLiteDataReader rd = getrs.ExecuteReader())
                     {
                         description = "";
@@ -4377,7 +4391,7 @@ namespace Oxide.Plugins
                     UI.Input(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target ");
                     row++;
                     pb = GetButtonPositionP(row, col);
-                    UI.Button(ref container, NGPVERULEEDIT, UI.Color("#d85540", 1f), Lang("delete"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule deleterule {rulename}");
+                    UI.Button(ref container, NGPVERULEEDIT, UI.Color("#ff5540", 1f), Lang("delete"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule deleterule {rulename} {custom}");
                 }
             }
             else
@@ -4407,7 +4421,7 @@ namespace Oxide.Plugins
                 UI.Input(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), " ", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editrule {rulename} target ");
                 row++;
                 pb = GetButtonPositionP(row, col);
-                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#d85540", 1f), Lang("delete"), 12, "0.93 0.95", "0.99 0.98", $"pverule deleterule {rulename}");
+                UI.Button(ref container, NGPVERULEEDIT, UI.Color("#ff5540", 1f), Lang("delete"), 12, "0.93 0.95", "0.99 0.98", $"pverule deleterule {rulename} {custom}");
             }
 
             CuiHelper.AddUi(player, container);
