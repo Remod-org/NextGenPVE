@@ -60,7 +60,6 @@ namespace Oxide.Plugins
         [PluginReference]
         private readonly Plugin ZoneManager, Humanoids, HumanNPC, Friends, Clans, GUIAnnouncements, NREHook, RustIO;
 
-        //private static NextGenPVE Instance;
         private readonly string logfilename = "log";
         private bool dolog;
         private bool onfoundnre;
@@ -90,8 +89,6 @@ namespace Oxide.Plugins
         #region init
         private void Init()
         {
-            //Instance = this;
-            //Puts("Creating database connection for main thread.");
             DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/nextgenpve");
             dataFile.Save();
 
@@ -113,7 +110,6 @@ namespace Oxide.Plugins
         private void OnServerInitialized()
         {
             ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
-            //Puts("Opening...");
             sqlConnection = new SQLiteConnection(connStr);
             sqlConnection.Open();
 
@@ -139,7 +135,6 @@ namespace Oxide.Plugins
 
         private void OnUserDisconnected(IPlayer player)
         {
-            //if (configData.Options.usePlayerDatabase) return;
             long lc;
             lastConnected.TryGetValue(player.Id, out lc);
             if (lc > 0)
@@ -162,16 +157,6 @@ namespace Oxide.Plugins
             }
             return null;
         }
-
-        //private object OnPlayerCommand(BasePlayer player, string command, string[] args)
-        //{
-        //    if (command != "pverule" && isopen.Contains(player.userID))
-        //    {
-        //        if (configData.Options.debug) Puts($"OnPlayerCommand: {command} BLOCKED");
-        //        return true;
-        //    }
-        //    return null;
-        //}
 
         private void OnNewSave()
         {
@@ -481,7 +466,7 @@ namespace Oxide.Plugins
                 try
                 {
                     object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { player, sam });
-                    if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool)
+                    if (extCanEntityBeTargeted != null  && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
                     {
                         if ((bool)extCanEntityBeTargeted)
                         {
@@ -493,7 +478,10 @@ namespace Oxide.Plugins
                         }
                     }
                 }
-                catch { }
+                catch
+                {
+                    if (configData.Options.debug) Puts("Humanoids detection failure.");
+                }
             }
             return null; // allow
         }
@@ -781,7 +769,6 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                //Puts($"SELECT name FROM ngpve_rulesets WHERE zone='{key}'");
                 using (SQLiteCommand rm = new SQLiteCommand($"SELECT name FROM ngpve_rulesets WHERE zone='{key}'", c))
                 using (SQLiteDataReader rd = rm.ExecuteReader())
                 {
@@ -815,7 +802,6 @@ namespace Oxide.Plugins
 
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
-            //if (ConVar.Server.pve) ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
             if (!enabled) return null;
             if (entity == null) return null;
             if (hitinfo == null) return null;
@@ -846,7 +832,7 @@ namespace Oxide.Plugins
             }
             catch
             {
-                if (configData.Options.debug) Puts("Calling external damage hook FAILED");
+                if (configData.Options.debug) Puts("Calling external damage hook FAILED!");
             }
 
             string stype; string ttype;
@@ -963,6 +949,7 @@ namespace Oxide.Plugins
 
             string zone = "default";
             bool hasBP = true;
+            bool ownsItem = true;
             bool isBuilding = false;
             //bool isHeli = false;
 
@@ -982,68 +969,76 @@ namespace Oxide.Plugins
             // Also check for special cases since Humanoids/HumanNPC contain a BasePlayer object
             if (stype == "BasePlayer")
             {
-                // Special cases for building damage requiring owner or auth access
-                if (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window")
+                if (Humanoids && IsHumanoid(source)) stype = "Humanoid";
+                if (HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
+                if (stype == "BasePlayer")
                 {
-                    isBuilding = true;
-                    object ploi = PlayerOwnsItem(source as BasePlayer, target);
-                    if (ploi != null && ploi is bool && !(bool)ploi)
+                    // Special cases for building damage requiring owner or auth access
+                    if (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window")
                     {
-                        DoLog("No building block access.");
-                        hasBP = false;
-                    }
-                    else
-                    {
-                        DoLog("Player has privilege to block or is not blocked by TC.");
-                    }
-                }
-                else if (ttype == "BuildingPrivlidge")
-                {
-                    object pltc = PlayerOwnsTC(source as BasePlayer, target as BuildingPrivlidge);
-                    if (pltc != null && pltc is bool && !(bool)pltc)
-                    {
-                        DoLog("No building privilege.");
-                        hasBP = false;
-                    }
-                    else if (configData.Options.protectedDays > 0 && target.OwnerID > 0)
-                    {
-                        // Check days since last owner connection
-                        long lc;
-                        //if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
-                        //{
-                        //    lc = (long)PlayerDatabase?.CallHook("GetPlayerData", target.OwnerID.ToString(), "lc");
-                        //}
-                        //else
-                        lastConnected.TryGetValue(target?.OwnerID.ToString(), out lc);
-                        if (lc > 0)
+                        isBuilding = true;
+                        object ploi = PlayerOwnsItem(source as BasePlayer, target);
+                        if (ploi != null && ploi is bool && !(bool)ploi)
                         {
-                            long now = ToEpochTime(DateTime.UtcNow);
-                            float days = Math.Abs((now - lc) / 86400);
-                            if (days > configData.Options.protectedDays)
+                            DoLog("No building block access.");
+                            ownsItem = false;
+                            hasBP = false;
+                        }
+                        else
+                        {
+                            DoLog("Player has privilege to block or is not blocked by TC.");
+                        }
+                    }
+                    else if (ttype == "BuildingPrivlidge")
+                    {
+                        object pltc = PlayerOwnsTC(source as BasePlayer, target as BuildingPrivlidge);
+                        if (pltc != null && pltc is bool && !(bool)pltc)
+                        {
+                            DoLog("No building privilege.");
+                            ownsItem = false;
+                            hasBP = false;
+                        }
+                        else if (configData.Options.protectedDays > 0 && target?.OwnerID > 0)
+                        {
+                            // Check days since last owner connection
+                            long lc;
+                            lastConnected.TryGetValue(target?.OwnerID.ToString(), out lc);
+                            if (lc > 0)
                             {
-                                DoLog($"Allowing TC damage for offline owner beyond {configData.Options.protectedDays} days");
-                                return true;
+                                long now = ToEpochTime(DateTime.UtcNow);
+                                float days = Math.Abs((now - lc) / 86400);
+                                if (days > configData.Options.protectedDays)
+                                {
+                                    DoLog($"Allowing TC damage for offline owner beyond {configData.Options.protectedDays} days");
+                                    return true;
+                                }
+                                else
+                                {
+                                    DoLog($"Owner was last connected {days} days ago and is still protected...");
+                                }
                             }
-                            else
-                            {
-                                DoLog($"Owner was last connected {days} days ago and is still protected...");
-                            }
+                        }
+                        else
+                        {
+                            DoLog("Player has building privilege or is not blocked.");
+                        }
+
+                        // Check for player permission if requirePermissionForPlayerProtection is true.
+                        // This includes checking that the target is not the source and is also a real player.
+                        if (PlayerIsProtected(source as BasePlayer) && target is BasePlayer && (target as BasePlayer).userID.IsSteamId() && target != source)
+                        {
+                            DoLog("DAMAGE BLOCKED! Source player has protection.  Blocking damage to target player.  Fair is fair...");
+                            return false;
                         }
                     }
                     else
                     {
-                        DoLog("Player has building privilege or is not blocked.");
-                    }
-
-                    if (Humanoids && IsHumanoid(source)) stype = "Humanoid";
-                    if (HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
-
-                    // Check for player permission if requirePermissionForPlayerProtection is true.
-                    // This includes checking that the target is not the source and is also a real player.
-                    if (PlayerIsProtected(source as BasePlayer) && target is BasePlayer && (target as BasePlayer).userID.IsSteamId() && target != source)
-                    {
-                        DoLog("DAMAGE BLOCKED! Source player has protection.  Blocking damage to target player.  Fair is fair...");
-                        return false;
+                        object ploi = PlayerOwnsItem(source as BasePlayer, target);
+                        if (ploi != null && ploi is bool && !(bool)ploi)
+                        {
+                            DoLog($"Player has no access to this {ttype}");
+                            ownsItem = false;
+                        }
                     }
                 }
             }
@@ -1075,7 +1070,6 @@ namespace Oxide.Plugins
 
                 if (sourcezone?.Length > 0 && targetzone?.Length > 0)
                 {
-                    //DoLog($"Found {sourcezone.Length} source zone(s) and {targetzone.Length} target zone(s).");
                     foreach (string z in sourcezone)
                     {
                         if (targetzone.Contains(z))
@@ -1094,10 +1088,9 @@ namespace Oxide.Plugins
             bool damage = true;
             string rulesetname = null;
 
-            string src = null; string tgt = null;
+            string src = ""; string tgt = "";
             bool foundSrcInDB = false;
             bool foundTgtInDB = false;
-            //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'");
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection))
             using (SQLiteDataReader readMe = findIt.ExecuteReader())
             {
@@ -1122,7 +1115,6 @@ namespace Oxide.Plugins
                 });
             }
 
-            //Puts($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'");
             using (SQLiteCommand findIt = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'", sqlConnection))
             using (SQLiteDataReader readMe = findIt.ExecuteReader())
             {
@@ -1158,7 +1150,6 @@ namespace Oxide.Plugins
                     mquery = "SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
                     break;
                 default:
-                    //mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='default' OR zone='0' OR zone='lookup'";
                     mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup'";
                     bool zonefound = false;
                     using (SQLiteCommand findIt = new SQLiteCommand(mquery, sqlConnection))
@@ -1176,7 +1167,6 @@ namespace Oxide.Plugins
                     }
                     break;
             }
-            //using (SQLiteCommand findIt = new SQLiteCommand("SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets", sqlConnection))
             using (SQLiteCommand findIt = new SQLiteCommand(mquery, sqlConnection))
             using (SQLiteDataReader readMe = findIt.ExecuteReader())
             {
@@ -1224,32 +1214,32 @@ namespace Oxide.Plugins
                     }
 
                     DoLog($"Checking ruleset {rulesetname} for {src} attacking {tgt}.");
-                    //Puts($"SELECT enabled, src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' AND enabled='1' AND exception='{src}_{tgt}'");
 
-                    if (!string.IsNullOrEmpty(src) && !string.IsNullOrEmpty(tgt))
+                    if (src.Length > 0 && tgt.Length > 0)
                     {
                         DoLog($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}, zone {rulesetzone}");
                         using (SQLiteCommand rq = new SQLiteCommand($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' AND exception='{src}_{tgt}'", sqlConnection))
                         using (SQLiteDataReader entry = rq.ExecuteReader())
                         {
+                            //Puts(rq.CommandText); // VERY NOISY
                             while (entry.Read())
                             {
                                 // source and target exist - verify that they are not excluded
-                                DoLog($"Found exception match for {stype} attacking {ttype}");
-
                                 string foundsrc = !entry.IsDBNull(0) ? entry.GetString(0) : "";
                                 string foundtgt = !entry.IsDBNull(1) ? entry.GetString(1) : "";
+
+                                DoLog($"Found exception match for {stype} attacking {ttype}, Exceptions (src,tgt): ({foundsrc},{foundtgt})");
                                 // Following check to prevent exception for heli fireball damage
                                 //foundexception = foundsrc != "fireball" || !isHeli;
                                 foundexception = true;
 
-                                if (foundsrc.Contains(stype))
+                                if (foundsrc.Length > 0 && foundsrc.Contains(stype))
                                 {
                                     DoLog($"Exclusion for {stype}");
                                     foundexclusion = true;
                                     break;
                                 }
-                                else if (foundtgt.Contains(ttype))
+                                else if (foundtgt.Length > 0 && foundtgt.Contains(ttype))
                                 {
                                     DoLog($"Exclusion for {ttype}");
                                     foundexclusion = true;
@@ -1284,6 +1274,8 @@ namespace Oxide.Plugins
                     }
                 }
             }
+
+            // Final result and sanity checks
             if (hasBP && isBuilding)
             {
                 DoLog("Player has building privilege and is attacking a BuildingBlock/door/window, heli is attacking a building owned by a targeted player, or damage is enabled for buildings with no exceptions.");
@@ -1292,6 +1284,11 @@ namespace Oxide.Plugins
             else if (!hasBP && isBuilding)
             {
                 DoLog("Player does NOT have building privilege and is attacking a BuildingBlock.  Or, player owner is not being targeted by the heli.");
+                return false;
+            }
+            else if (!ownsItem)
+            {
+                DoLog($"Player does not own the item they are attacking ({ttype})");
                 return false;
             }
 
@@ -1363,10 +1360,10 @@ namespace Oxide.Plugins
             if (month == 12) year++;
 
             IEnumerable<DateTime> thursdays = AllDatesInMonth(year, month).Where(i => i.DayOfWeek == DayOfWeek.Thursday);
-            DoLog($"Next force wipe day will be {thursdays.First().ToShortDateString()}");
+            DoLog($"Next force wipe day will be {thursdays.FirstOrDefault().ToShortDateString()}");
 
-            configData.Options.purgeStart = thursdays.First().Subtract(TimeSpan.FromDays(configData.Options.autoCalcPurgeDays)).ToShortDateString() + " 0:00";
-            configData.Options.purgeEnd = thursdays.First().ToShortDateString() + " 0:00";
+            configData.Options.purgeStart = thursdays.FirstOrDefault().Subtract(TimeSpan.FromDays(configData.Options.autoCalcPurgeDays)).ToShortDateString() + " 0:00";
+            configData.Options.purgeEnd = thursdays.FirstOrDefault().ToShortDateString() + " 0:00";
             SaveConfig(configData);
         }
 
@@ -1443,7 +1440,7 @@ namespace Oxide.Plugins
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
-                    using (SQLiteCommand use = new SQLiteCommand("SELECT DISTINCT name, schedule, invschedule FROM ngpve_rulesets WHERE schedule != '0'", c))
+                    using (SQLiteCommand use = new SQLiteCommand("SELECT DISTINCT name, schedule, invschedule FROM ngpve_rulesets WHERE schedule != '0' AND invschedule IS NOT NULL", c))
                     using (SQLiteDataReader schedule = use.ExecuteReader())
                     {
                         while (schedule.Read())
@@ -1459,7 +1456,8 @@ namespace Oxide.Plugins
                                     schedule = sc,
                                     invert = invert
                                 });
-                                if (!ngpveinvert.ContainsKey(nm)) ngpveinvert.Add(nm, invert);
+                                if (ngpveinvert.ContainsKey(nm)) ngpveinvert.Remove(nm);
+                                ngpveinvert.Add(nm, invert);
                                 i++;
                             }
                         }
@@ -1484,21 +1482,21 @@ namespace Oxide.Plugins
                         if (ts.Days.ToString() == x)
                         {
                             DoLog($"Day matched.  Comparing {ts.Hours}:{ts.Minutes.ToString().PadLeft(2, '0')} to start time {parsed.starthour}:{parsed.startminute} and end time {parsed.endhour}:{parsed.endminute}");
-                            if (ts.Hours >= Convert.ToInt32(parsed.starthour) && ts.Hours <= Convert.ToInt32(parsed.endhour))
+                            if (ts.Hours >= int.Parse(parsed.starthour) && ts.Hours <= int.Parse(parsed.endhour))
                             {
                                 // Hours matched for activating ruleset, check minutes
                                 DoLog($"Hours matched for ruleset {scheduleInfo.Key}", 1);
-                                if (ts.Hours == Convert.ToInt32(parsed.starthour) && ts.Minutes >= Convert.ToInt32(parsed.startminute))
+                                if (ts.Hours == int.Parse(parsed.starthour) && ts.Minutes >= int.Parse(parsed.startminute))
                                 {
                                     DoLog("Matched START hour and minute.", 2);
                                     enables[scheduleInfo.Value.name] = !invert;
                                 }
-                                else if (ts.Hours == Convert.ToInt32(parsed.endhour) && ts.Minutes <= Convert.ToInt32(parsed.endminute))
+                                else if (ts.Hours == int.Parse(parsed.endhour) && ts.Minutes <= int.Parse(parsed.endminute))
                                 {
                                     DoLog("Matched END hour and minute.", 2);
                                     enables[scheduleInfo.Value.name] = !invert;
                                 }
-                                else if (ts.Hours > Convert.ToInt32(parsed.starthour) && ts.Hours < Convert.ToInt32(parsed.endhour))
+                                else if (ts.Hours > int.Parse(parsed.starthour) && ts.Hours < int.Parse(parsed.endhour))
                                 {
                                     DoLog("Between start and end hours.", 2);
                                     enables[scheduleInfo.Value.name] = !invert;
@@ -2602,7 +2600,7 @@ namespace Oxide.Plugins
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets (name, damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule) SELECT '{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule FROM ngpve_rulesets WHERE name='{oldname}'", c))
+                                        using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets (name, damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule, invschedule) SELECT '{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule, invschedule FROM ngpve_rulesets WHERE name='{oldname}'", c))
                                         {
                                             newrs.ExecuteNonQuery();
                                         }
@@ -4755,6 +4753,7 @@ namespace Oxide.Plugins
         #region Specialized_checks
         private string[] GetEntityZones(BaseEntity entity)
         {
+            if (entity == null) return new string[] { };
             if (ZoneManager && configData.Options.useZoneManager)
             {
                 if (entity is BasePlayer)
@@ -4766,7 +4765,7 @@ namespace Oxide.Plugins
                     return (string[])ZoneManager?.Call("GetEntityZoneIDs", new object[] { entity });
                 }
             }
-            return null;
+            return new string[] { };
         }
 
         private bool IsMLRS(HitInfo hitinfo)
@@ -4780,12 +4779,14 @@ namespace Oxide.Plugins
             }
             catch
             {
+                if (configData.Options.debug) Puts("MLRS Detection failure.");
             }
             return false;
         }
 
         private bool IsHumanNPC(BaseEntity player)
         {
+            if (player == null) return false;
             if (HumanNPC && player is BasePlayer)
             {
                 try
@@ -4807,6 +4808,7 @@ namespace Oxide.Plugins
                 }
                 catch
                 {
+                    if (configData.Options.debug) Puts("HumanNPC Detection failure.");
                     return false;
                 }
             }
@@ -4824,8 +4826,8 @@ namespace Oxide.Plugins
 
         private bool IsBaseHelicopter(BaseEntity entity)
         {
-            if (configData.Options.debug) Puts("Is source helicopter?");
             if (entity == null) return false;
+            if (configData.Options.debug) Puts("Is source helicopter?");
             if (entity?.ShortPrefabName == null) return false;
             if (entity is BaseHelicopter) return true;
             return entity.ShortPrefabName.Equals("oilfireballsmall") || entity.ShortPrefabName.Equals("napalm");
@@ -4908,6 +4910,7 @@ namespace Oxide.Plugins
         private object PlayerOwnsItem(BasePlayer player, BaseEntity entity)
         {
             if (player == null || entity == null) return null;
+            if (entity.OwnerID == 0) return true;
             DoLog($"Does player {player?.displayName} own {entity?.ShortPrefabName}?");
             if (entity is BuildingBlock)
             {
@@ -4961,12 +4964,12 @@ namespace Oxide.Plugins
                     }
                     foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                     {
-                        if (entity.OwnerID == player.userID)
+                        if (entity?.OwnerID == player?.userID)
                         {
                             DoLog("Player owns BuildingBlock", 2);
                             return true;
                         }
-                        else if (player.userID == auth)
+                        else if (player?.userID == auth)
                         {
                             DoLog("Player has privilege on BuildingBlock", 2);
                             return true;
@@ -4992,9 +4995,9 @@ namespace Oxide.Plugins
                 {
                     foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                     {
-                        if (player.userID == auth)
+                        if (player?.userID == auth)
                         {
-                            DoLog($"Player has privilege on {entity.ShortPrefabName}", 2);
+                            DoLog($"Player has privilege on {entity?.ShortPrefabName}", 2);
                             hasbp = true;
                             break;
                         }
@@ -5003,13 +5006,18 @@ namespace Oxide.Plugins
                             object isfr = IsFriend(auth, entity.OwnerID);
                             if (isfr != null && isfr is bool && (bool)isfr)
                             {
-                                DoLog($"Player is friends with owner of {entity.ShortPrefabName}", 2);
+                                DoLog($"Player is friends with owner of {entity?.ShortPrefabName}", 2);
                                 hasbp = true;
                                 break;
                             }
                         }
                     }
                     if (!hasbp) DoLog($"Player may own {entity.ShortPrefabName} but is blocked by building privilege.", 2);
+                }
+                else if (configData.Options.UnprotectedDeployableDamage)
+                {
+                    DoLog("Player can damage unprotected item");
+                    return true;
                 }
 
                 object isFriend = IsFriend(player.userID, entity.OwnerID);
@@ -5018,7 +5026,7 @@ namespace Oxide.Plugins
                     DoLog("Player is friends with owner of entity and has building privilege.", 2);
                     return true;
                 }
-                else if (entity.OwnerID == player.userID && hasbp)
+                else if (entity?.OwnerID == player?.userID && hasbp)
                 {
                     DoLog("Player owns item and has building privilege.", 2);
                     return true;
@@ -5027,7 +5035,7 @@ namespace Oxide.Plugins
                 {
                     DoLog("Player is friends with owner of entity but is blocked by building privilege", 2);
                 }
-                else if (entity.OwnerID == player.userID && !hasbp)
+                else if (entity?.OwnerID == player?.userID && !hasbp)
                 {
                     DoLog("Player owns item but is blocked by building privilege", 2);
                 }
@@ -5064,7 +5072,7 @@ namespace Oxide.Plugins
 
         private static bool GetBoolValue(string value)
         {
-            if (value == null) return false;
+            if (string.IsNullOrEmpty(value)) return false;
             value = value.Trim().ToLower();
             switch (value)
             {
