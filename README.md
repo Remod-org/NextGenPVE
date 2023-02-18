@@ -5,10 +5,6 @@ Uses ZoneManager, Friends, Clans, RustIO, GUIAnnouncements, HumanNPC (from remod
 
 Works with DynamicPVP.
 
-
-NOTE: <b>1.3.8 is a PRERELEASE VERSION</b>.  It should be an improvement for overall performance, null reference exceptions, and other errors.  However, this was a big change and there could be issues.  Please report any problems at Codefling.
-
-
 Don't let the documentation trouble you.  In most cases all you should need to do is install the plugin.  The rest is optional.
 
 NEW FOR 1.2.8: There are 3 new configurations for scheduling a purge based on date and time.  Currently, this must be set in the config file.  Set purgeEnabled to true and useSchedule to true.  Set a start date (and time if desired) and end date (and time).  Note that you must update these values each month for them to be effective.  This can currently only happen once per month.
