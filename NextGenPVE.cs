@@ -32,10 +32,11 @@ using System.IO;
 using System.Text.RegularExpressions;
 using Oxide.Core.Configuration;
 using System.Text;
+using ConVar;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.3.9")]
+    [Info("NextGen PVE", "RFC1920", "1.4.0")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -148,11 +149,22 @@ namespace Oxide.Plugins
             SaveData();
         }
 
-        private object OnUserCommand(IPlayer player, string command, string[] args)
+        private object OnServerCommand(ConsoleSystem.Arg arg)
         {
-            if (command != "pverule" && isopen.Contains(ulong.Parse(player.Id)))
+            BasePlayer player = arg.Player();
+            if (player == null) return null;
+
+            if (!arg.cmd.FullName.StartsWith("pverule") && isopen.Contains(ulong.Parse(player.UserIDString)))
             {
-                if (configData.Options.debug) Puts($"OnPlayerCommand: {command} BLOCKED");
+                return true;
+            }
+            return null;
+        }
+
+        private object OnPlayerCommand(BasePlayer player, string command, string[] args)
+        {
+            if (command != "pverule" && isopen.Contains(player.userID))
+            {
                 return true;
             }
             return null;
@@ -1025,14 +1037,15 @@ namespace Oxide.Plugins
 
                         // Check for player permission if requirePermissionForPlayerProtection is true.
                         // This includes checking that the target is not the source and is also a real player.
-                        if (PlayerIsProtected(source as BasePlayer) && target is BasePlayer && (target as BasePlayer).userID.IsSteamId() && target != source)
+                        if (PlayerIsProtected(source as BasePlayer) && ttype == "BasePlayer" && (target as BasePlayer).userID.IsSteamId() && target != source)
                         {
                             DoLog("DAMAGE BLOCKED! Source player has protection.  Blocking damage to target player.  Fair is fair...");
                             return false;
                         }
                     }
-                    else
+                    else if (target?.OwnerID > 0 && target is DecayEntity)
                     {
+                        DoLog("Target is not a player or NPC, checking perms..");
                         object ploi = PlayerOwnsItem(source as BasePlayer, target);
                         if (ploi != null && ploi is bool && !(bool)ploi)
                         {
@@ -1213,7 +1226,7 @@ namespace Oxide.Plugins
                         DoLog($"Lookup zone {zone}");
                     }
 
-                    DoLog($"Checking ruleset {rulesetname} for {src} attacking {tgt}.");
+                    DoLog($"Checking ruleset {rulesetname} for {src} attacking {tgt}, decay entity: {target is DecayEntity}.");
 
                     if (src.Length > 0 && tgt.Length > 0)
                     {
@@ -1228,7 +1241,7 @@ namespace Oxide.Plugins
                                 string foundsrc = !entry.IsDBNull(0) ? entry.GetString(0) : "";
                                 string foundtgt = !entry.IsDBNull(1) ? entry.GetString(1) : "";
 
-                                DoLog($"Found exception match for {stype} attacking {ttype}, Exceptions (src,tgt): ({foundsrc},{foundtgt})");
+                                DoLog($"Found exception match for {stype} attacking {ttype}, Exclusions (src,tgt): ({foundsrc},{foundtgt})");
                                 // Following check to prevent exception for heli fireball damage
                                 //foundexception = foundsrc != "fireball" || !isHeli;
                                 foundexception = true;
@@ -3079,6 +3092,22 @@ namespace Oxide.Plugins
                         ct.ExecuteNonQuery();
                     }
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_helicopter', null, null, null, null)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
+            if (configData.Version < new VersionNumber(1, 4, 0))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("DELETE FROM ngpve_entities WHERE type='IndustrialStorageAdaptor'", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('resource', 'IndustrialStorageAdaptor', 0)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -5330,7 +5359,6 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_entities VALUES('mlrs', 'MLRS', 0);"
                     + "INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0);"
                     + "INSERT INTO ngpve_entities VALUES('npc', 'BradleyAPC', 0);"
-                    + "INSERT INTO ngpve_entities VALUES('npc', 'HelicopterDebris', 0);"
                     + "INSERT INTO ngpve_entities VALUES('npc', 'Humanoid', 0);"
                     + "INSERT INTO ngpve_entities VALUES('npc', 'HumanNPC', 0);"
                     + "INSERT INTO ngpve_entities VALUES('npc', 'TunnelDweller', 0);"
@@ -5352,6 +5380,7 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_entities VALUES('player', 'BasePlayer', 0);"
                     + "INSERT INTO ngpve_entities VALUES('resource', 'AdventCalendar', 0);"
                     + "INSERT INTO ngpve_entities VALUES('resource', 'BaseCorpse', 0);"
+                    + "INSERT INTO ngpve_entities VALUES('resource', 'IndustrialStorageAdaptor', 0);"
                     + "INSERT INTO ngpve_entities VALUES('resource', 'NPCPlayerCorpse', 0);"
                     + "INSERT INTO ngpve_entities VALUES('resource', 'PlayerCorpse', 0);"
                     + "INSERT INTO ngpve_entities VALUES('resource', 'DroppedItemContainer', 0);"
