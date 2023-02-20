@@ -33,10 +33,11 @@ using System.Text.RegularExpressions;
 using Oxide.Core.Configuration;
 using System.Text;
 using ConVar;
+using Mono.Cecil;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.0")]
+    [Info("NextGen PVE", "RFC1920", "1.4.1")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -52,6 +53,7 @@ namespace Oxide.Plugins
         private ConfigData configData;
         private SQLiteConnection sqlConnection;
         private string connStr;
+        private bool newsave;
 
         private List<ulong> isopen = new List<ulong>();
 
@@ -121,8 +123,24 @@ namespace Oxide.Plugins
             }
             LoadData();
 
+            if (newsave)
+            {
+                Puts("Wipe detected.  Clearing zone maps and setting purge schedule, if enabled.");
+                ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
+                newsave = false;
+
+                NextTick(() =>
+                {
+                    NewPurgeSchedule();
+                    SaveData();
+                    UpdateEnts();
+                });
+            }
+
             if (configData.Options.useSchedule) RunSchedule(true);
         }
+
+        private void OnNewSave() => newsave = true;
 
         private void OnPluginLoaded(Plugin plugin)
         {
@@ -168,19 +186,6 @@ namespace Oxide.Plugins
                 return true;
             }
             return null;
-        }
-
-        private void OnNewSave()
-        {
-            Puts("Wipe detected.  Clearing zone maps...");
-            ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
-            LoadConfig();
-            NextTick(() =>
-            {
-                NewPurgeSchedule();
-                SaveData();
-                UpdateEnts();
-            });
         }
 
         private void UpdateEnts()
@@ -711,13 +716,13 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private bool AddOrUpdateMapping(string key, string rulesetname)
+        private bool AddOrUpdateMapping(string zoneId, string rulesetname)
         {
-            if (string.IsNullOrEmpty(key)) return false;
-            if (rulesetname == null) return false;
+            if (string.IsNullOrEmpty(zoneId)) return false;
+            if (string.IsNullOrEmpty(rulesetname)) return false;
 
-            DoLog($"AddOrUpdateMapping called for ruleset: {rulesetname}, zone: {key}", 0);
-            bool foundrs = false;
+            DoLog($"AddOrUpdateMapping called for ruleset: {rulesetname}, zone: {zoneId}", 0);
+            bool foundRuleset = false;
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
@@ -726,21 +731,25 @@ namespace Oxide.Plugins
                 {
                     while (ar.Read())
                     {
-                        foundrs = true;
+                        foundRuleset = true;
                     }
                 }
             }
-            if (foundrs)
+            if (foundRuleset)
             {
-                if (ngpvezonemaps.ContainsKey(rulesetname) && !ngpvezonemaps[rulesetname].map.Contains(key))
+                if (!ngpvezonemaps.ContainsKey(rulesetname))
                 {
-                    ngpvezonemaps[rulesetname].map.Add(key);
+                    ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap());
                 }
-                else
+
+                if (!ngpvezonemaps[rulesetname].map.Contains(zoneId))
                 {
-                    ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap() { map = new List<string>() { key } });
+                    ngpvezonemaps[rulesetname].map.Add(zoneId);
                 }
+                // Verify zones are valid
+                ngpvezonemaps[rulesetname].map = CleanupZones(ngpvezonemaps[rulesetname].map);
                 SaveData();
+
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                 {
                     c.Open();
@@ -765,51 +774,37 @@ namespace Oxide.Plugins
                     }
                 }
                 if (ngpvezonemaps.ContainsKey(rulesetname)) ngpvezonemaps.Remove(rulesetname);
-                ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap() { map = new List<string>() { key } });
+                ngpvezonemaps.Add(rulesetname, new NextGenPVEZoneMap() { map = new List<string>() { zoneId } });
+
+                //Verify zones are valid
+                //ngpvezonemaps[rulesetname].map = CleanupZones(ngpvezonemaps[rulesetname].map);
+
                 SaveData();
                 return true;
             }
         }
 
-        private bool RemoveMapping(string key)
+        private bool RemoveMapping(string zoneId)
         {
-            if (string.IsNullOrEmpty(key)) return false;
-            List<string> foundrs = new List<string>();
-
-            DoLog($"RemoveMapping called for zone: {key}", 0);
-
-            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            DoLog($"RemoveMapping called for zone: {zoneId}", 0);
+            bool found = false;
+            foreach (KeyValuePair<string, NextGenPVEZoneMap> map in ngpvezonemaps)
             {
-                c.Open();
-                using (SQLiteCommand rm = new SQLiteCommand($"SELECT name FROM ngpve_rulesets WHERE zone='{key}'", c))
-                using (SQLiteDataReader rd = rm.ExecuteReader())
+                if (map.Value.map == null) continue;
+                if (map.Value.map.Contains(zoneId))
                 {
-                    while (rd.Read())
-                    {
-                        string rn = !rd.IsDBNull(0) ? rd.GetString(0) : "";
-                        foundrs.Add(rn);
-                        ngpvezonemaps.Remove(rn);
-                        SaveData();
-                    }
+                    ngpvezonemaps[map.Key].map.Remove(zoneId);
+                    SaveData();
+                    DoLog($"RemoveMapping found and removed {zoneId} from ruleset {map.Key}", 0);
+                    found = true;
                 }
             }
 
-            if (foundrs.Count > 0)
+            if (!found)
             {
-                foreach (string found in foundrs)
-                {
-                    using (SQLiteConnection c = new SQLiteConnection(connStr))
-                    {
-                        c.Open();
-                        using (SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='0' WHERE name='{found}'", c))
-                        {
-                            cmd.ExecuteNonQuery();
-                        }
-                    }
-                }
+                DoLog($"RemoveMapping did not find {zoneId} in any ruleset", 0);
             }
-
-            return true;
+            return found;
         }
 
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
@@ -4811,6 +4806,21 @@ namespace Oxide.Plugins
             return new string[] { };
         }
 
+        private List<string> CleanupZones(List<string> maps)
+        {
+            List<string> validZones = new List<string>();
+            foreach (string zoneId in maps)
+            {
+                object validZoneId = ZoneManager?.Call("CheckZoneID", zoneId);
+                if (validZoneId == null)
+                {
+                    continue;
+                }
+                validZones.Add(zoneId);
+            }
+            return validZones;
+        }
+
         private bool IsMLRS(HitInfo hitinfo)
         {
             try
@@ -5207,7 +5217,7 @@ namespace Oxide.Plugins
 
         private class NextGenPVEZoneMap
         {
-            public List<string> map;
+            public List<string> map = new List<string>();
         }
 
         public static class UI
