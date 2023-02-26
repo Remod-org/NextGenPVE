@@ -37,7 +37,7 @@ using Mono.Cecil;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.1")]
+    [Info("NextGen PVE", "RFC1920", "1.4.2")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -812,11 +812,16 @@ namespace Oxide.Plugins
             if (!enabled) return null;
             if (entity == null) return null;
             if (hitinfo == null) return null;
-            Rust.DamageType majority = hitinfo.damageTypes.GetMajorityDamageType();
-            if (majority == Rust.DamageType.Decay) return null;
+            Rust.DamageType majority = Rust.DamageType.Generic;
+            try
+            {
+                majority = hitinfo.damageTypes.GetMajorityDamageType();
+                if (majority == Rust.DamageType.Decay || majority == Rust.DamageType.Radiation) return null;
+            }
+            catch { }
 
             if (configData.Options.debug) Puts("ENTRY:");
-            if (configData.Options.debug) Puts("Checking for fall damage");
+            if (configData.Options.debug) Puts("Checking for null fall damage");
             if (majority == Rust.DamageType.Fall && hitinfo?.Initiator == null)
             {
                 DoLog($"Null initiator for attack on {entity?.ShortPrefabName} by Fall");
@@ -833,7 +838,7 @@ namespace Oxide.Plugins
                 object CanTakeDamage = Interface.CallHook("CanEntityTakeDamage", new object[] { entity, hitinfo });
                 if (CanTakeDamage != null && CanTakeDamage is bool && (bool)CanTakeDamage)
                 {
-                    if (configData.Options.debug) Puts("Calling external damage hook PASSED: ALLOW\n:EXIT");
+                    if (configData.Options.debug) Puts($"Calling external damage hook for {hitinfo?.Initiator} attacking {entity?.ShortPrefabName} PASSED: ALLOW\n:EXIT");
                     return null;
                 }
             }
@@ -842,20 +847,27 @@ namespace Oxide.Plugins
                 if (configData.Options.debug) Puts("Calling external damage hook FAILED!");
             }
 
-            string stype; string ttype;
+            string stype = ""; string ttype = "";
             bool canhurt;
-            if (IsMLRS(hitinfo))
+            if (hitinfo?.WeaponPrefab != null && hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs")
             {
-                if (configData.Options.debug) Puts($"attacker prefab: {hitinfo.WeaponPrefab?.ShortPrefabName}, victim prefab: {entity.ShortPrefabName}");
+                if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.WeaponPrefab?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
                 if (configData.Options.debug) Puts("Calling EvaluateRulesets: MLRS");
                 canhurt = EvaluateRulesets(hitinfo?.WeaponPrefab, entity, out stype, out ttype);
             }
+            else if (hitinfo?.Initiator == null)
+            {
+                if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.Initiator?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
+                if (configData.Options.debug) Puts("NOT calling EvaluateRulesets: NULL INITIATOR");
+                canhurt = true;
+            }
             else
             {
-                if (configData.Options.debug) Puts($"attacker prefab: {hitinfo.Initiator?.ShortPrefabName}, victim prefab: {entity.ShortPrefabName}");
+                if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.Initiator?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
                 if (configData.Options.debug) Puts("Calling EvaluateRulesets: Standard");
                 canhurt = EvaluateRulesets(hitinfo?.Initiator, entity, out stype, out ttype);
             }
+
             if (stype.Length == 0 && ttype.Length == 0)
             {
                 if (configData.Options.debug) Puts("Calling EvaluateRulesets DETECTION FAILED");
@@ -938,7 +950,8 @@ namespace Oxide.Plugins
 
             if (configData.Options.debug) Puts("Getting target type");
             ttype = target?.GetType()?.Name;
-            if (string.IsNullOrEmpty(stype) || string.IsNullOrEmpty(ttype))
+
+            if (stype.Length == 0 || ttype.Length == 0)
             {
                 if (configData.Options.debug) Puts("Type detection failure.  Bailing out.");
                 stype = "";
@@ -962,7 +975,7 @@ namespace Oxide.Plugins
 
             if (ttype == "BasePlayer")
             {
-                // EXPERIMENTAL check for player permission if requirePermissionForPlayerProtection is true.
+                // Check for player permission if requirePermissionForPlayerProtection is true.
                 if (PlayerIsProtected(target as BasePlayer) && source is BasePlayer)
                 {
                     DoLog("DAMAGE BLOCKED! Targeted player has protection.  Blocking damage from source player.");
@@ -980,6 +993,14 @@ namespace Oxide.Plugins
                 if (HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
                 if (stype == "BasePlayer")
                 {
+                    // Check for player permission if requirePermissionForPlayerProtection is true.
+                    // This includes checking that the target is not the source and is also a real player.
+                    if (PlayerIsProtected(source as BasePlayer) && ttype == "BasePlayer" && (target as BasePlayer).userID.IsSteamId() && target != source)
+                    {
+                        DoLog("DAMAGE BLOCKED! Source player has protection.  Blocking damage to target player.  Fair is fair...");
+                        return false;
+                    }
+
                     // Special cases for building damage requiring owner or auth access
                     if (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window")
                     {
@@ -1029,14 +1050,6 @@ namespace Oxide.Plugins
                         {
                             DoLog("Player has building privilege or is not blocked.");
                         }
-
-                        // Check for player permission if requirePermissionForPlayerProtection is true.
-                        // This includes checking that the target is not the source and is also a real player.
-                        if (PlayerIsProtected(source as BasePlayer) && ttype == "BasePlayer" && (target as BasePlayer).userID.IsSteamId() && target != source)
-                        {
-                            DoLog("DAMAGE BLOCKED! Source player has protection.  Blocking damage to target player.  Fair is fair...");
-                            return false;
-                        }
                     }
                     else if (target?.OwnerID > 0 && target is DecayEntity)
                     {
@@ -1056,11 +1069,12 @@ namespace Oxide.Plugins
                 hasBP = false;
                 foreach (PatrolHelicopterAI.targetinfo heliTarget in (source as BaseHelicopter)?.myAI._targetList.ToArray())
                 {
-                    BasePlayer htarget = heliTarget?.ent as BasePlayer;
-                    if (htarget != null)
+                    //BasePlayer htarget = heliTarget?.ent as BasePlayer;
+                    //if (htarget != null)
+                    if (heliTarget.ply != null)
                     {
-                        DoLog($"Heli targeting player {htarget?.displayName}.  Checking building permission for {target?.ShortPrefabName}");
-                        object ploi = PlayerOwnsItem(htarget, target);
+                        DoLog($"Heli targeting player {heliTarget.ply?.displayName}.  Checking building permission for {target?.ShortPrefabName}");
+                        object ploi = PlayerOwnsItem(heliTarget.ply, target);
                         if (ploi != null && ploi is bool && !(bool)ploi)
                         {
                             DoLog("Yes they own that building!");
@@ -1104,9 +1118,12 @@ namespace Oxide.Plugins
             {
                 while (readMe.Read())
                 {
-                    src = !readMe.IsDBNull(0) ? readMe.GetString(0) : "";
-                    foundSrcInDB = true;
-                    break;
+                    if (!readMe.IsDBNull(0))
+                    {
+                        src = readMe.GetString(0);
+                        foundSrcInDB = true;
+                        break;
+                    }
                 }
             }
             if (configData.Options.AutoPopulateUnknownEntitities && !foundSrcInDB)
@@ -1185,6 +1202,7 @@ namespace Oxide.Plugins
                     if (foundmatch) break; // Breaking due to match found in previously checked ruleset
                     bool enabled = !readMe.IsDBNull(3) && readMe.GetInt32(3) == 1;
                     rulesetname = !readMe.IsDBNull(0) ? readMe.GetString(0) : "";
+                    damage = !readMe.IsDBNull(2) && readMe.GetInt32(2) == 1;
                     string rulesetzone = !readMe.IsDBNull(1) ? readMe.GetString(1) : "";
 
                     if (!enabled)
@@ -1195,8 +1213,6 @@ namespace Oxide.Plugins
 
                     foundexception = false;
                     foundexclusion = false;
-
-                    damage = !readMe.IsDBNull(2) && readMe.GetInt32(2) == 1;
 
                     // ZONE CHECKS
                     // First: If we are in a matching zone, use it
@@ -4823,28 +4839,20 @@ namespace Oxide.Plugins
 
         private bool IsMLRS(HitInfo hitinfo)
         {
-            try
-            {
-                if (hitinfo.WeaponPrefab.ShortPrefabName.Equals("rocket_mlrs"))
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-                if (configData.Options.debug) Puts("MLRS Detection failure.");
-            }
-            return false;
+            if (configData.Options.debug) Puts("Is source MLRS?");
+            return hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs";
         }
 
-        private bool IsHumanNPC(BaseEntity player)
+        private bool IsHumanNPC(BaseEntity entity)
         {
-            if (player == null) return false;
-            if (HumanNPC && player is BasePlayer)
+            if (entity == null) return false;
+            BasePlayer player = entity as BasePlayer;
+            if (HumanNPC && player != null)
             {
                 try
                 {
-                    return (bool)HumanNPC?.Call("IsHumanNPC", player as BasePlayer);
+                    if (configData.Options.debug) Puts("Is HumanNPC?");
+                    return (bool)HumanNPC?.Call("IsHumanNPC", player);
                 }
                 catch
                 {
@@ -4856,8 +4864,7 @@ namespace Oxide.Plugins
             {
                 try
                 {
-                    BasePlayer pl = player as BasePlayer;
-                    return !pl.userID.IsSteamId() && !pl.IsDestroyed;
+                    return !player.userID.IsSteamId() && !player.IsDestroyed;
                 }
                 catch
                 {
@@ -4867,12 +4874,14 @@ namespace Oxide.Plugins
             }
         }
 
-        private bool IsHumanoid(BaseEntity player)
+        private bool IsHumanoid(BaseEntity entity)
         {
-            if (player == null) return false;
-            if (Humanoids && player is BasePlayer)
+            if (entity == null) return false;
+            BasePlayer player = entity as BasePlayer;
+            if (Humanoids && player != null)
             {
-                return (bool)Humanoids?.Call("IsHumanoid", player as BasePlayer);
+                if (configData.Options.debug) Puts("Is Humanoid?");
+                return (bool)Humanoids?.Call("IsHumanoid", player);
             }
             return false;
         }
