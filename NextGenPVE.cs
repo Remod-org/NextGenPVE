@@ -32,12 +32,10 @@ using System.IO;
 using System.Text.RegularExpressions;
 using Oxide.Core.Configuration;
 using System.Text;
-using ConVar;
-using Mono.Cecil;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.2")]
+    [Info("NextGen PVE", "RFC1920", "1.4.3")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -4851,14 +4849,29 @@ namespace Oxide.Plugins
             {
                 try
                 {
-                    if (configData.Options.debug) Puts("Is HumanNPC?");
-                    return (bool)HumanNPC?.Call("IsHumanNPC", player);
+                    if ((bool)HumanNPC?.Call("IsHumanNPC", player))
+                    {
+                        if (configData.Options.debug) Puts("Found a HumanNPC");
+                        return true;
+                    }
                 }
                 catch
                 {
                     // HumanNPC version does not have the above call.
-                    return false;
+                    Component[] comps = entity?.GetComponents(typeof(Component));
+                    if (comps.Length > 0)
+                    {
+                        foreach (Component component in comps)
+                        {
+                            if (component.GetType().ToString().Contains("HumanPlayer"))
+                            {
+                                if (configData.Options.debug) Puts("Found a HumanNPC");
+                                return true;
+                            }
+                        }
+                    }
                 }
+                return false;
             }
             else
             {
@@ -4880,8 +4893,11 @@ namespace Oxide.Plugins
             BasePlayer player = entity as BasePlayer;
             if (Humanoids && player != null)
             {
-                if (configData.Options.debug) Puts("Is Humanoid?");
-                return (bool)Humanoids?.Call("IsHumanoid", player);
+                if ((bool)Humanoids?.Call("IsHumanoid", player))
+                {
+                    if (configData.Options.debug) Puts("Found a Humanoid");
+                    return true;
+                }
             }
             return false;
         }
