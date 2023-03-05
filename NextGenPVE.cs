@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.3")]
+    [Info("NextGen PVE", "RFC1920", "1.4.4")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -705,8 +705,14 @@ namespace Oxide.Plugins
             {
                 while (readMe.Read())
                 {
-                    if (!readMe.IsDBNull(2) && !readMe.IsDBNull(3) && readMe.GetInt32(2) == 1 && readMe.GetInt32(3) == 1)
+                    if (!readMe.IsDBNull(2) && !readMe.IsDBNull(3) && readMe.GetInt32(2) == 1 && readMe.GetInt32(3) == 0)
                     {
+                        // Default damage for this ruleset is ENabled but ruleset is DISabled.
+                        return true;
+                    }
+                    else if (!readMe.IsDBNull(2) && !readMe.IsDBNull(3) && readMe.GetInt32(2) == 0 && readMe.GetInt32(3) == 1)
+                    {
+                        // Default damage for this ruleset is DISabled and ruleset is ENabled.
                         return true;
                     }
                 }
