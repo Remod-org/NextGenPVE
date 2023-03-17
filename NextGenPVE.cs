@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.4")]
+    [Info("NextGen PVE", "RFC1920", "1.4.5")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -964,8 +964,14 @@ namespace Oxide.Plugins
             }
             if (configData.Options.debug) Puts($"attacker type: {stype}, victim type: {ttype}");
 
+            //if (source == target)
+            //{
+            //    if (configData.Options.debug) Puts("Source and target are the same.");
+            //    return true;
+            //}
+
             // Special case for preventing codelock hacking
-            if (stype =="CodeLock" && ttype == "BasePlayer")
+            if (stype == "CodeLock" && ttype == "BasePlayer")
             {
                 DoLog("Allowing codelock damage");
                 return true;
@@ -979,14 +985,18 @@ namespace Oxide.Plugins
 
             if (ttype == "BasePlayer")
             {
-                // Check for player permission if requirePermissionForPlayerProtection is true.
-                if (PlayerIsProtected(target as BasePlayer) && source is BasePlayer)
-                {
-                    DoLog("DAMAGE BLOCKED! Targeted player has protection.  Blocking damage from source player.");
-                    return false;
-                }
                 if (Humanoids && IsHumanoid(target)) ttype = "Humanoid";
                 if (HumanNPC && IsHumanNPC(target)) ttype = "HumanNPC";
+                if (ttype == "BasePlayer")
+                {
+                    // Check for player permission if requirePermissionForPlayerProtection is true.
+                    // Block player_player in advance of ruleset check.
+                    if (target != source && target is BasePlayer && PlayerIsProtected(target as BasePlayer) && source is BasePlayer && (source as BasePlayer).userID.IsSteamId())
+                    {
+                        DoLog("DAMAGE BLOCKED! Targeted player has protection.  Blocking damage from source player.");
+                        return false;
+                    }
+                }
             }
 
             // Check for permission blocking player on player damage
@@ -999,7 +1009,8 @@ namespace Oxide.Plugins
                 {
                     // Check for player permission if requirePermissionForPlayerProtection is true.
                     // This includes checking that the target is not the source and is also a real player.
-                    if (PlayerIsProtected(source as BasePlayer) && ttype == "BasePlayer" && (target as BasePlayer).userID.IsSteamId() && target != source)
+                    // Block player_player in advance of ruleset check.
+                    if (target != source && source is BasePlayer && PlayerIsProtected(source as BasePlayer) && ttype == "BasePlayer" && (target as BasePlayer).userID.IsSteamId())
                     {
                         DoLog("DAMAGE BLOCKED! Source player has protection.  Blocking damage to target player.  Fair is fair...");
                         return false;
@@ -1018,7 +1029,7 @@ namespace Oxide.Plugins
                         }
                         else
                         {
-                            DoLog("Player has privilege to block or is not blocked by TC.");
+                            DoLog("Player has privilege to building block or is not blocked by TC.");
                         }
                     }
                     else if (ttype == "BuildingPrivlidge")
@@ -1071,18 +1082,27 @@ namespace Oxide.Plugins
             {
                 isBuilding = true;
                 hasBP = false;
-                foreach (PatrolHelicopterAI.targetinfo heliTarget in (source as BaseHelicopter)?.myAI._targetList.ToArray())
+                BaseHelicopter sourceHeli = source as BaseHelicopter;
+                if (sourceHeli?.myAI?._targetList.Count > 0)
                 {
-                    //BasePlayer htarget = heliTarget?.ent as BasePlayer;
-                    //if (htarget != null)
-                    if (heliTarget.ply != null)
+                    for (int i = sourceHeli.myAI._targetList.Count - 1; i >= 0; i--)
                     {
-                        DoLog($"Heli targeting player {heliTarget.ply?.displayName}.  Checking building permission for {target?.ShortPrefabName}");
-                        object ploi = PlayerOwnsItem(heliTarget.ply, target);
-                        if (ploi != null && ploi is bool && !(bool)ploi)
+                        PatrolHelicopterAI.targetinfo heliTarget = sourceHeli.myAI._targetList[i];
+                        if (heliTarget?.ply != null)
                         {
-                            DoLog("Yes they own that building!");
-                            hasBP = true;
+                            DoLog($"Heli targeting player {heliTarget?.ply?.displayName}.  Checking building permission for {target?.ShortPrefabName}");
+                            object ploi = PlayerOwnsItem(heliTarget?.ply, target);
+                            if (ploi != null && ploi is bool && !(bool)ploi)
+                            {
+                                DoLog("Yes they own that building block!");
+                                hasBP = true;
+                            }
+                            object pltc = PlayerOwnsTC(heliTarget?.ply, target as BuildingPrivlidge);
+                            if (pltc != null && pltc is bool && !(bool)pltc)
+                            {
+                                DoLog("Yes they own that building!");
+                                hasBP = true;
+                            }
                         }
                     }
                 }
