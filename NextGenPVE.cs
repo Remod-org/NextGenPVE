@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.5")]
+    [Info("NextGen PVE", "RFC1920", "1.4.6")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -170,7 +170,7 @@ namespace Oxide.Plugins
             BasePlayer player = arg.Player();
             if (player == null) return null;
 
-            if (!arg.cmd.FullName.StartsWith("pverule") && isopen.Contains(ulong.Parse(player.UserIDString)))
+            if (isopen.Contains(ulong.Parse(player?.UserIDString)) && !arg.cmd.FullName.StartsWith("pve"))
             {
                 return true;
             }
@@ -179,8 +179,9 @@ namespace Oxide.Plugins
 
         private object OnPlayerCommand(BasePlayer player, string command, string[] args)
         {
-            if (command != "pverule" && isopen.Contains(player.userID))
+            if (isopen.Contains(player.userID) && !command.StartsWith("pve"))
             {
+                Puts($"Player tried to run command while gui open: {command}");
                 return true;
             }
             return null;
@@ -199,6 +200,28 @@ namespace Oxide.Plugins
                 if (objname.Contains("Entity")) continue;
                 if (names.Contains(objname)) continue; // Saves 20-30 seconds of processing time.
                 string category = objname.Contains("npc", CompareOptions.OrdinalIgnoreCase) ? "npc" : "unknown";
+                names.Add(objname);
+
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    string query = $"INSERT INTO ngpve_entities (name, type) SELECT '{category}', '{objname}' WHERE NOT EXISTS (SELECT * FROM ngpve_entities WHERE type='{objname}')";
+                    using (SQLiteCommand us = new SQLiteCommand(query, c))
+                    {
+                        if (us.ExecuteNonQuery() > 0)
+                        {
+                            Puts($"Added {objname} as {category}.");
+                        }
+                    }
+                }
+            }
+            foreach (UnityEngine.Object obj in Resources.FindObjectsOfTypeAll(new GrenadeWeapon().GetType()))
+            {
+                string objname = obj?.GetType().ToString();
+                if (string.IsNullOrEmpty(objname)) continue;
+                if (objname.Contains("Entity")) continue;
+                if (names.Contains(objname)) continue; // Saves 20-30 seconds of processing time.
+                string category = objname.Contains("npc", CompareOptions.OrdinalIgnoreCase) ? "npc" : "grenade";
                 names.Add(objname);
 
                 using (SQLiteConnection c = new SQLiteConnection(connStr))
@@ -857,7 +880,7 @@ namespace Oxide.Plugins
             {
                 if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.WeaponPrefab?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
                 if (configData.Options.debug) Puts("Calling EvaluateRulesets: MLRS");
-                canhurt = EvaluateRulesets(hitinfo?.WeaponPrefab, entity, out stype, out ttype);
+                canhurt = EvaluateRulesets(hitinfo?.WeaponPrefab, entity, hitinfo?.WeaponPrefab?.ShortPrefabName, out stype, out ttype);
             }
             else if (hitinfo?.Initiator == null)
             {
@@ -869,7 +892,7 @@ namespace Oxide.Plugins
             {
                 if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.Initiator?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
                 if (configData.Options.debug) Puts("Calling EvaluateRulesets: Standard");
-                canhurt = EvaluateRulesets(hitinfo?.Initiator, entity, out stype, out ttype);
+                canhurt = EvaluateRulesets(hitinfo?.Initiator, entity, hitinfo?.Initiator?.ShortPrefabName, out stype, out ttype);
             }
 
             if (stype.Length == 0 && ttype.Length == 0)
@@ -927,7 +950,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region Main
-        private bool EvaluateRulesets(BaseEntity source, BaseEntity target, out string stype, out string ttype)
+        private bool EvaluateRulesets(BaseEntity source, BaseEntity target, string srcPrefab, out string stype, out string ttype)
         {
             stype = ""; ttype = "";
             if (source == null || target == null)
@@ -937,10 +960,14 @@ namespace Oxide.Plugins
             }
 
             if (configData.Options.debug) Puts("Getting source type");
-            if (source?.ShortPrefabName == "rocket_mlrs")
+            if (srcPrefab == "rocket_mlrs")
             {
                 stype = "MLRS";
                 if (configData.Options.debug) Puts("Source is MLRS.");
+            }
+            else if (srcPrefab == "fireball_small_molotov")
+            {
+                stype = "MolotovCocktail";
             }
             else if (IsBaseHelicopter(source))
             {
@@ -3149,6 +3176,35 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 4, 6))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('grenade', 'MolotovCocktail', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('grenade', 'GrenadeWeapon', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand(sqlConnection))
+                    using (SQLiteTransaction tr = sqlConnection.BeginTransaction())
+                    {
+                        ct.CommandText = "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_animal', 'Grenade can damage animal', 1, 0, 'grenade', 'animal');"
+                            + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_building', 'Grenade can damage building', 1, 0, 'grenade', 'building');"
+                            + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_minicopter', 'Grenade can damage minicopter', 1, 0, 'grenade', 'minicopter');"
+                            + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_npc', 'Grenade can damage NPC', 1, 0, 'grenade', 'npc');"
+                            + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_player', 'Grenade can damage player', 1, 0, 'grenade', 'player');"
+                            + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_plant', 'Grenade can damage plant', 1, 0, 'grenade', 'plant');"
+                            + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_trap', 'Grenade can damage trap', 1, 0, 'grenade', 'trap');";
+                        ct.ExecuteNonQuery();
+                        tr.Commit();
+                    }
+                }
+            }
+
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
 
             configData.Version = Version;
@@ -3157,6 +3213,7 @@ namespace Oxide.Plugins
 
         private bool CheckRelEnables()
         {
+            // If none of these are enabled, HonorRelationships and AllowFriendlyFire have nothing with which to determine relationships.
             return configData.Options.useClans || configData.Options.useFriends || configData.Options.useTeams;
         }
 
@@ -3867,12 +3924,12 @@ namespace Oxide.Plugins
             {
                 UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone");
             }
-            if (rulesetname != "default")
-            {
+//            if (rulesetname != "default")
+//            {
 //                row++;
 //                pb = GetButtonPositionP(row, col);
 //                UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("clicktoedit"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-            }
+//            }
 
             if (configData.Options.useSchedule)
             {
@@ -3897,7 +3954,7 @@ namespace Oxide.Plugins
             CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
             CuiElementContainer container = UI.Container(NGPVECUSTOMSELECT, UI.Color("3b3b3b", 1f), "0.25 0.4", "0.7 0.55", true, "Overlay");
             UI.Label(ref container,  NGPVECUSTOMSELECT, UI.Color("#ffffff", 1f), Lang("edit"), 12, "0.1 0.92", "0.9 1");
-            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#55d840", 1f), Lang("custom") + " " + Lang("rules"),    12, "0.1 0.4", "0.25 0.6", "pverule customrules");
+            UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#55d840", 1f), Lang("custom") + " " + Lang("rules"), 12,     "0.1 0.4", "0.25 0.6",  "pverule customrules");
             UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#5540d8", 1f), Lang("all") + " " + Lang("entities"), 12,     "0.27 0.4", "0.47 0.6", "pverule allentities");
             UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#5540d8", 1f), Lang("unknown") + " " + Lang("entities"), 12, "0.49 0.4", "0.73 0.6", "pverule unknownentities");
             UI.Button(ref container, NGPVECUSTOMSELECT, UI.Color("#d85540", 1f), Lang("close"),    12,                         "0.75 0.4", "0.89 0.6", "pverule closecustom");
@@ -4244,7 +4301,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand ent = new SQLiteCommand("SELECT name,type,custom FROM ngpve_entities ORDER BY type", c))
+                using (SQLiteCommand ent = new SQLiteCommand("SELECT name, type, custom FROM ngpve_entities ORDER BY name, type", c))
                 using (SQLiteDataReader ntd = ent.ExecuteReader())
                 {
                     while (ntd.Read())
@@ -5410,6 +5467,8 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_entities VALUES('building', 'Door', 0);"
                     + "INSERT INTO ngpve_entities VALUES('fire', 'BaseOven', 0);"
                     + "INSERT INTO ngpve_entities VALUES('fire', 'FireBall', 0);"
+                    + "INSERT INTO ngpve_entities VALUES('grenade', 'GrenadeWeapon', 0);"
+                    + "INSERT INTO ngpve_entities VALUES('grenade', 'MolotovCocktail', 0);"
                     + "INSERT INTO ngpve_entities VALUES('helicopter', 'BaseHelicopter', 0);"
                     + "INSERT INTO ngpve_entities VALUES('helicopter', 'HelicopterDebris', 0);"
                     + "INSERT INTO ngpve_entities VALUES('helicopter', 'CH47HelicopterAIController', 0);"
@@ -5493,6 +5552,13 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_rules VALUES('npc_npc', 'NPC can damage NPC', 1, 0, 'npc', 'npc');"
                     + "INSERT INTO ngpve_rules VALUES('npc_resource', 'NPC can damage Resource', 1, 0, 'npc', 'npc');"
                     + "INSERT INTO ngpve_rules VALUES('npc_player', 'NPC can damage player', 1, 0, 'npc', 'player');"
+                    + "INSERT INTO ngpve_rules VALUES('grenade_animal', 'Grenade can damage animal', 1, 0, 'grenade', 'animal');"
+                    + "INSERT INTO ngpve_rules VALUES('grenade_building', 'Grenade can damage building', 1, 0, 'grenade', 'building');"
+                    + "INSERT INTO ngpve_rules VALUES('grenade_minicopter', 'Grenade can damage minicopter', 1, 0, 'grenade', 'minicopter');"
+                    + "INSERT INTO ngpve_rules VALUES('grenade_npc', 'Grenade can damage NPC', 1, 0, 'grenade', 'npc');"
+                    + "INSERT INTO ngpve_rules VALUES('grenade_player', 'Grenade can damage player', 1, 0, 'grenade', 'player');"
+                    + "INSERT INTO ngpve_rules VALUES('grenade_plant', 'Grenade can damage plant', 1, 0, 'grenade', 'plant');"
+                    + "INSERT INTO ngpve_rules VALUES('grenade_trap', 'Grenade can damage trap', 1, 0, 'grenade', 'trap');"
                     + "INSERT INTO ngpve_rules VALUES('player_plant', 'Player can damage Plants', 1, 0, 'player', 'plant');"
                     + "INSERT INTO ngpve_rules VALUES('player_npc', 'Player can damage NPC', 1, 0, 'player', 'npc');"
                     + "INSERT INTO ngpve_rules VALUES('player_player', 'Player can damage Player', 1, 0, 'player', 'player');"
