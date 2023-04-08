@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.6")]
+    [Info("NextGen PVE", "RFC1920", "1.4.7")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -454,7 +454,7 @@ namespace Oxide.Plugins
             object cantraptrigger = Interface.CallHook("CanEntityTrapTrigger", new object[] { trap, player });
             if (cantraptrigger != null && cantraptrigger is bool && (bool)cantraptrigger) return null;
 
-            if (configData.Options.TrapsIgnorePlayers) return false;
+            if (configData.Options.TrapsIgnorePlayers) return true;
 
             return null;
         }
@@ -541,11 +541,11 @@ namespace Oxide.Plugins
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
-                if (!configData.Options.AutoTurretTargetsNPCs) return false;
+                if (!configData.Options.AutoTurretTargetsNPCs) return true;
             }
             else if (!configData.Options.AutoTurretTargetsPlayers)
             {
-                return false;
+                return true;
             }
             return null;
         }
@@ -567,11 +567,11 @@ namespace Oxide.Plugins
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
-                if (!configData.Options.AutoTurretTargetsNPCs) return false;
+                if (!configData.Options.AutoTurretTargetsNPCs) return true;
             }
             else if (!configData.Options.AutoTurretTargetsPlayers)
             {
-                return false;
+                return true;
             }
             return null;
         }
@@ -602,11 +602,11 @@ namespace Oxide.Plugins
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
-                if (!configData.Options.AutoTurretTargetsNPCs) return false;
+                if (!configData.Options.AutoTurretTargetsNPCs) return true;
             }
             else if (!configData.Options.AutoTurretTargetsPlayers)
             {
-                return false;
+                return true;
             }
             return null;
         }
@@ -628,11 +628,11 @@ namespace Oxide.Plugins
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
-                if (!configData.Options.NPCAutoTurretTargetsNPCs) return false;
+                if (!configData.Options.NPCAutoTurretTargetsNPCs) return true;
             }
             else if (!configData.Options.NPCAutoTurretTargetsPlayers)
             {
-                return false;
+                return true;
             }
             return null;
         }
@@ -2943,6 +2943,7 @@ namespace Oxide.Plugins
             }
             else
             {
+                if (player == null) return;
                 if (isopen.Contains(player.userID)) return;
                 GUIRuleSets(player);
             }
@@ -3201,6 +3202,17 @@ namespace Oxide.Plugins
                             + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_trap', 'Grenade can damage trap', 1, 0, 'grenade', 'trap');";
                         ct.ExecuteNonQuery();
                         tr.Commit();
+                    }
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 4, 7))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT INTO ngpve_rules VALUES('trap_animal', 'Traps can damage Animals', 1, 0, 'trap', 'animal')", c))
+                    {
+                        ct.ExecuteNonQuery();
                     }
                 }
             }
@@ -5599,6 +5611,7 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_rules VALUES('fire_resource', 'Fire can damage Resource', 1, 0, 'fire', 'resource');"
                     + "INSERT INTO ngpve_rules VALUES('helicopter_animal', 'Helicopter can damage animal', 1, 0, 'helicopter', 'animal');"
                     + "INSERT INTO ngpve_rules VALUES('helicopter_npc', 'Helicopter can damage NPC', 1, 0, 'helicopter', 'npc');"
+                    + "INSERT INTO ngpve_rules VALUES('trap_animal', 'Traps can damage Animals', 1, 0, 'trap', 'animal');"
                     + "INSERT INTO ngpve_rules VALUES('trap_trap', 'Trap can damage trap', 1, 0, 'trap', 'trap');"
                     + "INSERT INTO ngpve_rules VALUES('trap_npc', 'Trap can damage npc', 1, 0, 'trap', 'npc');"
                     + "INSERT INTO ngpve_rules VALUES('trap_helicopter', 'Trap can damage helicopter', 1, 0, 'trap', 'helicopter');"
