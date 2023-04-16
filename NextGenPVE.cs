@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.7")]
+    [Info("NextGen PVE", "RFC1920", "1.4.8")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -454,7 +454,7 @@ namespace Oxide.Plugins
             object cantraptrigger = Interface.CallHook("CanEntityTrapTrigger", new object[] { trap, player });
             if (cantraptrigger != null && cantraptrigger is bool && (bool)cantraptrigger) return null;
 
-            if (configData.Options.TrapsIgnorePlayers) return true;
+            if (configData.Options.TrapsIgnorePlayers) return false;
 
             return null;
         }
@@ -541,11 +541,11 @@ namespace Oxide.Plugins
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
-                if (!configData.Options.AutoTurretTargetsNPCs) return true;
+                if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
             else if (!configData.Options.AutoTurretTargetsPlayers)
             {
-                return true;
+                return false;
             }
             return null;
         }
@@ -567,11 +567,11 @@ namespace Oxide.Plugins
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
-                if (!configData.Options.AutoTurretTargetsNPCs) return true;
+                if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
             else if (!configData.Options.AutoTurretTargetsPlayers)
             {
-                return true;
+                return false;
             }
             return null;
         }
@@ -602,11 +602,11 @@ namespace Oxide.Plugins
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
-                if (!configData.Options.AutoTurretTargetsNPCs) return true;
+                if (!configData.Options.AutoTurretTargetsNPCs) return false;
             }
             else if (!configData.Options.AutoTurretTargetsPlayers)
             {
-                return true;
+                return false;
             }
             return null;
         }
@@ -628,11 +628,11 @@ namespace Oxide.Plugins
 
             if (IsHumanoid(target) || IsHumanNPC(target) || target.IsNpc)
             {
-                if (!configData.Options.NPCAutoTurretTargetsNPCs) return true;
+                if (!configData.Options.NPCAutoTurretTargetsNPCs) return false;
             }
             else if (!configData.Options.NPCAutoTurretTargetsPlayers)
             {
-                return true;
+                return false;
             }
             return null;
         }
@@ -2943,7 +2943,6 @@ namespace Oxide.Plugins
             }
             else
             {
-                if (player == null) return;
                 if (isopen.Contains(player.userID)) return;
                 GUIRuleSets(player);
             }
