@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.8")]
+    [Info("NextGen PVE", "RFC1920", "1.4.9")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -876,6 +876,7 @@ namespace Oxide.Plugins
 
             string stype = ""; string ttype = "";
             bool canhurt;
+            DoLog("\nBEGIN:");
             if (hitinfo?.WeaponPrefab != null && hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs")
             {
                 if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.WeaponPrefab?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
@@ -1226,7 +1227,8 @@ namespace Oxide.Plugins
                     mquery = "SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
                     break;
                 default:
-                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup'";
+                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup' ORDER BY zone";
+                    //DoLog(mquery);
                     bool zonefound = false;
                     using (SQLiteCommand findIt = new SQLiteCommand(mquery, sqlConnection))
                     using (SQLiteDataReader readMe = findIt.ExecuteReader())
@@ -1285,14 +1287,14 @@ namespace Oxide.Plugins
                             DoLog($"Skipping ruleset {rulesetname} due to zone lookup mismatch with current zone, {zone}");
                             continue;
                         }
-                        DoLog($"Lookup zone {zone}");
+                        DoLog($"Lookup zone {zone} in ruleset {rulesetname}");
                     }
 
                     DoLog($"Checking ruleset {rulesetname} for {src} attacking {tgt}, decay entity: {target is DecayEntity}.");
 
                     if (src.Length > 0 && tgt.Length > 0)
                     {
-                        DoLog($"Found {stype} attacking {ttype}.  Checking ruleset {rulesetname}, zone {rulesetzone}");
+                        DoLog($"Found {stype} attacking {ttype}.  Checking ruleset '{rulesetname}', zone '{rulesetzone}'");
                         using (SQLiteCommand rq = new SQLiteCommand($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' AND exception='{src}_{tgt}'", sqlConnection))
                         using (SQLiteDataReader entry = rq.ExecuteReader())
                         {
@@ -5284,15 +5286,11 @@ namespace Oxide.Plugins
             }
             if (configData.Options.useTeams)
             {
-                BasePlayer player = BasePlayer.FindByID(playerid);
-                if (player != null && player.currentTeam != 0)
+                RelationshipManager.PlayerTeam playerTeam = RelationshipManager.ServerInstance.FindPlayersTeam(playerid);
+                if (playerTeam?.members.Contains(ownerid) == true)
                 {
-                    RelationshipManager.PlayerTeam playerTeam = RelationshipManager.ServerInstance.FindTeam(player.currentTeam);
-                    if (playerTeam?.members?.Contains(ownerid) == true)
-                    {
-                        DoLog($"Rust teams reports that {playerid} and {ownerid} are on the same team.");
-                        return true;
-                    }
+                    DoLog($"Rust teams reports that {playerid} and {ownerid} are on the same team.");
+                    return true;
                 }
             }
             return false;
