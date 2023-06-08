@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.4.9")]
+    [Info("NextGen PVE", "RFC1920", "1.5.0")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1110,26 +1110,36 @@ namespace Oxide.Plugins
             {
                 isBuilding = true;
                 hasBP = false;
-                BaseHelicopter sourceHeli = source as BaseHelicopter;
-                if (sourceHeli?.myAI?._targetList.Count > 0)
+
+                if (Interface.CallHook("IsHeliSignalObject", source.skinID) != null)
                 {
-                    for (int i = sourceHeli.myAI._targetList.Count - 1; i >= 0; i--)
+                    // Check above is for plugin-spawned helis that use that hook...
+                    // In this case, just allow damage.
+                    hasBP = true;
+                }
+                else
+                {
+                    BaseHelicopter sourceHeli = source as BaseHelicopter;
+                    if (sourceHeli?.myAI?._targetList.Count > 0)
                     {
-                        PatrolHelicopterAI.targetinfo heliTarget = sourceHeli.myAI._targetList[i];
-                        if (heliTarget?.ply != null)
+                        for (int i = sourceHeli.myAI._targetList.Count - 1; i >= 0; i--)
                         {
-                            DoLog($"Heli targeting player {heliTarget?.ply?.displayName}.  Checking building permission for {target?.ShortPrefabName}");
-                            object ploi = PlayerOwnsItem(heliTarget?.ply, target);
-                            if (ploi != null && ploi is bool && !(bool)ploi)
+                            PatrolHelicopterAI.targetinfo heliTarget = sourceHeli.myAI._targetList[i];
+                            if (heliTarget?.ply != null)
                             {
-                                DoLog("Yes they own that building block!");
-                                hasBP = true;
-                            }
-                            object pltc = PlayerOwnsTC(heliTarget?.ply, target as BuildingPrivlidge);
-                            if (pltc != null && pltc is bool && !(bool)pltc)
-                            {
-                                DoLog("Yes they own that building!");
-                                hasBP = true;
+                                DoLog($"Heli targeting player {heliTarget?.ply?.displayName}.  Checking building permission for {target?.ShortPrefabName}");
+                                object ploi = PlayerOwnsItem(heliTarget?.ply, target);
+                                if (ploi != null && ploi is bool && !(bool)ploi)
+                                {
+                                    DoLog("Yes they own that building block!");
+                                    hasBP = true;
+                                }
+                                object pltc = PlayerOwnsTC(heliTarget?.ply, target as BuildingPrivlidge);
+                                if (pltc != null && pltc is bool && !(bool)pltc)
+                                {
+                                    DoLog("Yes they own that building!");
+                                    hasBP = true;
+                                }
                             }
                         }
                     }
@@ -2103,7 +2113,7 @@ namespace Oxide.Plugins
                         GUICustomSelect(player);
                         break;
                     case "customrules":
-                        GUISelectRule(player,null,true);
+                        GUISelectRule(player, null, true);
                         break;
                     case "allentities":
                         {
@@ -2798,7 +2808,7 @@ namespace Oxide.Plugins
                     case "editrule":
                         {
                             string rn = args[1];
-                            string cs = args[2];
+                            bool custom = false;
                             if (args[0] == "editrule" && rn != null)
                             {
                                 if (args.Length > 3)
@@ -2819,6 +2829,7 @@ namespace Oxide.Plugins
                             }
                             else if (args[0] == "addrule" && rn != null)
                             {
+                                custom = true;
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
@@ -2828,8 +2839,23 @@ namespace Oxide.Plugins
                                     }
                                 }
                             }
+                            using (SQLiteConnection c = new SQLiteConnection(connStr))
+                            {
+                                c.Open();
+                                using (SQLiteCommand cmd = new SQLiteCommand($"SELECT custom FROM ngpve_rules WHERE name='{rn}'", c))
+                                {
+                                    using (SQLiteDataReader rread = cmd.ExecuteReader())
+                                    {
+                                        while (rread.Read())
+                                        {
+                                            custom = GetBoolValue(rread.GetInt32(0).ToString());
+                                        }
+                                    }
+                                }
+                            }
 
-                            GUIRuleEditor(player, rn, GetBoolValue(cs));
+                            GUISelectRule(player, null, true);
+                            GUIRuleEditor(player, rn, custom);
                         }
                         break;
                     case "deleterule":
