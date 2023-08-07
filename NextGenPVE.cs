@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.5.0")]
+    [Info("NextGen PVE", "RFC1920", "1.5.1")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -168,7 +168,8 @@ namespace Oxide.Plugins
         private object OnServerCommand(ConsoleSystem.Arg arg)
         {
             BasePlayer player = arg.Player();
-            if (player == null) return null;
+            //if (player == null) return null;
+            if (ReferenceEquals(player, null)) return null;
 
             if (isopen.Contains(ulong.Parse(player?.UserIDString)) && !arg.cmd.FullName.StartsWith("pve"))
             {
@@ -449,10 +450,13 @@ namespace Oxide.Plugins
         {
             if (!enabled) return null;
             BasePlayer player = go.GetComponent<BasePlayer>();
-            if (trap == null || player == null) return null;
+            //if (trap == null || player == null) return null;
+            if (ReferenceEquals(trap, null)) return null;
+            if (ReferenceEquals(player, null)) return null;
 
             object cantraptrigger = Interface.CallHook("CanEntityTrapTrigger", new object[] { trap, player });
-            if (cantraptrigger != null && cantraptrigger is bool && (bool)cantraptrigger) return null;
+            //if (cantraptrigger != null && cantraptrigger is bool && (bool)cantraptrigger) return null;
+            if (!ReferenceEquals(cantraptrigger, null) && cantraptrigger is bool && (bool)cantraptrigger) return null;
 
             if (configData.Options.TrapsIgnorePlayers) return false;
 
@@ -484,8 +488,10 @@ namespace Oxide.Plugins
 
         private object OnSamSiteTarget(SamSite sam, BaseMountable mountable)
         {
-            if (sam == null) return null;
-            if (mountable == null) return null;
+            //if (sam == null) return null;
+            if (ReferenceEquals(sam, null)) return null;
+            //if (mountable == null) return null;
+            if (ReferenceEquals(mountable, null)) return null;
             BasePlayer player = GetMountedPlayer(mountable);
 
             if (player.IsValid())
@@ -504,7 +510,8 @@ namespace Oxide.Plugins
                 try
                 {
                     object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { player, sam });
-                    if (extCanEntityBeTargeted != null  && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                    //if (extCanEntityBeTargeted != null  && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                    if (!ReferenceEquals(extCanEntityBeTargeted, null) && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
                     {
                         if ((bool)extCanEntityBeTargeted)
                         {
@@ -526,13 +533,16 @@ namespace Oxide.Plugins
 
         private object CanBeTargeted(BasePlayer target, GunTrap turret)
         {
-            if (target == null || turret == null) return null;
+            //if (target == null || turret == null) return null;
+            if (ReferenceEquals(target, null)) return null;
+            if (ReferenceEquals(turret, null)) return null;
             if (!enabled) return null;
 
             try
             {
                 object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
-                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                //if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                if (!ReferenceEquals(extCanEntityBeTargeted, null) && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
                 {
                     return null;
                 }
@@ -552,13 +562,16 @@ namespace Oxide.Plugins
 
         private object CanBeTargeted(BasePlayer target, FlameTurret turret)
         {
-            if (target == null || turret == null) return null;
+            //if (target == null || turret == null) return null;
+            if (ReferenceEquals(target, null)) return null;
+            if (ReferenceEquals(turret, null)) return null;
             if (!enabled) return null;
 
             try
             {
                 object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
-                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                //if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                if (!ReferenceEquals(extCanEntityBeTargeted, null) && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
                 {
                     return null;
                 }
@@ -578,7 +591,9 @@ namespace Oxide.Plugins
 
         private object CanBeTargeted(BasePlayer target, HelicopterTurret turret)
         {
-            if (target == null || turret == null) return null;
+            //if (target == null || turret == null) return null;
+            if (ReferenceEquals(target, null)) return null;
+            if (ReferenceEquals(turret, null)) return null;
             if (!enabled) return null;
 
             if (!configData.Options.HeliTurretTargetsPlayers) return false;
@@ -587,13 +602,16 @@ namespace Oxide.Plugins
 
         private object CanBeTargeted(BasePlayer target, AutoTurret turret)
         {
-            if (target == null || turret == null) return null;
+            //if (target == null || turret == null) return null;
+            if (ReferenceEquals(target, null)) return null;
+            if (ReferenceEquals(turret, null)) return null;
             if (!enabled) return null;
 
             try
             {
                 object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
-                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                //if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                if (!ReferenceEquals(extCanEntityBeTargeted, null) && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
                 {
                     return null;
                 }
@@ -613,13 +631,16 @@ namespace Oxide.Plugins
 
         private object CanBeTargeted(BasePlayer target, NPCAutoTurret turret)
         {
-            if (target == null || turret == null) return null;
+            //if (target == null || turret == null) return null;
+            if (ReferenceEquals(target, null)) return null;
+            if (ReferenceEquals(turret, null)) return null;
             if (!enabled) return null;
 
             try
             {
                 object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
-                if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                //if (extCanEntityBeTargeted != null && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                if (!ReferenceEquals(extCanEntityBeTargeted, null) && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
                 {
                     return null;
                 }
@@ -817,7 +838,8 @@ namespace Oxide.Plugins
             bool found = false;
             foreach (KeyValuePair<string, NextGenPVEZoneMap> map in ngpvezonemaps)
             {
-                if (map.Value.map == null) continue;
+                //if (map.Value.map == null) continue;
+                if (ReferenceEquals(map.Value.map, null)) continue;
                 if (map.Value.map.Contains(zoneId))
                 {
                     ngpvezonemaps[map.Key].map.Remove(zoneId);
@@ -837,8 +859,10 @@ namespace Oxide.Plugins
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
             if (!enabled) return null;
-            if (entity == null) return null;
-            if (hitinfo == null) return null;
+            //if (entity == null) return null;
+            if (ReferenceEquals(entity, null)) return null;
+            //if (hitinfo == null) return null;
+            if (ReferenceEquals(hitinfo, null)) return null;
             Rust.DamageType majority = Rust.DamageType.Generic;
             try
             {
@@ -849,7 +873,8 @@ namespace Oxide.Plugins
 
             if (configData.Options.debug) Puts("ENTRY:");
             if (configData.Options.debug) Puts("Checking for null fall damage");
-            if (majority == Rust.DamageType.Fall && hitinfo?.Initiator == null)
+            //if (majority == Rust.DamageType.Fall && hitinfo?.Initiator == null)
+            if (majority == Rust.DamageType.Fall && ReferenceEquals(hitinfo?.Initiator, null))
             {
                 DoLog($"Null initiator for attack on {entity?.ShortPrefabName} by Fall");
                 if (BlockFallDamage(entity))
@@ -863,7 +888,8 @@ namespace Oxide.Plugins
             try
             {
                 object CanTakeDamage = Interface.CallHook("CanEntityTakeDamage", new object[] { entity, hitinfo });
-                if (CanTakeDamage != null && CanTakeDamage is bool && (bool)CanTakeDamage)
+                //if (CanTakeDamage != null && CanTakeDamage is bool && (bool)CanTakeDamage)
+                if (!ReferenceEquals(CanTakeDamage, null) && CanTakeDamage is bool && (bool)CanTakeDamage)
                 {
                     if (configData.Options.debug) Puts($"Calling external damage hook for {hitinfo?.Initiator} attacking {entity?.ShortPrefabName} PASSED: ALLOW\n:EXIT");
                     return null;
@@ -877,13 +903,15 @@ namespace Oxide.Plugins
             string stype = ""; string ttype = "";
             bool canhurt;
             DoLog("\nBEGIN:");
-            if (hitinfo?.WeaponPrefab != null && hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs")
+            //if (hitinfo?.WeaponPrefab != null && hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs")
+            if (!ReferenceEquals(hitinfo?.WeaponPrefab, null) && hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs")
             {
                 if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.WeaponPrefab?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
                 if (configData.Options.debug) Puts("Calling EvaluateRulesets: MLRS");
                 canhurt = EvaluateRulesets(hitinfo?.WeaponPrefab, entity, hitinfo?.WeaponPrefab?.ShortPrefabName, out stype, out ttype);
             }
-            else if (hitinfo?.Initiator == null)
+            //else if (hitinfo?.Initiator == null)
+            else if (ReferenceEquals(hitinfo?.Initiator, null))
             {
                 if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.Initiator?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
                 if (configData.Options.debug) Puts("NOT calling EvaluateRulesets: NULL INITIATOR");
@@ -907,7 +935,8 @@ namespace Oxide.Plugins
             {
                 BasePlayer hibp = hitinfo?.Initiator as BasePlayer;
                 if (configData.Options.debug) Puts("Checking for god perms");
-                if (hibp != null && permission.UserHasPermission(hibp.UserIDString, permNextGenPVEGod))
+                //if (hibp != null && permission.UserHasPermission(hibp.UserIDString, permNextGenPVEGod))
+                if (!ReferenceEquals(hibp, null) && permission.UserHasPermission(hibp.UserIDString, permNextGenPVEGod))
                 {
                     Puts("Admin almighty!");
                     return null;
@@ -927,7 +956,8 @@ namespace Oxide.Plugins
                         else
                         {
                             object isfr = IsFriend(sid, tid);
-                            if (isfr != null && isfr is bool && (bool)isfr && configData.Options.AllowFriendlyFire)
+                            //if (isfr != null && isfr is bool && (bool)isfr && configData.Options.AllowFriendlyFire)
+                            if (!ReferenceEquals(isfr, null) && isfr is bool && (bool)isfr && configData.Options.AllowFriendlyFire)
                             {
                                 DoLog("AllowFriendlyFire TRUE");
                                 canhurt = true;
@@ -954,7 +984,8 @@ namespace Oxide.Plugins
         private bool EvaluateRulesets(BaseEntity source, BaseEntity target, string srcPrefab, out string stype, out string ttype)
         {
             stype = ""; ttype = "";
-            if (source == null || target == null)
+            //if (source == null || target == null)
+            if (ReferenceEquals(source, null) || ReferenceEquals(target, null))
             {
                 if (configData.Options.debug) Puts("Null source or target object");
                 return false;
@@ -1049,7 +1080,8 @@ namespace Oxide.Plugins
                     {
                         isBuilding = true;
                         object ploi = PlayerOwnsItem(source as BasePlayer, target);
-                        if (ploi != null && ploi is bool && !(bool)ploi)
+                        //if (ploi != null && ploi is bool && !(bool)ploi)
+                        if (!ReferenceEquals(ploi, null) && ploi is bool && !(bool)ploi)
                         {
                             DoLog("No building block access.");
                             ownsItem = false;
@@ -1063,7 +1095,8 @@ namespace Oxide.Plugins
                     else if (ttype == "BuildingPrivlidge")
                     {
                         object pltc = PlayerOwnsTC(source as BasePlayer, target as BuildingPrivlidge);
-                        if (pltc != null && pltc is bool && !(bool)pltc)
+                        //if (pltc != null && pltc is bool && !(bool)pltc)
+                        if (!ReferenceEquals(pltc, null) && pltc is bool && !(bool)pltc)
                         {
                             DoLog("No building privilege.");
                             ownsItem = false;
@@ -1098,7 +1131,8 @@ namespace Oxide.Plugins
                     {
                         DoLog("Target is not a player or NPC, checking perms..");
                         object ploi = PlayerOwnsItem(source as BasePlayer, target);
-                        if (ploi != null && ploi is bool && !(bool)ploi)
+                        //if (ploi != null && ploi is bool && !(bool)ploi)
+                        if (!ReferenceEquals(ploi, null) && ploi is bool && !(bool)ploi)
                         {
                             DoLog($"Player has no access to this {ttype}");
                             ownsItem = false;
@@ -1129,13 +1163,15 @@ namespace Oxide.Plugins
                             {
                                 DoLog($"Heli targeting player {heliTarget?.ply?.displayName}.  Checking building permission for {target?.ShortPrefabName}");
                                 object ploi = PlayerOwnsItem(heliTarget?.ply, target);
-                                if (ploi != null && ploi is bool && !(bool)ploi)
+                                //if (ploi != null && ploi is bool && !(bool)ploi)
+                                if (!ReferenceEquals(ploi, null) && ploi is bool && !(bool)ploi)
                                 {
                                     DoLog("Yes they own that building block!");
                                     hasBP = true;
                                 }
                                 object pltc = PlayerOwnsTC(heliTarget?.ply, target as BuildingPrivlidge);
-                                if (pltc != null && pltc is bool && !(bool)pltc)
+                                //if (pltc != null && pltc is bool && !(bool)pltc)
+                                if (!ReferenceEquals(pltc, null) && pltc is bool && !(bool)pltc)
                                 {
                                     DoLog("Yes they own that building!");
                                     hasBP = true;
@@ -4086,7 +4122,8 @@ namespace Oxide.Plugins
             UI.Button(ref container, NGPVEENTSELECT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", "pverule closeentselect");
 
             int row = 0; int col = 0;
-            if (cat == null) cat = "unknown";
+            //if (cat == null) cat = "unknown";
+            if (ReferenceEquals(cat, null)) cat = "unknown";
 
             string q = $"SELECT DISTINCT name, type from ngpve_entities WHERE name='{cat}' ORDER BY type";
             if (search != "")
@@ -4390,7 +4427,8 @@ namespace Oxide.Plugins
                         switch (srctgt)
                         {
                             case "src_exclude":
-                                if (src == null || !ngpveentities.ContainsKey(src)) break;
+                                //if (src == null || !ngpveentities.ContainsKey(src)) break;
+                                if (ReferenceEquals(src, null) || !ngpveentities.ContainsKey(src)) break;
                                 foreach (string type in ngpveentities[src].types)
                                 {
                                     //Puts($"Checking for '{type}'");
@@ -4419,7 +4457,8 @@ namespace Oxide.Plugins
                                 }
                                 break;
                             case "tgt_exclude":
-                                if (tgt == null || !ngpveentities.ContainsKey(tgt)) break;
+                                //if (tgt == null || !ngpveentities.ContainsKey(tgt)) break;
+                                if (ReferenceEquals(tgt, null) || !ngpveentities.ContainsKey(tgt)) break;
                                 foreach (string type in ngpveentities[tgt].types)
                                 {
                                     //Puts($"Checking for '{type}'");
@@ -4631,7 +4670,8 @@ namespace Oxide.Plugins
                     {
                         UI.Label(ref container, NGPVEVALUEEDIT, UI.Color("#222222", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
                     }
-                    else if (zone == null && rulesetname != "default")
+                    //else if (zone == null && rulesetname != "default")
+                    else if (ReferenceEquals(zone, null) && rulesetname != "default")
                     {
                         UI.Button(ref container, NGPVEVALUEEDIT, UI.Color("#55d840", 1f), Lang("none"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} zone delete");
                     }
@@ -4927,7 +4967,8 @@ namespace Oxide.Plugins
         #region Specialized_checks
         private string[] GetEntityZones(BaseEntity entity)
         {
-            if (entity == null) return new string[] { };
+            //if (entity == null) return new string[] { };
+            if (ReferenceEquals(entity, null)) return new string[] { };
             if (ZoneManager && configData.Options.useZoneManager)
             {
                 if (entity is BasePlayer)
@@ -4948,7 +4989,8 @@ namespace Oxide.Plugins
             foreach (string zoneId in maps)
             {
                 object validZoneId = ZoneManager?.Call("CheckZoneID", zoneId);
-                if (validZoneId == null)
+                //if (validZoneId == null)
+                if (ReferenceEquals(validZoneId, null))
                 {
                     continue;
                 }
@@ -4965,7 +5007,8 @@ namespace Oxide.Plugins
 
         private bool IsHumanNPC(BaseEntity entity)
         {
-            if (entity == null) return false;
+            //if (entity == null) return false;
+            if (ReferenceEquals(entity, null)) return false;
             BasePlayer player = entity as BasePlayer;
             if (HumanNPC && player != null)
             {
@@ -5011,7 +5054,8 @@ namespace Oxide.Plugins
 
         private bool IsHumanoid(BaseEntity entity)
         {
-            if (entity == null) return false;
+            //if (entity == null) return false;
+            if (ReferenceEquals(entity, null)) return false;
             BasePlayer player = entity as BasePlayer;
             if (Humanoids && player != null)
             {
@@ -5026,7 +5070,8 @@ namespace Oxide.Plugins
 
         private bool IsBaseHelicopter(BaseEntity entity)
         {
-            if (entity == null) return false;
+            //if (entity == null) return false;
+            if (ReferenceEquals(entity, null)) return false;
             if (configData.Options.debug) Puts("Is source helicopter?");
             if (entity?.ShortPrefabName == null) return false;
             if (entity is BaseHelicopter) return true;
@@ -5059,14 +5104,16 @@ namespace Oxide.Plugins
                 DoLog("HonorBuildingPrivilege set to false.  Skipping owner checks...");
                 return true;
             }
-            if (player == null || privilege == null) return null;
+            //if (player == null || privilege == null) return null;
+            if (ReferenceEquals(player, null) || ReferenceEquals(privilege, null)) return null;
 
             DoLog($"Does player {player?.displayName} own {privilege?.ShortPrefabName}?");
             BuildingManager.Building building = privilege.GetBuilding();
             if (building != null)
             {
                 BuildingPrivlidge privs = building.GetDominatingBuildingPrivilege();
-                if (privs == null)
+                //if (privs == null)
+                if (ReferenceEquals(privs, null))
                 {
                     if (configData.Options.UnprotectedBuildingDamage)
                     {
@@ -5102,6 +5149,8 @@ namespace Oxide.Plugins
                         }
                     }
                 }
+                DoLog("Player has no access to Building");
+                return false;
             }
 
             return null;
@@ -5109,7 +5158,10 @@ namespace Oxide.Plugins
 
         private object PlayerOwnsItem(BasePlayer player, BaseEntity entity)
         {
-            if (player == null || entity == null) return null;
+            //if (player == null || entity == null) return null;
+            if (ReferenceEquals(player, null)) return null;
+            if (ReferenceEquals(entity, null)) return null;
+
             if (entity.OwnerID == 0) return true;
             DoLog($"Does player {player?.displayName} own {entity?.ShortPrefabName}?");
             if (entity is BuildingBlock)
@@ -5158,7 +5210,8 @@ namespace Oxide.Plugins
                 {
                     DoLog($"Checking building privilege for {entity.ShortPrefabName}");
                     BuildingPrivlidge privs = building.GetDominatingBuildingPrivilege();
-                    if (privs == null)
+                    //if (privs == null)
+                    if (ReferenceEquals(privs, null))
                     {
                         return configData.Options.UnprotectedBuildingDamage;
                     }
