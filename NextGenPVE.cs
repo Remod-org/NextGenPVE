@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.5.1")]
+    [Info("NextGen PVE", "RFC1920", "1.5.2")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1001,9 +1001,9 @@ namespace Oxide.Plugins
             {
                 stype = "MolotovCocktail";
             }
-            else if (IsBaseHelicopter(source))
+            else if (IsPatrolHelicopter(source))
             {
-                stype = "BaseHelicopter";
+                stype = "PatrolHelicopter";
                 if (configData.Options.debug) Puts("Source is helicopter.");
             }
             else
@@ -1140,7 +1140,8 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            else if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window" || ttype == "BuildingPrivlidge"))
+            //else if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window" || ttype == "BuildingPrivlidge"))
+            else if (stype == "PatrolHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window" || ttype == "BuildingPrivlidge"))
             {
                 isBuilding = true;
                 hasBP = false;
@@ -1153,7 +1154,7 @@ namespace Oxide.Plugins
                 }
                 else
                 {
-                    BaseHelicopter sourceHeli = source as BaseHelicopter;
+                    PatrolHelicopter sourceHeli = source as PatrolHelicopter;
                     if (sourceHeli?.myAI?._targetList.Count > 0)
                     {
                         for (int i = sourceHeli.myAI._targetList.Count - 1; i >= 0; i--)
@@ -3279,6 +3280,17 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            if (configData.Version < new VersionNumber(1, 5, 2))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('helicopter', 'PatrolHelicopter', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
 
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
 
@@ -5068,21 +5080,21 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private bool IsBaseHelicopter(BaseEntity entity)
+        private bool IsPatrolHelicopter(BaseEntity entity)
         {
             //if (entity == null) return false;
             if (ReferenceEquals(entity, null)) return false;
             if (configData.Options.debug) Puts("Is source helicopter?");
             if (entity?.ShortPrefabName == null) return false;
-            if (entity is BaseHelicopter) return true;
+            if (entity is PatrolHelicopter) return true;
             return entity.ShortPrefabName.Equals("oilfireballsmall") || entity.ShortPrefabName.Equals("napalm");
         }
 
         // unused
-        private bool IsBaseHelicopter(HitInfo hitinfo)
+        private bool IsPatrolHelicopter(HitInfo hitinfo)
         {
             if (hitinfo?.Initiator == null) return false;
-            if (hitinfo?.Initiator is BaseHelicopter
+            if (hitinfo?.Initiator is PatrolHelicopter
                || (hitinfo?.Initiator != null && (hitinfo.Initiator.ShortPrefabName.Equals("oilfireballsmall") || hitinfo.Initiator.ShortPrefabName.Equals("napalm"))))
             {
                 return true;
@@ -5560,6 +5572,7 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_entities VALUES('helicopter', 'BaseHelicopter', 0);"
                     + "INSERT INTO ngpve_entities VALUES('helicopter', 'HelicopterDebris', 0);"
                     + "INSERT INTO ngpve_entities VALUES('helicopter', 'CH47HelicopterAIController', 0);"
+                    + "INSERT INTO ngpve_entities VALUES('helicopter', 'PatrolHelicopter', 0);"
                     + "INSERT INTO ngpve_entities VALUES('highwall', 'SimpleBuildingBlock', 0);"
                     + "INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.stone', 0);"
                     + "INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.wood', 0);"
