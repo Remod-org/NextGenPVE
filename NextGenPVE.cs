@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.5.2")]
+    [Info("NextGen PVE", "RFC1920", "1.5.3")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -1140,7 +1140,6 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            //else if (stype == "BaseHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window" || ttype == "BuildingPrivlidge"))
             else if (stype == "PatrolHelicopter" && (ttype == "BuildingBlock" || ttype == "Door" || ttype == "wall.window" || ttype == "BuildingPrivlidge"))
             {
                 isBuilding = true;
@@ -1182,7 +1181,7 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            //if (stype == "BaseHelicopter") isHeli = true;
+            //if (stype == "PatrolHelicopter") isHeli = true;
 
             if (ZoneManager && configData.Options.useZoneManager)
             {
@@ -3286,6 +3285,21 @@ namespace Oxide.Plugins
                 {
                     c.Open();
                     using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('helicopter', 'PatrolHelicopter', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 5, 3))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('minicopter', 'Minicopter', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('minicopter', 'AttackHelicopter', 0)", c))
                     {
                         ct.ExecuteNonQuery();
                     }
@@ -5576,7 +5590,8 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_entities VALUES('highwall', 'SimpleBuildingBlock', 0);"
                     + "INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.stone', 0);"
                     + "INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.wood', 0);"
-                    + "INSERT INTO ngpve_entities VALUES('minicopter', 'MiniCopter', 0);"
+                    + "INSERT INTO ngpve_entities VALUES('minicopter', 'Minicopter', 0);"
+                    + "INSERT INTO ngpve_entities VALUES('minicopter', 'AttackHelicopter', 0);"
                     + "INSERT INTO ngpve_entities VALUES('mlrs', 'MLRS', 0);"
                     + "INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0);"
                     + "INSERT INTO ngpve_entities VALUES('npc', 'BradleyAPC', 0);"
@@ -5678,9 +5693,9 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_rules VALUES('helicopter_building', 'Helicopter can damage Building', 1, 0, 'helicopter', 'building');"
                     + "INSERT INTO ngpve_rules VALUES('helicopter_player', 'Helicopter can damage Player', 1, 0, 'helicopter', 'player');"
                     + "INSERT INTO ngpve_rules VALUES('helicopter_helicopter', 'Helicopter can damage Helicopter', 1, 0, 'helicopter', 'helicopter');"
-                    + "INSERT INTO ngpve_rules VALUES('player_minicopter', 'Player can damage MiniCopter', 1, 0, 'player', 'minicopter');"
+                    + "INSERT INTO ngpve_rules VALUES('player_minicopter', 'Player can damage Minicopter', 1, 0, 'player', 'minicopter');"
                     + "INSERT INTO ngpve_rules VALUES('minicopter_building', 'Minicopter can damage building', 1, 0, 'minicopter', 'building');"
-                    + "INSERT INTO ngpve_rules VALUES('minicopter_player', 'MiniCopter can damage Player', 1, 0, 'minicopter', 'player');"
+                    + "INSERT INTO ngpve_rules VALUES('minicopter_player', 'Minicopter can damage Player', 1, 0, 'minicopter', 'player');"
                     + "INSERT INTO ngpve_rules VALUES('mlrs_building', 'MLRS can damage Building', 1, 0, 'mlrs', 'building');"
                     + "INSERT INTO ngpve_rules VALUES('mlrs_npc', 'MLRS can damage NPC', 1, 0, 'mlrs', 'npc');"
                     + "INSERT INTO ngpve_rules VALUES('mlrs_player', 'MLRS can damage Player', 1, 0, 'mlrs', 'player');"
