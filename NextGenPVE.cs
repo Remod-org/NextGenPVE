@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.5.3")]
+    [Info("NextGen PVE", "RFC1920", "1.5.4")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -140,13 +140,13 @@ namespace Oxide.Plugins
 
         private void OnNewSave() => newsave = true;
 
-        private void OnPluginLoaded(Plugin plugin)
-        {
-            if (plugin?.Name == "NREHook" && configData.Options.enableDebugOnErrors)
-            {
-                Puts("NREHook has been installed.  Will enable debugging if NRE is fired.");
-            }
-        }
+        //private void OnPluginLoaded(Plugin plugin)
+        //{
+        //    if (plugin?.Name == "NREHook" && configData.Options.enableDebugOnErrors)
+        //    {
+        //        Puts("NREHook has been installed.  Will enable debugging if NRE is fired.");
+        //    }
+        //}
 
         private void OnUserConnected(IPlayer player) => OnUserDisconnected(player);
 
