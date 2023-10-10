@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.5.4")]
+    [Info("NextGen PVE", "RFC1920", "1.5.5")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -239,6 +239,44 @@ namespace Oxide.Plugins
                 }
             }
             Puts("Done!");
+            CleanupEnts();
+        }
+
+        private void CleanupEnts()
+        {
+            // Find things defined as unknown but also in another category and delete the unknowns.
+            // name is category, type is ObjectName
+            using (SQLiteConnection c = new SQLiteConnection(connStr))
+            {
+                c.Open();
+                List<string> types = new List<string>();
+                List<string> toremove = new List<string>();
+                using (SQLiteCommand us = new SQLiteCommand("SELECT name, type FROM ngpve_entities ORDER BY name", c))
+                using (SQLiteDataReader rentry = us.ExecuteReader())
+                {
+                    while (rentry.Read())
+                    {
+                        string name = rentry.GetString(0);
+                        string type = rentry.GetString(1);
+                        if (types.Contains(type) && name == "unknown")
+                        {
+                            toremove.Add(type);
+                            continue;
+                        }
+                        if (!types.Contains(type)) types.Add(type);
+                    }
+                }
+                if (toremove.Count > 0)
+                {
+                    Puts("Cleaning up entity types...");
+                    string q = $"DELETE FROM ngpve_entities WHERE name='unknown' AND type in ('{string.Join("','", toremove)}')";
+                    using (SQLiteCommand us = new SQLiteCommand(q, c))
+                    {
+                        us.ExecuteNonQuery();
+                    }
+                    Puts("Done!");
+                }
+            }
         }
 
         protected override void LoadDefaultMessages()
@@ -903,14 +941,19 @@ namespace Oxide.Plugins
             string stype = ""; string ttype = "";
             bool canhurt;
             DoLog("\nBEGIN:");
-            //if (hitinfo?.WeaponPrefab != null && hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs")
+
             if (!ReferenceEquals(hitinfo?.WeaponPrefab, null) && hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs")
             {
                 if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.WeaponPrefab?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
                 if (configData.Options.debug) Puts("Calling EvaluateRulesets: MLRS");
                 canhurt = EvaluateRulesets(hitinfo?.WeaponPrefab, entity, hitinfo?.WeaponPrefab?.ShortPrefabName, out stype, out ttype);
             }
-            //else if (hitinfo?.Initiator == null)
+            //else if (!ReferenceEquals(hitinfo?.WeaponPrefab, null) && hitinfo?.WeaponPrefab?.ShortPrefabName == "homingmissile")
+            //{
+            //    if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.WeaponPrefab?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
+            //    if (configData.Options.debug) Puts("Calling EvaluateRulesets: Missile Launcher");
+            //    canhurt = EvaluateRulesets(hitinfo?.WeaponPrefab, entity, hitinfo?.WeaponPrefab?.ShortPrefabName, out stype, out ttype);
+            //}
             else if (ReferenceEquals(hitinfo?.Initiator, null))
             {
                 if (configData.Options.debug) Puts($"attacker prefab: {hitinfo?.Initiator?.ShortPrefabName}, victim prefab: {entity?.ShortPrefabName}");
@@ -1084,6 +1127,7 @@ namespace Oxide.Plugins
                         if (!ReferenceEquals(ploi, null) && ploi is bool && !(bool)ploi)
                         {
                             DoLog("No building block access.");
+
                             ownsItem = false;
                             hasBP = false;
                         }
@@ -5388,6 +5432,12 @@ namespace Oxide.Plugins
                     DoLog($"Clans plugin reports that {playerid} and {ownerid} are clanmates.");
                     return true;
                 }
+                //object isMember = Clans?.Call("IsClanMember", ownerid.ToString(), playerid.ToString());
+                //if (isMember != null)
+                //{
+                //    DoLog($"Clans plugin reports that {playerid} and {ownerid} are clanmates.");
+                //    return (bool)isMember;
+                //}
             }
             if (configData.Options.useTeams)
             {
