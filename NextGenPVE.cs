@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.5.5")]
+    [Info("NextGen PVE", "RFC1920", "1.5.6")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -152,6 +152,8 @@ namespace Oxide.Plugins
 
         private void OnUserDisconnected(IPlayer player)
         {
+            if (player == null) return;
+            if (!player.Id.IsSteamId()) return;
             long lc;
             lastConnected.TryGetValue(player.Id, out lc);
             if (lc > 0)
@@ -5413,6 +5415,7 @@ namespace Oxide.Plugins
 
         private object IsFriend(ulong playerid, ulong ownerid)
         {
+            if (playerid == ownerid) return true;
             if (!configData.Options.HonorRelationships) return null;
             if (configData.Options.useFriends && Friends != null)
             {
