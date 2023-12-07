@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.5.6")]
+    [Info("NextGen PVE", "RFC1920", "1.5.7")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -3352,6 +3352,30 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 5, 7))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("DELETE FROM ngpve_entities WHERE type='LegacyShelter'", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("DELETE FROM ngpve_entities WHERE type='LegacyShelterDoor'", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('building', 'LegacyShelter', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                    using (SQLiteCommand ct = new SQLiteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('building', 'LegacyShelterDoor', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
 
             configData.Version = Version;
@@ -5631,6 +5655,8 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_entities VALUES('balloon', 'HotAirBalloon', 0);"
                     + "INSERT INTO ngpve_entities VALUES('building', 'BuildingBlock', 0);"
                     + "INSERT INTO ngpve_entities VALUES('building', 'BuildingPrivlidge', 0);"
+                    + "INSERT INTO ngpve_entities VALUES('building', 'LegacyShelter', 0);"
+                    + "INSERT INTO ngpve_entities VALUES('building', 'LegacyShelterDoor', 0);"
                     + "INSERT INTO ngpve_entities VALUES('building', 'Door', 0);"
                     + "INSERT INTO ngpve_entities VALUES('fire', 'BaseOven', 0);"
                     + "INSERT INTO ngpve_entities VALUES('fire', 'FireBall', 0);"
