@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.5.8")]
+    [Info("NextGen PVE", "RFC1920", "1.5.9")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -90,10 +90,10 @@ namespace Oxide.Plugins
         #region init
         private void Init()
         {
-            DynamicConfigFile dataFile = Interface.Oxide.DataFileSystem.GetDatafile(Name + "/nextgenpve");
+            DynamicConfigFile dataFile = Interface.GetMod().DataFileSystem.GetDatafile(Name + "/nextgenpve");
             dataFile.Save();
 
-            connStr = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nextgenpve.db;";
+            connStr = $"Data Source={Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nextgenpve.db;";
             AddCovalenceCommand("pveupdate", "CmdUpdateEnts");
             AddCovalenceCommand("pvebackup", "CmdNextGenPVEbackup");
             AddCovalenceCommand("pverule", "CmdNextGenPVEGUI");
@@ -101,6 +101,7 @@ namespace Oxide.Plugins
             AddCovalenceCommand("pvedrop", "CmdNextGenPVEDrop");
             AddCovalenceCommand("pvelog", "CmdNextGenPVElog");
             AddCovalenceCommand("pvedebug", "CmdNextGenPVEDebug");
+            AddCovalenceCommand("pvereload", "CmdNextGenPVEReadCfg");
 
             permission.RegisterPermission(permNextGenPVEUse, this);
             permission.RegisterPermission(permNextGenPVEAdmin, this);
@@ -153,16 +154,23 @@ namespace Oxide.Plugins
         private void OnUserDisconnected(IPlayer player)
         {
             if (player == null) return;
-            if (!player.Id.IsSteamId()) return;
+            try
+            {
+                if (!player.Id.IsSteamId()) return;
+            }
+            catch
+            {
+                return;
+            }
             long lc;
-            lastConnected.TryGetValue(player.Id, out lc);
+            lastConnected.TryGetValue(player?.Id, out lc);
             if (lc > 0)
             {
-                lastConnected[player.Id] = ToEpochTime(DateTime.UtcNow);
+                lastConnected[player?.Id] = ToEpochTime(DateTime.UtcNow);
             }
             else
             {
-                lastConnected.Add(player.Id, ToEpochTime(DateTime.UtcNow));
+                lastConnected.Add(player?.Id, ToEpochTime(DateTime.UtcNow));
             }
             SaveData();
         }
@@ -308,6 +316,7 @@ namespace Oxide.Plugins
                 ["flags"] = "Global Flags",
                 ["defload"] = "Set Defaults",
                 ["deflag"] = "Reset Flags",
+                ["reload"] = "Reload Config",
                 ["default"] = "default",
                 ["drop"] = "RESET DATABASE",
                 ["none"] = "none",
@@ -480,8 +489,8 @@ namespace Oxide.Plugins
 
         private void SaveData()
         {
-            Interface.Oxide.DataFileSystem.WriteObject(Name + "/ngpve_zonemaps", ngpvezonemaps);
-            Interface.Oxide.DataFileSystem.WriteObject(Name + "/ngpve_lastconnected", lastConnected);
+            Interface.GetMod().DataFileSystem.WriteObject(Name + "/ngpve_zonemaps", ngpvezonemaps);
+            Interface.GetMod().DataFileSystem.WriteObject(Name + "/ngpve_lastconnected", lastConnected);
         }
         #endregion
 
@@ -738,6 +747,8 @@ namespace Oxide.Plugins
                 });
             }
         }
+
+        private void ReloadConfig() => LoadConfigVariables(true);
 
         private bool TogglePVE(bool on = true) => enabled = on;
 
@@ -1931,6 +1942,15 @@ namespace Oxide.Plugins
             UpdateEnts();
         }
 
+        [Command("pvereload")]
+        private void CmdNextGenPVEReadCfg(IPlayer player, string command, string[] args)
+        {
+            if (!player.HasPermission(permNextGenPVEAdmin)) { Message(player, "notauthorized"); return; }
+            Message(player, "Re-reading configuration");
+            LoadConfigVariables(true);
+            if (isopen.Contains(ulong.Parse(player.Id))) GUIRuleSets(player.Object as BasePlayer);
+        }
+
         [Command("pvebackup")]
         private void CmdNextGenPVEbackup(IPlayer player, string command, string[] args)
         {
@@ -1944,7 +1964,7 @@ namespace Oxide.Plugins
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                string bkup = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
+                string bkup = $"Data Source={Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
                 //Puts($"Using new db connection '{bkup}'");
                 using (SQLiteConnection d = new SQLiteConnection(bkup))
                 {
@@ -2111,7 +2131,7 @@ namespace Oxide.Plugins
                         {
                             c.Open();
                             //string bkup = $"Data Source={Path.Combine(Interface.Oxide.DataDirectory,Name,backupfile)};";
-                            string bkup = $"Data Source={Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
+                            string bkup = $"Data Source={Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
                             using (SQLiteConnection d = new SQLiteConnection(bkup))
                             {
                                 d.Open();
@@ -2121,21 +2141,21 @@ namespace Oxide.Plugins
                         }
                         break;
                     case "restore":
-                        string[] files = Interface.Oxide.DataFileSystem.GetFiles($"{Interface.Oxide.DataDirectory}/{Name}");
+                        string[] files = Interface.GetMod().DataFileSystem.GetFiles($"{Interface.GetMod().DataDirectory}/{Name}");
                         files = Array.FindAll(files, x => x.EndsWith(".db"));
                         files = Array.FindAll(files, x => !x.EndsWith("nextgenpve.db"));
 
                         if (args.Length > 1)
                         {
                             //string restorefile = Path.Combine(Interface.Oxide.DataDirectory, Name, args[1]);
-                            string restorefile = $"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{args[1]}";
+                            string restorefile = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{args[1]}";
                             if (files.Contains(restorefile) && restorefile.EndsWith(".db"))
                             {
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
                                     //string target = Path.Combine(Interface.Oxide.DataDirectory, Name, "nexgenpve.db");
-                                    string target = $"{Interface.Oxide.DataDirectory}/{Name}/nexgenpve.db";
+                                    string target = $"{Interface.GetMod().DataDirectory}/{Name}/nexgenpve.db";
                                     string restore = $"Data Source={restorefile}";
                                     using (SQLiteConnection d = new SQLiteConnection(restore))
                                     {
@@ -2162,7 +2182,7 @@ namespace Oxide.Plugins
                         else
                         {
                             Message(iplayer, "RestoreFilename");
-                            Message(iplayer, "RestoreAvailable", string.Join("\n\t", files.Select(x => x.Replace($"{Interface.Oxide.DataDirectory}/{Name}/", ""))));
+                            Message(iplayer, "RestoreAvailable", string.Join("\n\t", files.Select(x => x.Replace($"{Interface.GetMod().DataDirectory}/{Name}/", ""))));
                         }
                         break;
                     case "editnpcset":
@@ -3060,9 +3080,10 @@ namespace Oxide.Plugins
         #endregion
 
         #region config
-        private void LoadConfigVariables()
+        private void LoadConfigVariables(bool reload=false)
         {
             configData = Config.ReadObject<ConfigData>();
+            if (reload) return;
 
             if (configData.Version < new VersionNumber(1, 1, 1))
             {
@@ -3520,6 +3541,7 @@ namespace Oxide.Plugins
             configData.Options.UnprotectedBuildingDamage = false;
             configData.Options.HonorRelationships = false;
             configData.Options.BlockScrapHeliFallDamage = false;
+            SaveConfig();
         }
         #endregion
 
@@ -3802,6 +3824,9 @@ namespace Oxide.Plugins
             row++;
             pb = GetButtonPositionF(row, col);
             UI.Button(ref container, NGPVERULELIST, UI.Color("#d82222", 1f), Lang("deflag"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig RESET true");
+            row++;
+            pb = GetButtonPositionF(row, col);
+            UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), Lang("reload"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pvereload");
 
             CuiHelper.AddUi(player, container);
         }
