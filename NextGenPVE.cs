@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.5.9")]
+    [Info("NextGen PVE", "RFC1920", "1.6.0")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -313,6 +313,11 @@ namespace Oxide.Plugins
                 ["scheduling"] = "Schedules should be in the format of 'day(s);starttime;endtime'.  Use * for all days.  Enter 0 to clear.",
                 ["current2chedule"] = "Currently scheduled for day: {0} from {1} until {2}",
                 ["noschedule"] = "Not currently scheduled",
+                ["activelevels"] = "Active Levels",
+                ["ground"] = "Ground",
+                ["tunnel"] = "Tunnel",
+                ["sky"] = "Sky",
+                ["all"] = "All",
                 ["flags"] = "Global Flags",
                 ["defload"] = "Set Defaults",
                 ["deflag"] = "Reset Flags",
@@ -1327,10 +1332,10 @@ namespace Oxide.Plugins
             {
                 case "default":
                     DoLog("Default ruleset query");
-                    mquery = "SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
+                    mquery = "SELECT DISTINCT name, zone, damage, enabled, active_layer FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
                     break;
                 default:
-                    mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup' ORDER BY zone";
+                    mquery = $"SELECT DISTINCT name, zone, damage, enabled, active_layer FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup' ORDER BY zone";
                     //DoLog(mquery);
                     bool zonefound = false;
                     using (SQLiteCommand findIt = new SQLiteCommand(mquery, sqlConnection))
@@ -1344,7 +1349,7 @@ namespace Oxide.Plugins
                     if (!zonefound)
                     {
                         // No rules found matching this zone, revert to default...
-                        mquery = "SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
+                        mquery = "SELECT DISTINCT name, zone, damage, enabled, active_layer FROM ngpve_rulesets WHERE zone='0' OR zone='default'";
                     }
                     break;
             }
@@ -1359,11 +1364,31 @@ namespace Oxide.Plugins
                     bool enabled = !readMe.IsDBNull(3) && readMe.GetInt32(3) == 1;
                     rulesetname = !readMe.IsDBNull(0) ? readMe.GetString(0) : "";
                     damage = !readMe.IsDBNull(2) && readMe.GetInt32(2) == 1;
+                    int layer = !readMe.IsDBNull(4) ? readMe.GetInt32(4) : 0;
                     string rulesetzone = !readMe.IsDBNull(1) ? readMe.GetString(1) : "";
 
                     if (!enabled)
                     {
                         DoLog($"Skipping ruleset {rulesetname}, which is disabled");
+                        continue;
+                    }
+                    // layer 0 == all
+                    // layer 1 == ground
+                    // layer 2 == tunnel
+                    // layer 3 == sky
+                    if (layer == 1 && (target.transform.position.y < configData.Options.tunnelDepth || (configData.Options.skyStartHeight > 0 && target.transform.position.y >= configData.Options.skyStartHeight)))
+                    {
+                        DoLog($"Skipping ruleset {rulesetname}: Target in tunnel or sky and ruleset for ground only.");
+                        continue;
+                    }
+                    else if (layer == 2 && target.transform.position.y >= configData.Options.tunnelDepth)
+                    {
+                        DoLog($"Skipping ruleset {rulesetname}: Target above ground and ruleset for tunnel only.");
+                        continue;
+                    }
+                    else if (layer == 3 && configData.Options.skyStartHeight > 0 && target.transform.position.y < configData.Options.skyStartHeight)
+                    {
+                        DoLog($"Skipping ruleset {rulesetname}: Target grounded or below ground and ruleset for sky only.");
                         continue;
                     }
 
@@ -2300,6 +2325,16 @@ namespace Oxide.Plugins
                                         }
                                     }
                                     RunSchedule(true);
+                                    break;
+                                case "layer":
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
+                                    {
+                                        c.Open();
+                                        using (SQLiteCommand dm = new SQLiteCommand($"UPDATE ngpve_rulesets SET active_layer='{newval}' WHERE name='{rs}'", c))
+                                        {
+                                            dm.ExecuteNonQuery();
+                                        }
+                                    }
                                     break;
                                 case "name":
                                     using (SQLiteConnection c = new SQLiteConnection(connStr))
@@ -3413,7 +3448,23 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 6, 0))
+            {
+                using (SQLiteConnection c = new SQLiteConnection(connStr))
+                {
+                    c.Open();
+                    using (SQLiteCommand ct = new SQLiteCommand("ALTER TABLE ngpve_rulesets ADD active_layer INT (1) DEFAULT 0", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+                configData.Options.skyStartHeight = 50f;
+                configData.Options.tunnelDepth = -70f;
+            }
+
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
+            if (configData.Options.skyStartHeight <= 0) configData.Options.skyStartHeight = 50f;
+            if (configData.Options.tunnelDepth >= 0) configData.Options.tunnelDepth = -70f;
 
             configData.Version = Version;
             SaveConfig(configData);
@@ -3462,7 +3513,9 @@ namespace Oxide.Plugins
                     AutoPopulateUnknownEntitities = true,
                     requirePermissionForPlayerProtection = false, // DO NOT SET UNLESS YOU KNOW WHAT YOU'RE DOING
                     enableDebugOnErrors = false,
-                    autoDebugTime = 10f
+                    autoDebugTime = 10f,
+                    skyStartHeight = 50f,
+                    tunnelDepth = -70f
                 },
                 Version = Version
             };
@@ -3487,6 +3540,8 @@ namespace Oxide.Plugins
             public float autoDebugTime;
             public bool useZoneManager;
             public float protectedDays;
+            public float skyStartHeight;
+            public float tunnelDepth;
             public bool purgeEnabled;
             public string purgeStart;
             public string purgeEnd;
@@ -3842,11 +3897,12 @@ namespace Oxide.Plugins
             string zone = null;
             string zName = null;
             bool invert = false;
+            int layer = 0;
 
             using (SQLiteConnection c = new SQLiteConnection(connStr))
             {
                 c.Open();
-                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT automated, enabled, damage, schedule, zone, invschedule from ngpve_rulesets WHERE name='{rulesetname}'", c))
+                using (SQLiteCommand getrs = new SQLiteCommand($"SELECT DISTINCT automated, enabled, damage, schedule, zone, invschedule, active_layer from ngpve_rulesets WHERE name='{rulesetname}'", c))
                 using (SQLiteDataReader rsread = getrs.ExecuteReader())
                 {
                     while (rsread.Read())
@@ -3859,6 +3915,7 @@ namespace Oxide.Plugins
                         damage = !rsread.IsDBNull(2) && rsread.GetInt32(2) == 1;
                         zone = !rsread.IsDBNull(4) ? rsread.GetString(4) : "";
                         invert = !rsread.IsDBNull(5) && rsread.GetInt32(5) == 1;
+                        layer = !rsread.IsDBNull(6) ? rsread.GetInt32(6) : 0;
                         zName = (string)ZoneManager?.Call("GetZoneName", zone);
                         try
                         {
@@ -3940,6 +3997,69 @@ namespace Oxide.Plugins
             {
                 UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("scheduled"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
             }
+
+            row++;
+            pb = GetButtonPositionP(row, hdrcol);
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("activelevels"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, hdrcol);
+            switch (layer)
+            {
+                case 0:
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#33ff33", 1f), Lang("all"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 0");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("ground"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 1");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("tunnel"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 2");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("sky"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 3");
+                    break;
+                case 1:
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("all"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 0");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#33ff33", 1f), Lang("ground"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 1");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("tunnel"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 2");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("sky"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 3");
+                    break;
+                case 2:
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("all"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 0");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("ground"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 1");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#33ff33", 1f), Lang("tunnel"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 2");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("sky"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 3");
+                    break;
+                case 3:
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("all"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 0");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("ground"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 1");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#333333", 1f), Lang("tunnel"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 2");
+                    row++;
+                    pb = GetButtonPositionP(row, hdrcol);
+                    UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#33ff33", 1f), Lang("sky"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 3");
+                    break;
+            }
+            row++;
+            pb = GetButtonPositionP(row, hdrcol);
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("sky") + ": " + configData.Options.skyStartHeight.ToString() + "m", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            row++;
+            pb = GetButtonPositionP(row, hdrcol);
+            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("tunnel") + ": " + configData.Options.tunnelDepth.ToString() + "m", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             row = 0; hdrcol++;
             pb = GetButtonPositionP(row, hdrcol);
@@ -5866,50 +5986,50 @@ namespace Oxide.Plugins
             {
                 SQLiteCommand cd = new SQLiteCommand("DROP TABLE IF EXISTS ngpve_rulesets", sqlConnection);
                 cd.ExecuteNonQuery();
-                cd = new SQLiteCommand("CREATE TABLE ngpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255), invschedule INT(1) DEFAULT 0)", sqlConnection);
+                cd = new SQLiteCommand("CREATE TABLE ngpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255), invschedule INT(1) DEFAULT 0, active_layer INT(1) DEFAULT 0)", sqlConnection);
                 cd.ExecuteNonQuery();
             }
             using (SQLiteCommand ct = new SQLiteCommand(sqlConnection))
             using (SQLiteTransaction tr = sqlConnection.BeginTransaction())
             {
-                ct.CommandText = "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_player', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'elevator_player', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_animal', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_animal', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_npc', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_balloon', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_helicopter', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_minicopter', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_npc', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_plant', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_animal', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_player', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_resource', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_building', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_resource', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'resource_player', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_npc', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_player', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_animal', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_npc', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'scrapcopter_player', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_animal', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_building', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_helicopter', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_player', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'trap_trap', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_player', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_fire', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_resource', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_building', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_trap', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_vehicle', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'vehicle_vehicle', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'vehicle_trap', null, null, null, null);"
-                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'highwall_player', null, null, null, null);";
+                ct.CommandText = "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_player', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'elevator_player', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_animal', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_animal', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_npc', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_balloon', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_helicopter', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_minicopter', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_npc', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_plant', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_animal', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_player', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_resource', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_building', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_resource', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'resource_player', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npc_npc', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_player', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_animal', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'npcturret_npc', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_scrapcopter', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'scrapcopter_player', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_animal', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_building', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_helicopter', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_npc', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_player', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'trap_trap', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_player', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_fire', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_resource', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'fire_building', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_trap', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_vehicle', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'vehicle_vehicle', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'vehicle_trap', null, null, null, null, null);"
+                    + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'highwall_player', null, null, null, null, null);";
                 ct.ExecuteNonQuery();
                 tr.Commit();
             }

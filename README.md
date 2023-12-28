@@ -7,12 +7,15 @@ Works with DynamicPVP.
 
 Don't let the documentation trouble you.  In most cases all you should need to do is install the plugin.  The rest is optional.
 
+NEW FOR 1.6.0: Rulesets can now be limited to ground, tunnel, or sky.  The default value for existing and default rulesets is ALL locations.
+Two new variables have been added to set where tunnels and sky start, which are both vertical positions only.
+
 NEW FOR 1.2.8: There are 3 new configurations for scheduling a purge based on date and time.  Currently, this must be set in the config file.  Set purgeEnabled to true and useSchedule to true.  Set a start date (and time if desired) and end date (and time).  Note that you must update these values each month for them to be effective.  This can currently only happen once per month.
 
 NEW FOR 1.0.52: Custom rule and entity collection editor - You must set AllowCustomEdit true in the configuration to enable this feature.  To go along with this, new entity types will be detected at wipe and should be available to set into existing or new collections for inclusion in rulesets.
 
 ### Overview
-NextGenPVE is a new plugin and not a fork of TruePVE, et al.  It includes an integrated GUI for ruleset and entity management.
+NextGenPVE is an original plugin and not a fork of any other PVE plugins.  It includes an integrated GUI for ruleset and entity management.  If you didn't get it from my Github, remod.org, or formerly from CF, then it isn't NextGenPVE.
 
 NextGenPVE is organized into entity collections, rules that use those collections, and rulesets that include a set of rules.
 
@@ -85,6 +88,7 @@ The following commands have been implemented:
     - `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
     - `/pvedebug` - Toggles the logging of attacker/target and some other minor information to rcon and oxide logs.  This is saved in the config.
     - `/pverule` - Starts the GUI for editing, creating, and deleting rulesets
+	- `/pvereload` - Re-read the config file
 
 #### Sub-commands for /pverule
 
@@ -136,6 +140,8 @@ The above commands can also be run from console or RCON (without /).
     "debug": false,
     "useZoneManager": false,
     "protectedDays": 0.0,
+    "skyStartHeight": 50.0,
+    "tunnelDepth": -70.0,
     "useSchedule": false,
     "purgeEnabled": false,
     "purgeStart": "12/31/1969 12:00",
@@ -169,8 +175,8 @@ The above commands can also be run from console or RCON (without /).
   },
   "Version": {
     "Major": 1,
-    "Minor": 3,
-    "Patch": 8
+    "Minor": 6,
+    "Patch": 0
   }
 }
 ```
@@ -194,6 +200,8 @@ AllowCustomEdit - Enables the editing of custom rulesets and setting collections
 AllowDropDatabase - Enables pvedrop command and GUI button to reset the database to defaults.  This wipes everything!!!
 
 If protectedDays is set to any value other than zero, player buildings, etc. will only be protected if the user has been online sometime within that number of days.
+
+skyStartHeight and tunnelDepth should be left as-is unless you know what you're doing.  These are set to determine the target object location for rulesets that are fixed to ground, tunnel, or sky vs. the default of ALL.  In any case, tunnelDepth must be < 0 and skyStartHeight must be > 0 or they will be reset to the default values.
 
 "requirePermissionForPlayerProtection" - ONLY set this true if you want a default PVP setting with specific users or groups having protection.  In this case, perhaps the default rule damage would be set to true with no exceptions.  Or, you could make exception for player vs. deployables, etc.  Then, each player getting protection from player on player damage would need to have the nextgenpve.use permission.
 
