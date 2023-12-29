@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.6.1")]
+    [Info("NextGen PVE", "RFC1920", "1.6.2")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -316,7 +316,9 @@ namespace Oxide.Plugins
                 ["activelevels"] = "Active Levels",
                 ["ground"] = "Ground",
                 ["tunnel"] = "Tunnel",
+                ["tunneld"] = "Tunnel Depth",
                 ["sky"] = "Sky",
+                ["skys"] = "Sky Start Height",
                 ["all"] = "All",
                 ["flags"] = "Global Flags",
                 ["defload"] = "Set Defaults",
@@ -2886,6 +2888,14 @@ namespace Oxide.Plugins
                         bool val = GetBoolValue(args[2]);
                         switch (cfg)
                         {
+                            case "sky":
+                                Puts($"Setting skyStartHeight to {args[2]}");
+                                configData.Options.skyStartHeight = float.Parse(args[2]);
+                                break;
+                            case "tunnel":
+                                Puts($"Setting tunnelDepth to {args[2]}");
+                                configData.Options.tunnelDepth = float.Parse(args[2]);
+                                break;
                             case "NPCAutoTurretTargetsPlayers":
                                 configData.Options.NPCAutoTurretTargetsPlayers = val;
                                 break;
@@ -3683,6 +3693,25 @@ namespace Oxide.Plugins
 
             pb = GetButtonPositionP(row, col);
             UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("add"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editruleset add");
+
+            row = 12;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("skys") + ":", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+            col++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#535353", 1f), configData.Options.skyStartHeight.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Input(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), "", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig sky ");
+
+            col++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), Lang("tunneld") + ":", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+
+            col++;
+            pb = GetButtonPositionP(row, col);
+            UI.Label(ref container, NGPVERULELIST, UI.Color("#535353", 1f), configData.Options.tunnelDepth.ToString(), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            UI.Input(ref container, NGPVERULELIST, UI.Color("#ffffff", 1f), "", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig tunnel ");
+
             if (!ZoneManager)
             {
                 row++;
@@ -4054,12 +4083,12 @@ namespace Oxide.Plugins
                     UI.Button(ref container, NGPVEEDITRULESET, UI.Color("#33ff33", 1f), Lang("sky"), 11, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", $"pverule editruleset {rulesetname} layer 3");
                     break;
             }
-            row++;
-            pb = GetButtonPositionP(row, hdrcol);
-            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("sky") + ": " + configData.Options.skyStartHeight.ToString() + "m", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
-            row++;
-            pb = GetButtonPositionP(row, hdrcol);
-            UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("tunnel") + ": " + configData.Options.tunnelDepth.ToString() + "m", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            //row++;
+            //pb = GetButtonPositionP(row, hdrcol);
+            //UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("sky") + ": " + configData.Options.skyStartHeight.ToString() + "m", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
+            //row++;
+            //pb = GetButtonPositionP(row, hdrcol);
+            //UI.Label(ref container, NGPVEEDITRULESET, UI.Color("#ffffff", 1f), Lang("tunnel") + ": " + configData.Options.tunnelDepth.ToString() + "m", 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
             row = 0; hdrcol++;
             pb = GetButtonPositionP(row, hdrcol);
