@@ -84,19 +84,21 @@ There is an integrated GUI for the admin to use to:
 
 The following commands have been implemented:
 
-    - `/pveenable` - Toggles the enabled status of the plugin
-    - `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
-    - `/pvedebug` - Toggles the logging of attacker/target and some other minor information to rcon and oxide logs.  This is saved in the config.
-    - `/pverule` - Starts the GUI for editing, creating, and deleting rulesets
-	- `/pvereload` - Re-read the config file
+  - `/pveenable` - Toggles the enabled status of the plugin
+  - `/pvelog` - Toggles the creation of a log file to monitor ruleset evaluation
+  - `/pvedebug` - Toggles the logging of attacker/target and some other minor information to rcon and oxide logs.  This is saved in the config.
+  - `/pverule` - Starts the GUI for editing, creating, and deleting rulesets
+  - `/pvedrop {gui} - Resets database to plugin defaults, removing any custom rules and entities.  Requires AllowDropDatabase config to be true.
+  - `/pveupdate` - Update new entity types (normally run automatically at wipe, but can be run any time).  Any newly-detected entities will be added to the collection 'unknown'.
+  - `/pvereload` - Re-read the config file
 
 #### Sub-commands for /pverule
 
     - `/pverule list` - List current rulesets
-  - `/pverule dump RULESETNAME` - List some information about a specific ruleset
-  - `/pverule backup` - Same as /pvebackup.
-  - `/pverule restore` - List available backup files from the plugin oxide data folder.
-  - `/pverule restore FILENAME` - Restores the named database backup file to the live database.  The file must end in .db and MUST be from a previous backup created by NextGenPVE.  It must also be located in the plugin oxide data folder.
+    - `/pverule dump RULESETNAME` - List some information about a specific ruleset
+    - `/pverule backup` - Same as /pvebackup.
+    - `/pverule restore` - List available backup files from the plugin oxide data folder.
+    - `/pverule restore FILENAME` - Restores the named database backup file to the live database.  The file must end in .db and MUST be from a previous backup created by NextGenPVE.  It must also be located in the plugin oxide data folder.
 
 #### Additional sub-commands of /pverule called by GUI
 
@@ -121,8 +123,6 @@ The following commands have been implemented:
     - `/pverule editruleset {RULESETNAME} zone delete` - Delete zone from a ruleset.
     - `/pverule editruleset {RULESETNAME} zone {zoneID}` - Set zone for ruleset.
 
-    - `/pvedrop {gui} - Resets database to plugin defaults, removing any custom rules and entities.  Requires AllowDropDatabase config to be true.
-  - `/pveupdate` - Update new entity types (normally run automatically at wipe, but can be run any time).  Any newly-detected entities will be added to the collection 'unknown'. 
 
 The above commands can also be run from console or RCON (without /).
 
