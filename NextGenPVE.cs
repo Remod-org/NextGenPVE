@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.6.2")]
+    [Info("NextGen PVE", "RFC1920", "1.6.3")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -177,23 +177,18 @@ namespace Oxide.Plugins
 
         private object OnServerCommand(ConsoleSystem.Arg arg)
         {
-            BasePlayer player = arg.Player();
-            //if (player == null) return null;
-            if (ReferenceEquals(player, null)) return null;
-
-            if (isopen.Contains(ulong.Parse(player?.UserIDString)) && !arg.cmd.FullName.StartsWith("pve"))
-            {
-                return true;
-            }
-            return null;
+            return OnPlayerCommand(arg.Player(), arg.cmd.FullName, arg.Args);
         }
 
         private object OnPlayerCommand(BasePlayer player, string command, string[] args)
         {
-            if (isopen.Contains(player.userID) && !command.StartsWith("pve"))
+            if (player != null)
             {
-                Puts($"Player tried to run command while gui open: {command}");
-                return true;
+                if (isopen.Contains(player.userID) && !command.StartsWith("pve"))
+                {
+                    Puts($"Player tried to run command while gui open: {command}");
+                    return true;
+                }
             }
             return null;
         }
@@ -5776,7 +5771,8 @@ namespace Oxide.Plugins
                             Command = command + text,
                             FontSize = size,
                             IsPassword = false,
-                            Text = text
+                            Text = text,
+                            NeedsKeyboard = true
                         },
                         new CuiRectTransformComponent { AnchorMin = min, AnchorMax = max },
                         new CuiNeedsCursorComponent()
