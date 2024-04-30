@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.6.4")]
+    [Info("NextGen PVE", "RFC1920", "1.6.5")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -134,6 +134,14 @@ namespace Oxide.Plugins
                     SaveData();
                     UpdateEnts();
                 });
+            }
+
+            const string query = "CREATE INDEX IF NOT EXISTS ruleset_name_idx ON ngpve_rulesets (name, zone, damage, enabled, exception);"
+                + "CREATE INDEX IF NOT EXISTS rules_idx ON ngpve_rules (name, source, target);"
+                + "CREATE INDEX IF NOT EXISTS ent_idx ON ngpve_entities (name, type);REINDEX;";
+            using (SQLiteCommand us = new SQLiteCommand(query, sqlConnection))
+            {
+                us.ExecuteNonQuery();
             }
 
             if (configData.Options.useSchedule) RunSchedule(true);
@@ -1004,7 +1012,7 @@ namespace Oxide.Plugins
                 {
                     ulong sid = hibp.userID;
                     ulong tid = (entity as BasePlayer)?.userID ?? 0;
-                    if (sid > 0 && tid > 0)
+                    if (tid.IsSteamId() && sid > 0 && tid > 0)
                     {
                         if (sid == tid && configData.Options.AllowSuicide)
                         {
@@ -2152,7 +2160,6 @@ namespace Oxide.Plugins
                         using (SQLiteConnection c = new SQLiteConnection(connStr))
                         {
                             c.Open();
-                            //string bkup = $"Data Source={Path.Combine(Interface.Oxide.DataDirectory,Name,backupfile)};";
                             string bkup = $"Data Source={Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile};";
                             using (SQLiteConnection d = new SQLiteConnection(bkup))
                             {
@@ -2169,14 +2176,12 @@ namespace Oxide.Plugins
 
                         if (args.Length > 1)
                         {
-                            //string restorefile = Path.Combine(Interface.Oxide.DataDirectory, Name, args[1]);
                             string restorefile = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{args[1]}";
                             if (files.Contains(restorefile) && restorefile.EndsWith(".db"))
                             {
                                 using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
-                                    //string target = Path.Combine(Interface.Oxide.DataDirectory, Name, "nexgenpve.db");
                                     string target = $"{Interface.GetMod().DataDirectory}/{Name}/nexgenpve.db";
                                     string restore = $"Data Source={restorefile}";
                                     using (SQLiteConnection d = new SQLiteConnection(restore))
