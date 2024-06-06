@@ -35,7 +35,7 @@ using System.Text;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.6.5")]
+    [Info("NextGen PVE", "RFC1920", "1.6.6")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -935,7 +935,7 @@ namespace Oxide.Plugins
             if (configData.Options.debug) Puts("ENTRY:");
             if (configData.Options.debug) Puts("Checking for null fall damage");
             //if (majority == Rust.DamageType.Fall && hitinfo?.Initiator == null)
-            if (majority == Rust.DamageType.Fall && ReferenceEquals(hitinfo?.Initiator, null))
+            if (majority == Rust.DamageType.Fall && hitinfo?.Initiator is null)
             {
                 DoLog($"Null initiator for attack on {entity?.ShortPrefabName} by Fall");
                 if (BlockFallDamage(entity))
@@ -1002,7 +1002,7 @@ namespace Oxide.Plugins
                 BasePlayer hibp = hitinfo?.Initiator as BasePlayer;
                 if (configData.Options.debug) Puts("Checking for god perms");
                 //if (hibp != null && permission.UserHasPermission(hibp.UserIDString, permNextGenPVEGod))
-                if (!ReferenceEquals(hibp, null) && permission.UserHasPermission(hibp.UserIDString, permNextGenPVEGod))
+                if (!ReferenceEquals(hibp, null) && permission.UserHasPermission(hibp?.UserIDString, permNextGenPVEGod))
                 {
                     Puts("Admin almighty!");
                     return null;
@@ -5586,6 +5586,9 @@ namespace Oxide.Plugins
         // Check for player permission if requirePermissionForPlayerProtection is true.
         private bool PlayerIsProtected(BasePlayer player)
         {
+            if (player == null) return false;
+            if (player.IsNpc) return false;
+            if (!player.userID.IsSteamId()) return false;
             return configData.Options.requirePermissionForPlayerProtection && permission.UserHasPermission(player?.UserIDString, permNextGenPVEUse);
         }
 
