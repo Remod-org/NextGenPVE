@@ -1,5 +1,7 @@
 ## NextGenPVE
-Prevent damage to players and objects in a PVE environment
+Prevent damage to players and objects in a Rust PVE environment
+
+This plugin is for use with the game Rust by Facepunch in conjunction with your chosen modding framework (Oxide, et al.)
 
 Uses ZoneManager, Friends, Clans, RustIO, GUIAnnouncements, HumanNPC (from remod.org/github), ZombieHorde
 
