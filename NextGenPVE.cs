@@ -36,7 +36,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.6.8")]
+    [Info("NextGen PVE", "RFC1920", "1.6.9")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -45,6 +45,7 @@ namespace Oxide.Plugins
         private Dictionary<string, NextGenPVEZoneMap> ngpvezonemaps = new Dictionary<string, NextGenPVEZoneMap>();
         private Dictionary<int, NGPVE_Schedule> ngpveschedule = new Dictionary<int, NGPVE_Schedule>();
         private Dictionary<string, long> lastConnected = new Dictionary<string, long>();
+        private Dictionary<ulong, DateTime> playerShotHeli = new Dictionary<ulong, DateTime>();
 
         private const string permNextGenPVEUse = "nextgenpve.use";
         private const string permNextGenPVEAdmin = "nextgenpve.admin";
@@ -69,6 +70,7 @@ namespace Oxide.Plugins
         private bool inPurge;
         private bool purgeLast;
         private Timer scheduleTimer;
+        private Timer heliTimer;
         private const string NGPVERULELIST = "nextgenpve.rulelist";
         private const string NGPVEEDITRULESET = "nextgenpve.ruleseteditor";
         private const string NGPVERULEEDIT = "nextgenpve.ruleeditor";
@@ -146,6 +148,28 @@ namespace Oxide.Plugins
 
             enabled = true;
             if (configData.Options.useSchedule) RunSchedule(true);
+            HeliTimer();
+        }
+
+        private void HeliTimer()
+        {
+            if (!configData.Options.UseHeliTimerToDetectPlayer) return;
+            if (configData.Options.debug) Puts("Checking playerShotHeli");
+            float heliminutes = configData.Options.heliTimerMinutes > 0 ? configData.Options.heliTimerMinutes : 5;
+            heliTimer = timer.Once(60, () => HeliTimer());
+            if (playerShotHeli.Count == 0)
+            {
+                return;
+            }
+            foreach (KeyValuePair<ulong, DateTime> ht in new Dictionary<ulong, DateTime>(playerShotHeli))
+            {
+                if (configData.Options.debug) Puts($"Player {ht.Key} found in playerShotHeli.");
+                if (ht.Value.AddMinutes(heliminutes) >= DateTime.Now)
+                {
+                    playerShotHeli.Remove(ht.Key);
+                    if (configData.Options.debug) Puts($"Player {ht.Key} removed from playerShotHeli list.");
+                }
+            }
         }
 
         private void OnNewSave() => newsave = true;
@@ -206,6 +230,7 @@ namespace Oxide.Plugins
                 if (names.Contains(objname)) continue; // Saves 20-30 seconds of processing time.
                 string category = objname.Contains("npc", CompareOptions.OrdinalIgnoreCase) ? "npc" : "unknown";
                 names.Add(objname);
+                //Puts($"Checking {objname}");
 
                 using (SqliteConnection c = new SqliteConnection(connStr))
                 {
@@ -401,6 +426,7 @@ namespace Oxide.Plugins
                 ["TrapsIgnorePlayers"] = "Traps Ignore Players",
                 ["HonorBuildingPrivilege"] = "Honor Building Privilege",
                 ["UnprotectedBuildingDamage"] = "Unprotected Building Damage",
+                ["UseHeliTimerToDetectPlayer"] = "Use Heli Timer To Detect Player",
                 ["TwigDamage"] = "Twig Damage",
                 ["HonorRelationships"] = "Honor Relationships",
                 ["backup"] = "Backup Database",
@@ -431,6 +457,7 @@ namespace Oxide.Plugins
             }
 
             scheduleTimer?.Destroy();
+            heliTimer?.Destroy();
             sqlConnection?.Close();
         }
 
@@ -605,9 +632,9 @@ namespace Oxide.Plugins
 
         private object CanBeTargeted(BasePlayer target, FlameTurret turret)
         {
+            if (!enabled) return null;
             if (target is null) return null;
             if (turret is null) return null;
-            if (!enabled) return null;
 
             try
             {
@@ -632,9 +659,9 @@ namespace Oxide.Plugins
 
         private object CanBeTargeted(BasePlayer target, HelicopterTurret turret)
         {
+            if (!enabled) return null;
             if (target is null) return null;
             if (turret is null) return null;
-            if (!enabled) return null;
 
             if (!configData.Options.HeliTurretTargetsPlayers) return false;
             return null;
@@ -642,9 +669,9 @@ namespace Oxide.Plugins
 
         private object CanBeTargeted(BasePlayer target, AutoTurret turret)
         {
+            if (!enabled) return null;
             if (target is null) return null;
             if (turret is null) return null;
-            if (!enabled) return null;
 
             try
             {
@@ -669,9 +696,9 @@ namespace Oxide.Plugins
 
         private object CanBeTargeted(BasePlayer target, NPCAutoTurret turret)
         {
+            if (!enabled) return null;
             if (target is null) return null;
             if (turret is null) return null;
-            if (!enabled) return null;
 
             try
             {
@@ -1098,6 +1125,15 @@ namespace Oxide.Plugins
             // Also check for special cases since Humanoids/HumanNPC contain a BasePlayer object
             if (stype == "BasePlayer")
             {
+                if (ttype == "PatrolHelicopter" && configData.Options.UseHeliTimerToDetectPlayer)
+                {
+                    ulong pid = (source as BasePlayer).userID;
+                    if (pid.IsSteamId())
+                    {
+                        DoLog($"Player {pid} added to playerShotHeli list.");
+                        playerShotHeli[pid] = DateTime.Now;
+                    }
+                }
                 if (Humanoids && IsHumanoid(source)) stype = "Humanoid";
                 if (HumanNPC && IsHumanNPC(source)) stype = "HumanNPC";
                 if (stype == "BasePlayer")
@@ -1209,14 +1245,20 @@ namespace Oxide.Plugins
                                 object ploi = PlayerOwnsItem(heliTarget?.ply, target);
                                 if (ploi is object && ploi is bool && !(bool)ploi)
                                 {
-                                    DoLog("Yes they own that building block!");
-                                    hasBP = true;
+                                    if (playerShotHeli.ContainsKey(heliTarget.ply.userID))
+                                    {
+                                        DoLog("Yes they own that building block!");
+                                        hasBP = true;
+                                    }
                                 }
                                 object pltc = PlayerOwnsTC(heliTarget?.ply, target as BuildingPrivlidge);
                                 if (pltc is object && pltc is bool && !(bool)pltc)
                                 {
-                                    DoLog("Yes they own that building!");
-                                    hasBP = true;
+                                    if (playerShotHeli.ContainsKey(heliTarget.ply.userID))
+                                    {
+                                        DoLog("Yes they own that building!");
+                                        hasBP = true;
+                                    }
                                 }
                             }
                         }
@@ -2912,6 +2954,18 @@ namespace Oxide.Plugins
                             case "BlockScrapHeliFallDamage":
                                 configData.Options.BlockScrapHeliFallDamage = val;
                                 break;
+                            case "UseHeliTimerToDetectPlayer":
+                                configData.Options.UseHeliTimerToDetectPlayer = val;
+                                if (val)
+                                {
+                                    HeliTimer();
+                                }
+                                else
+                                {
+                                    heliTimer?.Destroy();
+                                }
+
+                                break;
                             case "RESET":
                                 LoadDefaultFlags();
                                 //LoadConfigVariables();
@@ -3441,6 +3495,19 @@ namespace Oxide.Plugins
                 configData.Options.tunnelDepth = -70f;
             }
 
+            if (configData.Version < new VersionNumber(1, 6, 9))
+            {
+                configData.Options.UseHeliTimerToDetectPlayer = true;
+                using (SqliteConnection c = new SqliteConnection(connStr))
+                {
+                    c.Open();
+                    using (SqliteCommand ct = new SqliteCommand("INSERT OR REPLACE INTO ngpve_entities VALUES('vehicle', 'Bike', 0)", c))
+                    {
+                        ct.ExecuteNonQuery();
+                    }
+                }
+            }
+
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
             if (configData.Options.skyStartHeight <= 0) configData.Options.skyStartHeight = 50f;
             if (configData.Options.tunnelDepth >= 0) configData.Options.tunnelDepth = -70f;
@@ -3464,6 +3531,7 @@ namespace Oxide.Plugins
                 {
                     useZoneManager = false,
                     protectedDays = 0f,
+                    heliTimerMinutes = 5,
                     useSchedule = false,
                     useGUIAnnouncements = false,
                     useMessageBroadcast = false,
@@ -3487,8 +3555,9 @@ namespace Oxide.Plugins
                     UnprotectedBuildingDamage = false,
                     UnprotectedDeployableDamage = false,
                     TwigDamage = false,
-                    HonorRelationships = false,
+                    HonorRelationships = true,
                     BlockScrapHeliFallDamage = false,
+                    UseHeliTimerToDetectPlayer = true,
                     AutoPopulateUnknownEntitities = true,
                     requirePermissionForPlayerProtection = false, // DO NOT SET UNLESS YOU KNOW WHAT YOU'RE DOING
                     enableDebugOnErrors = false,
@@ -3521,6 +3590,7 @@ namespace Oxide.Plugins
             public float protectedDays;
             public float skyStartHeight;
             public float tunnelDepth;
+            public float heliTimerMinutes;
             public bool purgeEnabled;
             public string purgeStart;
             public string purgeEnd;
@@ -3556,6 +3626,7 @@ namespace Oxide.Plugins
             public bool TwigDamage;
             public bool HonorRelationships;
             public bool BlockScrapHeliFallDamage;
+            public bool UseHeliTimerToDetectPlayer;
         }
 
         protected void LoadDefaultFlags()
@@ -3573,8 +3644,10 @@ namespace Oxide.Plugins
             configData.Options.TrapsIgnorePlayers = false;
             configData.Options.HonorBuildingPrivilege = true;
             configData.Options.UnprotectedBuildingDamage = false;
-            configData.Options.HonorRelationships = false;
+            configData.Options.HonorRelationships = true;
             configData.Options.BlockScrapHeliFallDamage = false;
+            configData.Options.UseHeliTimerToDetectPlayer = true;
+
             SaveConfig();
         }
         #endregion
@@ -3873,7 +3946,16 @@ namespace Oxide.Plugins
             {
                 UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("AllowSuicide"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig AllowSuicide true");
             }
-
+            row++;
+            pb = GetButtonPositionF(row, col);
+            if (configData.Options.UseHeliTimerToDetectPlayer)
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), Lang("UseHeliTimerToDetectPlayer"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig UseHeliTimerToDetectPlayer false");
+            }
+            else
+            {
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#555555", 1f), Lang("UseHeliTimerToDetectPlayer"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig UseHeliTimerToDetectPlayer true");
+            }
             row++;
             pb = GetButtonPositionF(row, col);
             UI.Button(ref container, NGPVERULELIST, UI.Color("#d82222", 1f), Lang("deflag"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}", "pverule editconfig RESET true");
@@ -5874,6 +5956,7 @@ namespace Oxide.Plugins
                     + "INSERT INTO ngpve_entities VALUES('vehicle', 'Sedan', 0);"
                     + "INSERT INTO ngpve_entities VALUES('vehicle', 'ModularVehicle', 0);"
                     + "INSERT INTO ngpve_entities VALUES('vehicle', 'BaseCar', 0);"
+                    + "INSERT INTO ngpve_entities VALUES('vehicle', 'Bike', 0);"
                     + "INSERT INTO ngpve_entities VALUES('vehicle', 'TrainEngine', 0);"
                     + "INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleEngine', 0);"
                     + "INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleStorage', 0);"

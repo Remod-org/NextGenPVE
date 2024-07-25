@@ -1,11 +1,13 @@
 ## NextGenPVE
 Prevent damage to players and objects in a PVE environment
 
-Uses ZoneManager, Friends, Clans, RustIO, GUIAnnouncements, HumanNPC (from remod.org), ZombieHorde
+Uses ZoneManager, Friends, Clans, RustIO, GUIAnnouncements, HumanNPC (from remod.org/github), ZombieHorde
 
 Works with DynamicPVP.
 
 Don't let the documentation trouble you.  In most cases all you should need to do is install the plugin.  The rest is optional.
+
+NEW FOR 1.6.9: A new optional helitimer can be used to aid in detecting who is targeting the heli to help prevent damage to other's buildings.  This is enabled by default and can be changed from the GUI.
 
 NEW FOR 1.6.0: Rulesets can now be limited to ground, tunnel, or sky.  The default value for existing and default rulesets is ALL locations.
 Two new variables have been added to set where tunnels and sky start, which are both vertical positions only.
@@ -69,7 +71,7 @@ There is an integrated GUI for the admin to use to:
  6. Add exclusions for the rules
  7. Set the zone enabling activation of a ruleset
  8. Set a schedule for ruleset enable/disable (WORK IN PROGRESS)
- 9. Edit custom rules (WORK IN PROGRESS)
+ 9. Edit custom rules
 10. Set global flags.
 11. Create and edit custom rules.
 12. Edit collections for ALL known entity types.
@@ -142,6 +144,7 @@ The above commands can also be run from console or RCON (without /).
     "protectedDays": 0.0,
     "skyStartHeight": 50.0,
     "tunnelDepth": -70.0,
+	"heliTimerMinutes": 5,
     "useSchedule": false,
     "purgeEnabled": false,
     "purgeStart": "12/31/1969 12:00",
@@ -167,7 +170,8 @@ The above commands can also be run from console or RCON (without /).
     "UnprotectedBuildingDamage": false,
     "UnprotectedDeployableDamage": false,
     "TwigDamage": false,
-    "HonorRelationships": false,
+    "HonorRelationships": true,
+	"UseHeliTimerToDetectPlayer": true,
     "BlockScrapHeliFallDamage": false,
     "requirePermissionForPlayerProtection": false,
     "enableDebugOnErrors": false,
@@ -176,7 +180,7 @@ The above commands can also be run from console or RCON (without /).
   "Version": {
     "Major": 1,
     "Minor": 6,
-    "Patch": 0
+    "Patch": 9
   }
 }
 ```
@@ -189,7 +193,7 @@ If a player is trying to damage a building, "HonorBuildingPrivilege" determines 
 
 "UnprotectedDamage" determines whether or not an unprotected building (no TC) can be damaged by players other than the builder.
 
-"HonorRelationships" determines whether or not a player can damage their friend's structures or deployables.
+"HonorRelationships" determines whether or not a player can damage their friend's structures or deployables. This should typically be enabled.
 
 "BlockScrapHeliFallDamage" handles the special case where players flying the scrapheli into other players causes fall damage, killing the target player.
 
@@ -254,7 +258,8 @@ Example 3:
 ### DynamicPVP
 
  For use with DynamicPVP, you may need to create a new ruleset.  Change the name to match the one that DynamicPVP uses - default name is "exclude".  Set that ruleset's default damage to true.  After that, reload DynamicPVP.  Your ruleset should look like this:
- spacer.png
+
+![](https://i.imgur.com/GE8o0Q6.png)
 
  Note that the Zone is set to lookup.  You can click on "lookup" to see that the zone lookup for this is set to one or more DynamicPVP-created zones.  You should be able to adjust the rules for the zone to block things that would otherwise be allowed.
 
