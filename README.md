@@ -144,7 +144,7 @@ The above commands can also be run from console or RCON (without /).
     "protectedDays": 0.0,
     "skyStartHeight": 50.0,
     "tunnelDepth": -70.0,
-	"heliTimerMinutes": 5,
+    "heliTimerMinutes": 5,
     "useSchedule": false,
     "purgeEnabled": false,
     "purgeStart": "12/31/1969 12:00",
@@ -171,7 +171,7 @@ The above commands can also be run from console or RCON (without /).
     "UnprotectedDeployableDamage": false,
     "TwigDamage": false,
     "HonorRelationships": true,
-	"UseHeliTimerToDetectPlayer": true,
+    "UseHeliTimerToDetectPlayer": true,
     "BlockScrapHeliFallDamage": false,
     "requirePermissionForPlayerProtection": false,
     "enableDebugOnErrors": false,
@@ -266,22 +266,28 @@ Example 3:
 
 ### Competing Ruleset Examples
 
-    You create a clone of the default ruleset and enable it.
-    You now have two rulesets with identical functionality including default damage, allow rules, and exclusions.
-    Both rulesets would apply to the entire map by default.
-    If you edit the allow rules or exclusions, the rulesets will compete.  The clone will likely override the default.
-    Without a schedule or zone to determine which one is active at any given time or place, either may match for all PVE activity.
-     FIX 1: Apply schedules to both rulesets
-     FIX 2: Set a zone to the cloned ruleset (requires ZoneManager) to isolate it.
+    - You create a clone of the default ruleset and enable it.
+    - You now have two rulesets with identical functionality including default damage,
+    allow rules, and exclusions.
+    - Both rulesets would apply to the entire map by default.
+    - If you edit the allow rules or exclusions, the rulesets will compete.  The clone will likely override the default.
+    - Without a schedule or zone to determine which one is active at any given time or place, either may
+      match for all PVE activity.
+      FIX 1: Apply schedules to both rulesets
+      FIX 2: Set a zone to the cloned ruleset (requires ZoneManager) to isolate it.
 
-    You create a new ruleset with default damage TRUE and enable it
-    You now have a ruleset which competes with the default ruleset.
-    This new ruleset has default damage TRUE, which overrides the default ruleset.
-    The entire map is now PVP.
+    - You create a new ruleset with default damage TRUE and enable it
+    - You now have a ruleset which competes with the default ruleset.
+    - This new ruleset has default damage TRUE, which overrides the default ruleset.
+    - The entire map is now PVP.
      FIX 1: Add a zone to the new ruleset (requires ZoneManager) to isolate it to a specific area of the map.
-     FIX 2: Add a schedule to the new ruleset.  A better option for scheduled PVP might be to add a schedule to the default ruleset and delete your secondary ruleset.
+     FIX 2: Add a schedule to the new ruleset.  A better option for scheduled PVP might be to add a schedule
+       to the default ruleset and delete your secondary ruleset.
 
-    In short, any rulesets you copy or create should be isolated by time and/or area using schedules or zones.  If your intention is to simply modify what types of damage is to be allowed globally, delete the extra rulesets and edit the default ruleset instead. 
+    In short, any rulesets you copy or create should be isolated by time and/or area using schedules or zones.
+    If your intention is to simply modify what types of damage is to be allowed globally, delete the extra
+    rulesets and edit the default ruleset instead. 
 
 ### TODO
 1. Performance tweaks as needed.
+
