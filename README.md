@@ -182,8 +182,8 @@ The above commands can also be run from console or RCON (without /).
   },
   "Version": {
     "Major": 1,
-    "Minor": 6,
-    "Patch": 9
+    "Minor": 7,
+    "Patch": 0
   }
 }
 ```
