@@ -20,6 +20,7 @@
 #endregion License (GPL v2)
 // Reference: Mono.Data.Sqlite
 using Mono.Data.Sqlite;
+using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Configuration;
 using Oxide.Core.Libraries.Covalence;
@@ -36,7 +37,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.6.9")]
+    [Info("NextGen PVE", "RFC1920", "1.7.0")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -71,6 +72,7 @@ namespace Oxide.Plugins
         private bool purgeLast;
         private Timer scheduleTimer;
         private Timer heliTimer;
+        private const string NGPVEPLUGINS = "nextgenpve.plugins";
         private const string NGPVERULELIST = "nextgenpve.rulelist";
         private const string NGPVEEDITRULESET = "nextgenpve.ruleseteditor";
         private const string NGPVERULEEDIT = "nextgenpve.ruleeditor";
@@ -97,7 +99,8 @@ namespace Oxide.Plugins
             dataFile.Save();
 
             LoadConfigVariables();
-            connStr = $"Data Source={Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nextgenpve.db;";
+            //connStr = $"Data Source={Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}nextgenpve.db;";
+            connStr = "Data Source=" + Path.Combine(Interface.GetMod().DataDirectory, Name, "nextgenpve.db");
             AddCovalenceCommand("pveupdate", "CmdUpdateEnts");
             AddCovalenceCommand("pvebackup", "CmdNextGenPVEbackup");
             AddCovalenceCommand("pverule", "CmdNextGenPVEGUI");
@@ -582,16 +585,31 @@ namespace Oxide.Plugins
 
                 try
                 {
-                    object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { player, sam });
-                    if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                    if (configData.Options.CanEntityBeTargeted?.Count > 0)
                     {
-                        if ((bool)extCanEntityBeTargeted)
+                        foreach (string plugin in configData.Options.CanEntityBeTargeted)
                         {
-                            return null; // allow
+                            Plugin plug = plugins.Find(plugin);
+                            object extCanEntityBeTargeted = plug?.Call("CanEntityBeTargeted");
+                            if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                            {
+                                return null;
+                            }
                         }
-                        else
+                    }
+                    else
+                    {
+                        object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { player, sam });
+                        if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
                         {
-                            return true; // block
+                            if ((bool)extCanEntityBeTargeted)
+                            {
+                                return null; // allow
+                            }
+                            else
+                            {
+                                return true; // block
+                            }
                         }
                     }
                 }
@@ -611,10 +629,25 @@ namespace Oxide.Plugins
 
             try
             {
-                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
-                if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                if (configData.Options.CanEntityBeTargeted?.Count > 0)
                 {
-                    return null;
+                    foreach (string plugin in configData.Options.CanEntityBeTargeted)
+                    {
+                        Plugin plug = plugins.Find(plugin);
+                        object extCanEntityBeTargeted = plug?.Call("CanEntityBeTargeted");
+                        if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                        {
+                            return null;
+                        }
+                    }
+                }
+                else
+                {
+                    object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
+                    if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                    {
+                        return null;
+                    }
                 }
             }
             catch { }
@@ -638,10 +671,25 @@ namespace Oxide.Plugins
 
             try
             {
-                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
-                if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                if (configData.Options.CanEntityBeTargeted?.Count > 0)
                 {
-                    return null;
+                    foreach (string plugin in configData.Options.CanEntityBeTargeted)
+                    {
+                        Plugin plug = plugins.Find(plugin);
+                        object extCanEntityBeTargeted = plug?.Call("CanEntityBeTargeted");
+                        if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                        {
+                            return null;
+                        }
+                    }
+                }
+                else
+                {
+                    object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
+                    if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                    {
+                        return null;
+                    }
                 }
             }
             catch { }
@@ -675,10 +723,25 @@ namespace Oxide.Plugins
 
             try
             {
-                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
-                if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                if (configData.Options.CanEntityBeTargeted?.Count > 0)
                 {
-                    return null;
+                    foreach (string plugin in configData.Options.CanEntityBeTargeted)
+                    {
+                        Plugin plug = plugins.Find(plugin);
+                        object extCanEntityBeTargeted = plug?.Call("CanEntityBeTargeted");
+                        if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                        {
+                            return null;
+                        }
+                    }
+                }
+                else
+                {
+                    object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
+                    if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                    {
+                        return null;
+                    }
                 }
             }
             catch { }
@@ -702,10 +765,25 @@ namespace Oxide.Plugins
 
             try
             {
-                object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
-                if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                if (configData.Options.CanEntityBeTargeted?.Count > 0)
                 {
-                    return null;
+                    foreach (string plugin in configData.Options.CanEntityBeTargeted)
+                    {
+                        Plugin plug = plugins.Find(plugin);
+                        object extCanEntityBeTargeted = plug?.Call("CanEntityBeTargeted");
+                        if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                        {
+                            return null;
+                        }
+                    }
+                }
+                else
+                {
+                    object extCanEntityBeTargeted = Interface.CallHook("CanEntityBeTargeted", new object[] { target, turret });
+                    if (extCanEntityBeTargeted is object && extCanEntityBeTargeted is bool && (bool)extCanEntityBeTargeted)
+                    {
+                        return null;
+                    }
                 }
             }
             catch { }
@@ -2010,7 +2088,8 @@ namespace Oxide.Plugins
             using (SqliteConnection c = new SqliteConnection(connStr))
             {
                 c.Open();
-                string file = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile}";
+                //string file = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile}";
+                string file = Path.Combine(Interface.GetMod().DataDirectory, Name, backupfile);
                 SqliteConnection.CreateFile(file);
                 SqliteCommand cmd = c.CreateCommand();
                 cmd.CommandText = $"VACUUM INTO '{file}'";
@@ -2175,7 +2254,8 @@ namespace Oxide.Plugins
                         using (SqliteConnection c = new SqliteConnection(connStr))
                         {
                             c.Open();
-                            string file = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile}";
+                            //string file = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile}";
+                            string file = Path.Combine(Interface.GetMod().DataDirectory, Name, backupfile);
                             SqliteConnection.CreateFile(file);
                             SqliteCommand cmd = c.CreateCommand();
                             cmd.CommandText = $"VACUUM INTO '{file}'";
@@ -2184,13 +2264,15 @@ namespace Oxide.Plugins
                         }
                         break;
                     case "restore":
-                        string[] files = Interface.GetMod().DataFileSystem.GetFiles($"{Interface.GetMod().DataDirectory}/{Name}");
+                        //string[] files = Interface.GetMod().DataFileSystem.GetFiles($"{Interface.GetMod().DataDirectory}/{Name}");
+                        string[] files = Interface.GetMod().DataFileSystem.GetFiles(Path.Combine(Interface.GetMod().DataDirectory, Name));
                         files = Array.FindAll(files, x => x.EndsWith(".db"));
                         files = Array.FindAll(files, x => !x.EndsWith("nextgenpve.db"));
 
                         if (args.Length > 1)
                         {
-                            string restorefile = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{args[1]}";
+                            //string restorefile = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{args[1]}";
+                            string restorefile = Path.Combine(Interface.GetMod().DataDirectory, Name, args[1]);
                             if (files.Contains(restorefile) && restorefile.EndsWith(".db"))
                             {
                                 string target = $"{Interface.GetMod().DataDirectory}/{Name}/nexgenpve.db";
@@ -3508,6 +3590,11 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (configData.Version < new VersionNumber(1, 7, 0))
+            {
+                configData.Options.CanEntityBeTargeted = new List<string>();
+            }
+
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
             if (configData.Options.skyStartHeight <= 0) configData.Options.skyStartHeight = 50f;
             if (configData.Options.tunnelDepth >= 0) configData.Options.tunnelDepth = -70f;
@@ -3563,7 +3650,8 @@ namespace Oxide.Plugins
                     enableDebugOnErrors = false,
                     autoDebugTime = 10f,
                     skyStartHeight = 50f,
-                    tunnelDepth = -70f
+                    tunnelDepth = -70f,
+                    CanEntityBeTargeted = new List<string>()
                 },
                 Version = Version
             };
@@ -3627,6 +3715,9 @@ namespace Oxide.Plugins
             public bool HonorRelationships;
             public bool BlockScrapHeliFallDamage;
             public bool UseHeliTimerToDetectPlayer;
+
+            [JsonProperty(PropertyName = "Plugins allowed to override targeting")]
+            public List<string> CanEntityBeTargeted;
         }
 
         protected void LoadDefaultFlags()
@@ -3666,6 +3757,33 @@ namespace Oxide.Plugins
             if (configData.Options.debug) Puts($"Clearing isopen for {uid}");
 
             isopen.Remove(uid);
+        }
+
+        private void GUIPlugins(BasePlayer player, string text)
+        {
+            System.Reflection.PropertyInfo toCheck = typeof(Options).GetProperty(text);
+            if (toCheck == null)
+            {
+                DoLog($"No such property {text}");
+                return;
+            }
+
+            IsOpen(player.userID, true);
+            CuiHelper.DestroyUi(player, NGPVEPLUGINS);
+
+            CuiElementContainer container = UI.Container(NGPVEPLUGINS, UI.Color("2b2b2b", 1f), "0.05 0.05", "0.95 0.95", true, "Overlay");
+            List<string> matchingPlugins = FindPluginsWithMatchingText(text);
+            List<string> myOption = (List<string>)toCheck.GetValue(text, null);
+
+            foreach (string plug in matchingPlugins)
+            {
+                if (myOption.Contains(plug))
+                {
+                    UI.Button(ref container, NGPVERULELIST, UI.Color("#55d840", 1f), plug, 12, "0.8 0.95", "0.92 0.98", "pveenable gui");
+                    continue;
+                }
+                UI.Button(ref container, NGPVERULELIST, UI.Color("#d85540", 1f), plug, 12, "0.8 0.95", "0.92 0.98", "pveenable gui");
+            }
         }
 
         private void GUIRuleSets(BasePlayer player)
@@ -5302,6 +5420,31 @@ namespace Oxide.Plugins
         #endregion
 
         #region Specialized_checks
+        private List<string> FindPluginsWithMatchingText(string text)
+        {
+            Plugin[] plugs = plugins.GetAll();
+            string pd = Interface.Oxide.PluginDirectory;
+            string line;
+            List<string> foundPlug = new List<string>();
+            bool found = false;
+            foreach (Plugin plug in plugs)
+            {
+                using (StreamReader st = new StreamReader(Path.Combine(pd, plug.Filename)))
+                {
+                    DoLog($"Checking plugin {plug.Name} for {text}");
+                    while ((line = st.ReadLine()) != null)
+                    {
+                        if (line.Contains(text))
+                        {
+                            found = true;
+                            foundPlug.Add(plug.Name);
+                        }
+                    }
+                }
+            }
+            return found ? foundPlug : null;
+        }
+
         private string[] GetEntityZones(BaseEntity entity)
         {
             if (entity is null) return new string[] { };
@@ -5437,6 +5580,8 @@ namespace Oxide.Plugins
                 return true;
             }
             if (player is null || privilege is null) return null;
+            ulong userid = player.userID;
+            ulong ownerid = privilege.OwnerID;
 
             DoLog($"Does player {player?.displayName} own {privilege?.ShortPrefabName}?");
             BuildingManager.Building building = privilege.GetBuilding();
@@ -5460,19 +5605,19 @@ namespace Oxide.Plugins
 
                 foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                 {
-                    if (privilege.OwnerID == player.userID)
+                    if (ownerid == userid)
                     {
                         DoLog("Player owns BuildingBlock", 2);
                         return true;
                     }
-                    else if (player.userID == auth)
+                    else if (userid == auth)
                     {
                         DoLog("Player has privilege on BuildingBlock", 2);
                         return true;
                     }
                     else
                     {
-                        object isfr = IsFriend(auth, privilege.OwnerID);
+                        object isfr = IsFriend(auth, ownerid);
                         if (isfr != null && isfr is bool && (bool)isfr)
                         {
                             DoLog("Player is friends with owner of BuildingBlock", 2);
@@ -5492,7 +5637,10 @@ namespace Oxide.Plugins
             if (player is null) return null;
             if (entity is null) return null;
 
-            if (entity.OwnerID == 0) return true;
+            ulong ownerid = entity.OwnerID;
+            if (ownerid == 0) return true;
+            ulong userid = player.userID;
+
             DoLog($"Does player {player?.displayName} own {entity?.ShortPrefabName}?");
             if (entity is BuildingBlock)
             {
@@ -5505,7 +5653,7 @@ namespace Oxide.Plugins
                         return true;
                     }
                 }
-                if (configData.Options.protectedDays > 0 && entity.OwnerID > 0)
+                if (configData.Options.protectedDays > 0)// && ownerid > 0)
                 {
                     // Check days since last owner connection
                     //if (PlayerDatabase != null && configData.Options.usePlayerDatabase)
@@ -5514,7 +5662,7 @@ namespace Oxide.Plugins
                     //}
                     //else
                     //{
-                    lastConnected.TryGetValue(entity.OwnerID.ToString(), out long lc);
+                    lastConnected.TryGetValue(ownerid.ToString(), out long lc);
                     if (lc > 0)
                     {
                         long now = ToEpochTime(DateTime.UtcNow);
@@ -5545,19 +5693,19 @@ namespace Oxide.Plugins
                     }
                     foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                     {
-                        if (entity?.OwnerID == player?.userID)
+                        if (ownerid == userid)
                         {
                             DoLog("Player owns BuildingBlock", 2);
                             return true;
                         }
-                        else if (player?.userID == auth)
+                        else if (userid == auth)
                         {
                             DoLog("Player has privilege on BuildingBlock", 2);
                             return true;
                         }
                         else
                         {
-                            object isfr = IsFriend(auth, entity.OwnerID);
+                            object isfr = IsFriend(auth, ownerid);
                             if (isfr != null && isfr is bool && (bool)isfr)
                             {
                                 DoLog("Player is friends with owner of BuildingBlock", 2);
@@ -5576,7 +5724,7 @@ namespace Oxide.Plugins
                 {
                     foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
                     {
-                        if (player?.userID == auth)
+                        if (userid == auth)
                         {
                             DoLog($"Player has privilege on {entity?.ShortPrefabName}", 2);
                             hasbp = true;
@@ -5584,7 +5732,7 @@ namespace Oxide.Plugins
                         }
                         else
                         {
-                            object isfr = IsFriend(auth, entity.OwnerID);
+                            object isfr = IsFriend(auth, ownerid);
                             if (isfr != null && isfr is bool && (bool)isfr)
                             {
                                 DoLog($"Player is friends with owner of {entity?.ShortPrefabName}", 2);
@@ -5601,13 +5749,13 @@ namespace Oxide.Plugins
                     return true;
                 }
 
-                object isFriend = IsFriend(player.userID, entity.OwnerID);
+                object isFriend = IsFriend(userid, ownerid);
                 if (isFriend != null && isFriend is bool && (bool)isFriend && hasbp)
                 {
                     DoLog("Player is friends with owner of entity and has building privilege.", 2);
                     return true;
                 }
-                else if (entity?.OwnerID == player?.userID && hasbp)
+                else if (ownerid == userid && hasbp)
                 {
                     DoLog("Player owns item and has building privilege.", 2);
                     return true;
@@ -5616,7 +5764,7 @@ namespace Oxide.Plugins
                 {
                     DoLog("Player is friends with owner of entity but is blocked by building privilege", 2);
                 }
-                else if (entity?.OwnerID == player?.userID && !hasbp)
+                else if (ownerid == userid && !hasbp)
                 {
                     DoLog("Player owns item but is blocked by building privilege", 2);
                 }

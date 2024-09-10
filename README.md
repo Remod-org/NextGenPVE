@@ -177,7 +177,8 @@ The above commands can also be run from console or RCON (without /).
     "BlockScrapHeliFallDamage": false,
     "requirePermissionForPlayerProtection": false,
     "enableDebugOnErrors": false,
-    "autoDebugTime": 0.0
+    "autoDebugTime": 0.0,
+    "Plugins allowed to override targeting": []
   },
   "Version": {
     "Major": 1,
@@ -212,6 +213,26 @@ skyStartHeight and tunnelDepth should be left as-is unless you know what you're 
 "requirePermissionForPlayerProtection" - ONLY set this true if you want a default PVP setting with specific users or groups having protection.  In this case, perhaps the default rule damage would be set to true with no exceptions.  Or, you could make exception for player vs. deployables, etc.  Then, each player getting protection from player on player damage would need to have the nextgenpve.use permission.
 
 "enableDebugOnErrors" - ONLY set this to automatically enable full debug for "autoDebugTime" seconds whenever we experience an NRE.  This requires the plugin NREHook, available at https://github.com/Remod-org/NREHook.  This is mostly useful only when diagnosing a problem with the developer.  As noted elsewhere, full debug (pvelog and pvedebug) can negatively impact performance.
+
+
+"Plugins allowed to override targeting": - OPTIONAL list of plugins allowed to override targeting for turrets, etc.  This refers to a non-standard but widely used hook called CanEntityBeTargeted, used by plugins such as DangerousTreasures, RaidableBases, Convoy, ArmoredTrain, WaterEvent, etc.  When NextGenPVE configuration is supposed to block targeting for shotgun traps, AutoTurret, etc., it can be overridden by these plugins.  If you set this to a list of plugins, it will only call out to them:
+
+```json
+    "Plugins allowed to override targeting": [
+      "DangerousTreasures",
+      "Convoy"
+    ]
+```
+
+If left blank ( [] ), the default behavior is to call out to every plugin that has this function.  This has been the default for NextGenPVE for several years.
+
+If you want NO overrides at all, you can set this to a single, invalid plugin name, e.g.
+
+```json
+    "Plugins allowed to override targeting": [
+      "DoNotCallMeAtAll"
+    ]
+```
 
 ### Details
 
