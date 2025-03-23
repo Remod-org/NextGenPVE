@@ -37,7 +37,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.7.2")]
+    [Info("NextGen PVE", "RFC1920", "1.7.3")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -434,7 +434,7 @@ namespace Oxide.Plugins
         {
             foreach (BasePlayer player in BasePlayer.activePlayerList)
             {
-                if (!permission.UserHasPermission(player?.UserIDString, permNextGenPVEAdmin)) continue;
+                //if (!permission.UserHasPermission(player?.UserIDString, permNextGenPVEAdmin)) continue;
                 CuiHelper.DestroyUi(player, NGPVERULELIST);
                 CuiHelper.DestroyUi(player, NGPVERULEEDIT);
                 CuiHelper.DestroyUi(player, NGPVEVALUEEDIT);
@@ -3060,307 +3060,6 @@ namespace Oxide.Plugins
             configData = Config.ReadObject<ConfigData>();
             if (reload) return;
 
-            if (configData.Version < new VersionNumber(1, 1, 1))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using (SqliteCommand ct = new("INSERT INTO ngpve_rules VALUES('player_fire', 'Player can damage Fire', 1, 0, 'player', 'fire')", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_fire', null, null, null, null)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 1, 3))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using SqliteCommand ct = new("INSERT INTO ngpve_entities VALUES('npc', 'FrankensteinPet', 0)", c);
-                ct.ExecuteNonQuery();
-            }
-
-            if (configData.Version < new VersionNumber(1, 1, 4))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='MLRS'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('mlrs', 'MLRS', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT INTO ngpve_rules VALUES('mlrs_building', 'MLRS can damage Building', 1, 0, 'mlrs', 'building')", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT INTO ngpve_rules VALUES('mlrs_npc', 'MLRS can damage NPC', 1, 0, 'mlrs', 'npc')", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT INTO ngpve_rules VALUES('mlrs_player', 'MLRS can damage Player', 1, 0, 'mlrs', 'player')", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT INTO ngpve_rules VALUES('mlrs_resource', 'MLRS can damage Resource', 1, 0, 'mlrs', 'resource')", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 1, 8))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using SqliteCommand ct = new("INSERT INTO ngpve_entities VALUES('npc', 'ZombieNPC', 0)", c);
-                ct.ExecuteNonQuery();
-            }
-            if (configData.Version < new VersionNumber(1, 1, 9))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='NPCPlayerApex'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='NPCPlayer'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 2, 0))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-
-                using SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='ScientistNPCNew'", c);
-                ct.ExecuteNonQuery();
-            }
-
-            if (configData.Version < new VersionNumber(1, 2, 2))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='NpcRaider'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('npc', 'NpcRaider', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('resource', 'AdventCalendar', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 2, 3))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='ScarecrowNPC'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('npc', 'ScarecrowNPC', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 2, 4))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='Polarbear'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('animal', 'Polarbear', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 2, 8))
-            {
-                configData.Options.purgeEnabled = false;
-                configData.Options.purgeStartMessage = "";
-                configData.Options.purgeEndMessage = "";
-                configData.Options.purgeStart = "12/31/1969 12:01";
-                configData.Options.purgeEnd = "1/1/1970 14:20";
-            }
-
-            if (configData.Version < new VersionNumber(1, 3, 1))
-            {
-                configData.Options.autoCalcPurge = false;
-                configData.Options.autoCalcPurgeDays = 2;
-            }
-            if (configData.Version < new VersionNumber(1, 3, 4))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using SqliteCommand ct = new("INSERT INTO ngpve_entities VALUES('npc', 'GingerbreadNPC', 0)", c);
-                ct.ExecuteNonQuery();
-            }
-            if (configData.Version < new VersionNumber(1, 3, 6))
-            {
-                configData.Options.AutoPopulateUnknownEntitities = true;
-            }
-
-            if (configData.Version < new VersionNumber(1, 3, 7))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using (SqliteCommand ct = new("INSERT INTO ngpve_rules VALUES('helicopter_helicopter', 'Helicopter can damage Helicopter', 1, 0, 'helicopter', 'helicopter')", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'helicopter_helicopter', null, null, null, null)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 4, 0))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='IndustrialStorageAdaptor'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('resource', 'IndustrialStorageAdaptor', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 4, 6))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('grenade', 'MolotovCocktail', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('grenade', 'GrenadeWeapon', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new(sqlConnection))
-                using (SqliteTransaction tr = sqlConnection.BeginTransaction())
-                {
-                    ct.CommandText = "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_animal', 'Grenade can damage animal', 1, 0, 'grenade', 'animal');"
-                        + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_building', 'Grenade can damage building', 1, 0, 'grenade', 'building');"
-                        + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_minicopter', 'Grenade can damage minicopter', 1, 0, 'grenade', 'minicopter');"
-                        + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_npc', 'Grenade can damage NPC', 1, 0, 'grenade', 'npc');"
-                        + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_player', 'Grenade can damage player', 1, 0, 'grenade', 'player');"
-                        + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_plant', 'Grenade can damage plant', 1, 0, 'grenade', 'plant');"
-                        + "INSERT OR REPLACE INTO ngpve_rules VALUES('grenade_trap', 'Grenade can damage trap', 1, 0, 'grenade', 'trap');";
-                    ct.ExecuteNonQuery();
-                    tr.Commit();
-                }
-            }
-            if (configData.Version < new VersionNumber(1, 4, 7))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using SqliteCommand ct = new("INSERT INTO ngpve_rules VALUES('trap_animal', 'Traps can damage Animals', 1, 0, 'trap', 'animal')", c);
-                ct.ExecuteNonQuery();
-            }
-            if (configData.Version < new VersionNumber(1, 5, 2))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('helicopter', 'PatrolHelicopter', 0)", c);
-                ct.ExecuteNonQuery();
-            }
-            if (configData.Version < new VersionNumber(1, 5, 3))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('minicopter', 'Minicopter', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('minicopter', 'AttackHelicopter', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 5, 7))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='LegacyShelter'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='LegacyShelterDoor'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('building', 'LegacyShelter', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('building', 'LegacyShelterDoor', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 5, 8))
-            {
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='Pinata'", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('resource', 'Pinata', 0)", c))
-                {
-                    ct.ExecuteNonQuery();
-                }
-            }
-
-            if (configData.Version < new VersionNumber(1, 6, 0))
-            {
-                using (SqliteConnection c = new(connStr))
-                {
-                    c.Open();
-                    using SqliteCommand ct = new("ALTER TABLE ngpve_rulesets ADD active_layer INT (1) DEFAULT 0", c);
-                    ct.ExecuteNonQuery();
-                }
-                configData.Options.skyStartHeight = 50f;
-                configData.Options.tunnelDepth = -70f;
-            }
-
-            if (configData.Version < new VersionNumber(1, 6, 9))
-            {
-                configData.Options.UseHeliTimerToDetectPlayer = true;
-                using SqliteConnection c = new(connStr);
-                c.Open();
-                using SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('vehicle', 'Bike', 0)", c);
-                ct.ExecuteNonQuery();
-            }
-
             if (configData.Version < new VersionNumber(1, 7, 0))
             {
                 configData.Options.CanEntityBeTargeted = new List<string>();
@@ -3392,6 +3091,20 @@ namespace Oxide.Plugins
                     ct.ExecuteNonQuery();
                 }
                 using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('building', 'ChickenCoop', 0)", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 7, 3))
+            {
+                using SqliteConnection c = new(connStr);
+                c.Open();
+
+                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='Wolf2'", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SqliteCommand ct = new("INSERT INTO ngpve_entities VALUES('animal', 'Wolf2', 0)", c))
                 {
                     ct.ExecuteNonQuery();
                 }
@@ -5796,6 +5509,7 @@ namespace Oxide.Plugins
                 + "INSERT INTO ngpve_entities VALUES('animal', 'SimpleShark', 0);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Stag', 0);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Wolf', 0);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Wolf2', 0);"
                 + "INSERT INTO ngpve_entities VALUES('balloon', 'HotAirBalloon', 0);"
                 + "INSERT INTO ngpve_entities VALUES('building', 'BuildingBlock', 0);"
                 + "INSERT INTO ngpve_entities VALUES('building', 'BuildingPrivlidge', 0);"
