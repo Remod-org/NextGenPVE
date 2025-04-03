@@ -1,7 +1,7 @@
 #region License (GPL v2)
 /*
     NextGenPVE - Prevent damage to players and objects in a Rust PVE environment
-    Copyright (c) 2020-2024 RFC1920 <desolationoutpostpve@gmail.com>
+    Copyright (c) 2020-2025 RFC1920 <desolationoutpostpve@gmail.com>
 
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License v2.0.
@@ -18,8 +18,7 @@
     Optionally you can also view the license at <http://www.gnu.org/licenses/>.
 */
 #endregion License (GPL v2)
-// Reference: Mono.Data.Sqlite
-using Mono.Data.Sqlite;
+// Reference: System.Data.SQLite
 using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Configuration;
@@ -28,6 +27,7 @@ using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
 using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -37,7 +37,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.7.3")]
+    [Info("NextGen PVE", "RFC1920", "1.7.4")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -52,7 +52,7 @@ namespace Oxide.Plugins
         private const string permNextGenPVEAdmin = "nextgenpve.admin";
         private const string permNextGenPVEGod = "nextgenpve.god";
         private ConfigData configData;
-        private SqliteConnection sqlConnection;
+        private SQLiteConnection sqlConnection;
         private string connStr;
         private bool newsave;
 
@@ -117,7 +117,7 @@ namespace Oxide.Plugins
         private void OnServerInitialized()
         {
             ConsoleSystem.Run(ConsoleSystem.Option.Server.FromServer(), "server.pve 0");
-            sqlConnection = new SqliteConnection(connStr);
+            sqlConnection = new SQLiteConnection(connStr);
             sqlConnection.Open();
 
             if (NREHook && configData.Options.enableDebugOnErrors)
@@ -143,7 +143,7 @@ namespace Oxide.Plugins
             const string query = "CREATE INDEX IF NOT EXISTS ruleset_name_idx ON ngpve_rulesets (name, zone, damage, enabled, exception);"
                 + "CREATE INDEX IF NOT EXISTS rules_idx ON ngpve_rules (name, source, target);"
                 + "CREATE INDEX IF NOT EXISTS ent_idx ON ngpve_entities (name, type);REINDEX;";
-            using (SqliteCommand us = new(query, sqlConnection))
+            using (SQLiteCommand us = new(query, sqlConnection))
             {
                 us.ExecuteNonQuery();
             }
@@ -234,10 +234,10 @@ namespace Oxide.Plugins
                 names.Add(objname);
                 //Puts($"Checking {objname}");
 
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
                 string query = $"INSERT INTO ngpve_entities (name, type) SELECT '{category}', '{objname}' WHERE NOT EXISTS (SELECT * FROM ngpve_entities WHERE type='{objname}')";
-                using SqliteCommand us = new(query, c);
+                using SQLiteCommand us = new(query, c);
                 if (us.ExecuteNonQuery() > 0)
                 {
                     Puts($"Added {objname} as {category}.");
@@ -252,10 +252,10 @@ namespace Oxide.Plugins
                 string category = objname.Contains("npc", CompareOptions.OrdinalIgnoreCase) ? "npc" : "grenade";
                 names.Add(objname);
 
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
                 string query = $"INSERT INTO ngpve_entities (name, type) SELECT '{category}', '{objname}' WHERE NOT EXISTS (SELECT * FROM ngpve_entities WHERE type='{objname}')";
-                using SqliteCommand us = new(query, c);
+                using SQLiteCommand us = new(query, c);
                 if (us.ExecuteNonQuery() > 0)
                 {
                     Puts($"Added {objname} as {category}.");
@@ -269,12 +269,12 @@ namespace Oxide.Plugins
         {
             // Find things defined as unknown but also in another category and delete the unknowns.
             // name is category, type is ObjectName
-            using SqliteConnection c = new(connStr);
+            using SQLiteConnection c = new(connStr);
             c.Open();
             List<string> types = new();
             List<string> toremove = new();
-            using (SqliteCommand us = new("SELECT name, type FROM ngpve_entities ORDER BY name", c))
-            using (SqliteDataReader rentry = us.ExecuteReader())
+            using (SQLiteCommand us = new("SELECT name, type FROM ngpve_entities ORDER BY name", c))
+            using (SQLiteDataReader rentry = us.ExecuteReader())
             {
                 while (rentry.Read())
                 {
@@ -292,7 +292,7 @@ namespace Oxide.Plugins
             {
                 Puts("Cleaning up entity types...");
                 string q = $"DELETE FROM ngpve_entities WHERE name='unknown' AND type in ('{string.Join("','", toremove)}')";
-                using (SqliteCommand us = new(q, c))
+                using (SQLiteCommand us = new(q, c))
                 {
                     us.ExecuteNonQuery();
                 }
@@ -456,41 +456,41 @@ namespace Oxide.Plugins
         private void LoadData()
         {
             bool found = false;
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand r = new("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_entities'", c);
-                using SqliteDataReader rentry = r.ExecuteReader();
+                using SQLiteCommand r = new("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_entities'", c);
+                using SQLiteDataReader rentry = r.ExecuteReader();
                 while (rentry.Read()) { found = true; }
             }
             if (!found) LoadDefaultEntities();
 
             found = false;
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand r = new("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_rules'", c);
-                using SqliteDataReader rentry = r.ExecuteReader();
+                using SQLiteCommand r = new("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_rules'", c);
+                using SQLiteDataReader rentry = r.ExecuteReader();
                 while (rentry.Read()) { found = true; }
             }
             if (!found) LoadDefaultRules();
 
             found = false;
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand r = new("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_rulesets'", c);
-                using SqliteDataReader rentry = r.ExecuteReader();
+                using SQLiteCommand r = new("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_rulesets'", c);
+                using SQLiteDataReader rentry = r.ExecuteReader();
                 while (rentry.Read()) { found = true; }
             }
             if (!found) LoadDefaultRuleset();
 
             found = false;
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand r = new("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_targetexclusion'", c);
-                using SqliteDataReader rentry = r.ExecuteReader();
+                using SQLiteCommand r = new("SELECT name FROM sqlite_master WHERE type='table' AND name='ngpve_targetexclusion'", c);
+                using SQLiteDataReader rentry = r.ExecuteReader();
                 while (rentry.Read()) { found = true; }
             }
             if (!found) LoadNPCTgtExclDb();
@@ -802,6 +802,7 @@ namespace Oxide.Plugins
         // We also check for the presence of this plugin to avoid callouts from other plugins.
         private void OnFoundNRE(string plugin, string unused)
         {
+            Puts("BOGUS");
             if (NREHook && plugin == Name && configData.Options.enableDebugOnErrors && !onfoundnre)
             {
                 if (configData.Options.autoDebugTime == 0) return;
@@ -829,9 +830,9 @@ namespace Oxide.Plugins
         {
             string enable = "0";
             if (on) enable = "1";
-            using SqliteConnection c = new(connStr);
+            using SQLiteConnection c = new(connStr);
             c.Open();
-            using SqliteCommand cmd = new($"UPDATE ngpve_rulesets SET enabled='{enable}", c);
+            using SQLiteCommand cmd = new($"UPDATE ngpve_rulesets SET enabled='{enable}", c);
             cmd.ExecuteNonQuery();
             return true;
         }
@@ -864,8 +865,8 @@ namespace Oxide.Plugins
                     mquery = $"SELECT DISTINCT name, zone, damage, enabled FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup'";
                     break;
             }
-            using SqliteCommand findIt = new(mquery, sqlConnection);
-            using SqliteDataReader readMe = findIt.ExecuteReader();
+            using SQLiteCommand findIt = new(mquery, sqlConnection);
+            using SQLiteDataReader readMe = findIt.ExecuteReader();
             while (readMe.Read())
             {
                 if (!readMe.IsDBNull(2) && !readMe.IsDBNull(3) && readMe.GetInt32(2) == 1 && readMe.GetInt32(3) == 0)
@@ -889,11 +890,11 @@ namespace Oxide.Plugins
 
             DoLog($"AddOrUpdateMapping called for ruleset: {rulesetname}, zone: {zoneId}", 0);
             bool foundRuleset = false;
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand au = new($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
-                using SqliteDataReader ar = au.ExecuteReader();
+                using SQLiteCommand au = new($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
+                using SQLiteDataReader ar = au.ExecuteReader();
                 while (ar.Read())
                 {
                     foundRuleset = true;
@@ -914,21 +915,21 @@ namespace Oxide.Plugins
                 ngpvezonemaps[rulesetname].map = CleanupZones(ngpvezonemaps[rulesetname].map);
                 SaveData();
 
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
                 DoLog($"UPDATE ngpve_rulesets SET zone='lookup' WHERE rulesetname='{rulesetname}'");
-                using SqliteCommand cmd = new($"UPDATE ngpve_rulesets SET zone='lookup' WHERE name='{rulesetname}'", c);
+                using SQLiteCommand cmd = new($"UPDATE ngpve_rulesets SET zone='lookup' WHERE name='{rulesetname}'", c);
                 cmd.ExecuteNonQuery();
                 return true;
             }
             else
             {
-                using (SqliteConnection c = new(connStr))
+                using (SQLiteConnection c = new(connStr))
                 {
                     c.Open();
                     DoLog($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0, 0)");
 
-                    using SqliteCommand cmd = new($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0, 0)", c);
+                    using SQLiteCommand cmd = new($"INSERT INTO ngpve_rulesets VALUES('{rulesetname}', '1', '1', '1', 'lookup', '', '', '', '', 0, 0)", c);
                     cmd.ExecuteNonQuery();
                 }
                 if (ngpvezonemaps.ContainsKey(rulesetname)) ngpvezonemaps.Remove(rulesetname);
@@ -1340,8 +1341,8 @@ namespace Oxide.Plugins
             string src = ""; string tgt = "";
             bool foundSrcInDB = false;
             bool foundTgtInDB = false;
-            using (SqliteCommand findIt = new($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection))
-            using (SqliteDataReader readMe = findIt.ExecuteReader())
+            using (SQLiteCommand findIt = new($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{stype}'", sqlConnection))
+            using (SQLiteDataReader readMe = findIt.ExecuteReader())
             {
                 while (readMe.Read())
                 {
@@ -1360,13 +1361,13 @@ namespace Oxide.Plugins
                 NextTick(() =>
                 {
                     Puts($"Adding discovered source type {newtype} as unknown");
-                    using SqliteCommand ct = new($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0)", sqlConnection);
+                    using SQLiteCommand ct = new($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0)", sqlConnection);
                     ct.ExecuteNonQuery();
                 });
             }
 
-            using (SqliteCommand findIt = new($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'", sqlConnection))
-            using (SqliteDataReader readMe = findIt.ExecuteReader())
+            using (SQLiteCommand findIt = new($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{ttype}'", sqlConnection))
+            using (SQLiteDataReader readMe = findIt.ExecuteReader())
             {
                 while (readMe.Read())
                 {
@@ -1385,7 +1386,7 @@ namespace Oxide.Plugins
                 NextTick(() =>
                 {
                     Puts($"Adding discovered target type {newtype} as unknown");
-                    using SqliteCommand ct = new($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0)", sqlConnection);
+                    using SQLiteCommand ct = new($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0)", sqlConnection);
                     ct.ExecuteNonQuery();
                 });
             }
@@ -1401,8 +1402,8 @@ namespace Oxide.Plugins
                     mquery = $"SELECT DISTINCT name, zone, damage, enabled, active_layer FROM ngpve_rulesets WHERE zone='{zone}' OR zone='lookup' ORDER BY zone";
                     //DoLog(mquery);
                     bool zonefound = false;
-                    using (SqliteCommand findIt = new(mquery, sqlConnection))
-                    using (SqliteDataReader readMe = findIt.ExecuteReader())
+                    using (SQLiteCommand findIt = new(mquery, sqlConnection))
+                    using (SQLiteDataReader readMe = findIt.ExecuteReader())
                     {
                         while (readMe.Read())
                         {
@@ -1416,8 +1417,8 @@ namespace Oxide.Plugins
                     }
                     break;
             }
-            using (SqliteCommand findIt = new(mquery, sqlConnection))
-            using (SqliteDataReader readMe = findIt.ExecuteReader())
+            using (SQLiteCommand findIt = new(mquery, sqlConnection))
+            using (SQLiteDataReader readMe = findIt.ExecuteReader())
             {
                 DoLog("QUERY START");
                 while (readMe.Read())
@@ -1486,8 +1487,8 @@ namespace Oxide.Plugins
                     if (src.Length > 0 && tgt.Length > 0)
                     {
                         DoLog($"Found {stype} attacking {ttype}.  Checking ruleset '{rulesetname}', zone '{rulesetzone}'");
-                        using (SqliteCommand rq = new($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' AND exception='{src}_{tgt}'", sqlConnection))
-                        using (SqliteDataReader entry = rq.ExecuteReader())
+                        using (SQLiteCommand rq = new($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' AND exception='{src}_{tgt}'", sqlConnection))
+                        using (SQLiteDataReader entry = rq.ExecuteReader())
                         {
                             //Puts(rq.CommandText); // VERY NOISY
                             while (entry.Read())
@@ -1705,10 +1706,10 @@ namespace Oxide.Plugins
             {
                 ngpveschedule = new Dictionary<int, NGPVE_Schedule>();
                 int i = 0;
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
-                using SqliteCommand use = new("SELECT DISTINCT name, schedule, invschedule FROM ngpve_rulesets WHERE schedule != '0' AND invschedule IS NOT NULL", c);
-                using SqliteDataReader schedule = use.ExecuteReader();
+                using SQLiteCommand use = new("SELECT DISTINCT name, schedule, invschedule FROM ngpve_rulesets WHERE schedule != '0' AND invschedule IS NOT NULL", c);
+                using SQLiteDataReader schedule = use.ExecuteReader();
                 while (schedule.Read())
                 {
                     string nm = !schedule.IsDBNull(0) ? schedule.GetString(0) : "";
@@ -1792,11 +1793,11 @@ namespace Oxide.Plugins
                 {
                     case false:
                         DoLog($"Disabling ruleset {doenable.Key} (inverted={ngpveinvert[doenable.Key]})", 3);
-                        using (SqliteConnection c = new(connStr))
+                        using (SQLiteConnection c = new(connStr))
                         {
                             c.Open();
-                            using (SqliteCommand info = new($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{doenable.Key}'", c))
-                            using (SqliteDataReader crs = info.ExecuteReader())
+                            using (SQLiteCommand info = new($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{doenable.Key}'", c))
+                            using (SQLiteDataReader crs = info.ExecuteReader())
                             {
                                 while (crs.Read())
                                 {
@@ -1804,17 +1805,17 @@ namespace Oxide.Plugins
                                     //if (was != "0") MessageToAll("pvedisabled", doenable.Key);
                                 }
                             }
-                            using SqliteCommand cmd = new($"UPDATE ngpve_rulesets SET enabled='0' WHERE name='{doenable.Key}'", c);
+                            using SQLiteCommand cmd = new($"UPDATE ngpve_rulesets SET enabled='0' WHERE name='{doenable.Key}'", c);
                             cmd.ExecuteNonQuery();
                         }
                         break;
                     case true:
                         DoLog($"Enabling ruleset {doenable.Key} (inverted={ngpveinvert[doenable.Key]})", 3);
-                        using (SqliteConnection c = new(connStr))
+                        using (SQLiteConnection c = new(connStr))
                         {
                             c.Open();
-                            using (SqliteCommand info = new($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{doenable.Key}'", c))
-                            using (SqliteDataReader crs = info.ExecuteReader())
+                            using (SQLiteCommand info = new($"SELECT DISTINCT enabled FROM ngpve_rulesets WHERE name='{doenable.Key}'", c))
+                            using (SQLiteDataReader crs = info.ExecuteReader())
                             {
                                 while (crs.Read())
                                 {
@@ -1822,7 +1823,7 @@ namespace Oxide.Plugins
                                     //if (was != "1") MessageToAll("pveenabled", doenable.Key);
                                 }
                             }
-                            using SqliteCommand cmd = new($"UPDATE ngpve_rulesets SET enabled='1' WHERE name='{doenable.Key}'", c);
+                            using SQLiteCommand cmd = new($"UPDATE ngpve_rulesets SET enabled='1' WHERE name='{doenable.Key}'", c);
                             cmd.ExecuteNonQuery();
                         }
                         break;
@@ -1835,13 +1836,13 @@ namespace Oxide.Plugins
         public string EditScheduleHourMinute(string rs, string newval, string tomod)
         {
             string sc = "";
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
                 string query = $"SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rs}' AND schedule != '0'";
                 Puts(query);
-                using SqliteCommand use = new(query, c);
-                using SqliteDataReader schedule = use.ExecuteReader();
+                using SQLiteCommand use = new(query, c);
+                using SQLiteDataReader schedule = use.ExecuteReader();
                 while (schedule.Read())
                 {
                     sc = !schedule.IsDBNull(0) ? schedule.GetString(0) : "";
@@ -1876,11 +1877,11 @@ namespace Oxide.Plugins
         public string EditScheduleDay(string rs, string newval)
         {
             string sc = "";
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand use = new($"SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rs}' AND schedule != '0'", c);
-                using SqliteDataReader schedule = use.ExecuteReader();
+                using SQLiteCommand use = new($"SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rs}' AND schedule != '0'", c);
+                using SQLiteDataReader schedule = use.ExecuteReader();
                 while (schedule.Read())
                 {
                     sc = !schedule.IsDBNull(0) ? schedule.GetString(0) : "";
@@ -1944,9 +1945,9 @@ namespace Oxide.Plugins
                 parsed.startminute = "0";
                 parsed.endhour = "23";
                 parsed.endminute = "59";
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
-                using SqliteCommand us = new($"UPDATE ngpve_rulesets SET schedule='*;0:00;23:59' WHERE name='{rs}'", c);
+                using SQLiteCommand us = new($"UPDATE ngpve_rulesets SET schedule='*;0:00;23:59' WHERE name='{rs}'", c);
                 us.ExecuteNonQuery();
                 return true;
             }
@@ -2032,13 +2033,13 @@ namespace Oxide.Plugins
             {
                 backupfile = args[1] + ".db";
             }
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
                 //string file = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile}";
                 string file = Path.Combine(Interface.GetMod().DataDirectory, Name, backupfile);
-                SqliteConnection.CreateFile(file);
-                SqliteCommand cmd = c.CreateCommand();
+                SQLiteConnection.CreateFile(file);
+                SQLiteCommand cmd = c.CreateCommand();
                 cmd.CommandText = $"VACUUM INTO '{file}'";
                 cmd.ExecuteNonQuery();
                 Message(player, "BackupDone", file);
@@ -2114,11 +2115,11 @@ namespace Oxide.Plugins
                 {
                     case "list":
                         LMessage(iplayer, "nextgenpverulesets");
-                        using (SqliteConnection c = new SqliteConnection(connStr))
+                        using (SQLiteConnection c = new SQLiteConnection(connStr))
                         {
                             c.Open();
-                            using SqliteCommand checkrs = new SqliteCommand("SELECT DISTINCT name, enabled, zone FROM ngpve_rulesets", c);
-                            using SqliteDataReader crs = checkrs.ExecuteReader();
+                            using SQLiteCommand checkrs = new SQLiteCommand("SELECT DISTINCT name, enabled, zone FROM ngpve_rulesets", c);
+                            using SQLiteDataReader crs = checkrs.ExecuteReader();
                             while (crs.Read())
                             {
                                 string rs = !crs.IsDBNull(0) ? crs.GetString(0) : "";
@@ -2141,11 +2142,11 @@ namespace Oxide.Plugins
                             string rules = "";
                             List<string> src = new List<string>();
                             List<string> tgt = new List<string>();
-                            using (SqliteConnection c = new SqliteConnection(connStr))
+                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                             {
                                 c.Open();
-                                using SqliteCommand d = new SqliteCommand($"SELECT DISTINCT * FROM ngpve_rulesets WHERE name='{args[1]}'", c);
-                                using SqliteDataReader re = d.ExecuteReader();
+                                using SQLiteCommand d = new SQLiteCommand($"SELECT DISTINCT * FROM ngpve_rulesets WHERE name='{args[1]}'", c);
+                                using SQLiteDataReader re = d.ExecuteReader();
                                 while (re.Read())
                                 {
                                     //(name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1,
@@ -2194,13 +2195,13 @@ namespace Oxide.Plugins
                         {
                             backupfile = args[1] + ".db";
                         }
-                        using (SqliteConnection c = new SqliteConnection(connStr))
+                        using (SQLiteConnection c = new SQLiteConnection(connStr))
                         {
                             c.Open();
                             //string file = $"{Interface.GetMod().DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}{backupfile}";
                             string file = Path.Combine(Interface.GetMod().DataDirectory, Name, backupfile);
-                            SqliteConnection.CreateFile(file);
-                            SqliteCommand cmd = c.CreateCommand();
+                            SQLiteConnection.CreateFile(file);
+                            SQLiteCommand cmd = c.CreateCommand();
                             cmd.CommandText = $"VACUUM INTO '{file}'";
                             cmd.ExecuteNonQuery();
                             Message(iplayer, "BackupDone", file);
@@ -2220,13 +2221,13 @@ namespace Oxide.Plugins
                             {
                                 string target = Regex.Escape(Path.Combine(Interface.GetMod().DataDirectory, Name, "nexgenpve.db"));
                                 string restore = $"Data Source={Regex.Escape(restorefile)}";
-                                using SqliteConnection d = new SqliteConnection(restore);
+                                using SQLiteConnection d = new SQLiteConnection(restore);
                                 try
                                 {
                                     d.Open();
-                                    SqliteCommand cmd = d.CreateCommand();
+                                    SQLiteCommand cmd = d.CreateCommand();
                                     cmd.CommandText = $"VACUUM INTO '{target}'";
-                                    sqlConnection = new SqliteConnection(connStr);
+                                    sqlConnection = new SQLiteConnection(connStr);
                                     sqlConnection.Open();
                                     Message(iplayer, "RestoreDone", restorefile);
                                 }
@@ -2248,19 +2249,19 @@ namespace Oxide.Plugins
                         break;
                     case "editnpcset":
                         bool bval = GetBoolValue(args[2]);
-                        using (SqliteConnection c = new SqliteConnection(connStr))
+                        using (SQLiteConnection c = new SQLiteConnection(connStr))
                         {
                             c.Open();
                             switch (bval)
                             {
                                 case true:
-                                    using (SqliteCommand en = new SqliteCommand($"INSERT OR REPLACE INTO ngpve_targetexclusion VALUES('{args[1]}', 1)", c))
+                                    using (SQLiteCommand en = new SQLiteCommand($"INSERT OR REPLACE INTO ngpve_targetexclusion VALUES('{args[1]}', 1)", c))
                                     {
                                         en.ExecuteNonQuery();
                                     }
                                     break;
                                 case false:
-                                    using (SqliteCommand en = new SqliteCommand($"DELETE FROM ngpve_targetexclusion WHERE name='{args[1]}'", c))
+                                    using (SQLiteCommand en = new SQLiteCommand($"DELETE FROM ngpve_targetexclusion WHERE name='{args[1]}'", c))
                                     {
                                         en.ExecuteNonQuery();
                                     }
@@ -2321,52 +2322,52 @@ namespace Oxide.Plugins
                             {
                                 case "defload":
                                     rs = "default";
-                                    using (SqliteConnection c = new SqliteConnection(connStr))
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using SqliteCommand defload = new SqliteCommand("DELETE FROM ngpve_rulesets WHERE name='default'", c);
+                                        using SQLiteCommand defload = new SQLiteCommand("DELETE FROM ngpve_rulesets WHERE name='default'", c);
                                         defload.ExecuteNonQuery();
                                     }
                                     LoadDefaultRuleset(false);
                                     break;
                                 case "enable":
-                                    using (SqliteConnection c = new SqliteConnection(connStr))
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using SqliteCommand en = new SqliteCommand($"UPDATE ngpve_rulesets SET enabled='{newval}' WHERE name='{rs}'", c);
+                                        using SQLiteCommand en = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='{newval}' WHERE name='{rs}'", c);
                                         en.ExecuteNonQuery();
                                     }
                                     break;
                                 case "damage":
-                                    using (SqliteConnection c = new SqliteConnection(connStr))
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using SqliteCommand dm = new SqliteCommand($"UPDATE ngpve_rulesets SET damage='{newval}' WHERE name='{rs}'", c);
+                                        using SQLiteCommand dm = new SQLiteCommand($"UPDATE ngpve_rulesets SET damage='{newval}' WHERE name='{rs}'", c);
                                         dm.ExecuteNonQuery();
                                     }
                                     break;
                                 case "invschedule":
-                                    using (SqliteConnection c = new SqliteConnection(connStr))
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using SqliteCommand dm = new SqliteCommand($"UPDATE ngpve_rulesets SET invschedule='{newval}' WHERE name='{rs}'", c);
+                                        using SQLiteCommand dm = new SQLiteCommand($"UPDATE ngpve_rulesets SET invschedule='{newval}' WHERE name='{rs}'", c);
                                         dm.ExecuteNonQuery();
                                     }
                                     RunSchedule(true);
                                     break;
                                 case "layer":
-                                    using (SqliteConnection c = new SqliteConnection(connStr))
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using SqliteCommand dm = new SqliteCommand($"UPDATE ngpve_rulesets SET active_layer='{newval}' WHERE name='{rs}'", c);
+                                        using SQLiteCommand dm = new SQLiteCommand($"UPDATE ngpve_rulesets SET active_layer='{newval}' WHERE name='{rs}'", c);
                                         dm.ExecuteNonQuery();
                                     }
                                     break;
                                 case "name":
-                                    using (SqliteConnection c = new SqliteConnection(connStr))
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using SqliteCommand nm = new SqliteCommand($"UPDATE ngpve_rulesets SET name='{newval}' WHERE name='{rs}'", c);
+                                        using SQLiteCommand nm = new SQLiteCommand($"UPDATE ngpve_rulesets SET name='{newval}' WHERE name='{rs}'", c);
                                         nm.ExecuteNonQuery();
                                         rs = newval;
                                     }
@@ -2374,25 +2375,25 @@ namespace Oxide.Plugins
                                 case "zone":
                                     if (newval == "delete")
                                     {
-                                        using SqliteConnection c = new SqliteConnection(connStr);
+                                        using SQLiteConnection c = new SQLiteConnection(connStr);
                                         c.Open();
-                                        using SqliteCommand zup = new SqliteCommand($"UPDATE ngpve_rulesets SET zone='' WHERE name='{rs}'", c);
+                                        using SQLiteCommand zup = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='' WHERE name='{rs}'", c);
                                         zup.ExecuteNonQuery();
                                     }
                                     else
                                     {
-                                        using SqliteConnection c = new SqliteConnection(connStr);
+                                        using SQLiteConnection c = new SQLiteConnection(connStr);
                                         c.Open();
-                                        using SqliteCommand zu = new SqliteCommand($"UPDATE ngpve_rulesets SET zone='{newval}' WHERE name='{rs}'", c);
+                                        using SQLiteCommand zu = new SQLiteCommand($"UPDATE ngpve_rulesets SET zone='{newval}' WHERE name='{rs}'", c);
                                         zu.ExecuteNonQuery();
                                     }
                                     break;
                                 case "scheduleday":
                                     string newparts = EditScheduleDay(rs, newval);
-                                    using (SqliteConnection c = new SqliteConnection(connStr))
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using SqliteCommand us = new SqliteCommand($"UPDATE ngpve_rulesets SET schedule='{newparts}' WHERE name='{rs}'", c);
+                                        using SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{newparts}' WHERE name='{rs}'", c);
                                         us.ExecuteNonQuery();
                                     }
                                     GUIRulesetEditor(player, rs);
@@ -2404,10 +2405,10 @@ namespace Oxide.Plugins
                                         //            RS      setting           newval
                                         //editruleset,default,schedulestarthour,9
                                         string ns = EditScheduleHourMinute(rs, newval, "sh");
-                                        using (SqliteConnection c = new SqliteConnection(connStr))
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
                                         {
                                             c.Open();
-                                            using SqliteCommand us = new SqliteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c);
+                                            using SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c);
                                             us.ExecuteNonQuery();
                                         }
                                         GUIRulesetEditor(player, rs);
@@ -2418,10 +2419,10 @@ namespace Oxide.Plugins
                                 case "scheduleendhour":
                                     {
                                         string ns = EditScheduleHourMinute(rs, newval, "eh");
-                                        using (SqliteConnection c = new SqliteConnection(connStr))
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
                                         {
                                             c.Open();
-                                            using SqliteCommand us = new SqliteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c);
+                                            using SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c);
                                             us.ExecuteNonQuery();
                                         }
                                         GUIRulesetEditor(player, rs);
@@ -2432,10 +2433,10 @@ namespace Oxide.Plugins
                                 case "schedulestartminute":
                                     {
                                         string ns = EditScheduleHourMinute(rs, newval, "sm");
-                                        using (SqliteConnection c = new SqliteConnection(connStr))
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
                                         {
                                             c.Open();
-                                            using SqliteCommand us = new SqliteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c);
+                                            using SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c);
                                             us.ExecuteNonQuery();
                                         }
                                         GUIRulesetEditor(player, rs);
@@ -2446,10 +2447,10 @@ namespace Oxide.Plugins
                                 case "scheduleendminute":
                                     {
                                         string ns = EditScheduleHourMinute(rs, newval, "em");
-                                        using (SqliteConnection c = new SqliteConnection(connStr))
+                                        using (SQLiteConnection c = new SQLiteConnection(connStr))
                                         {
                                             c.Open();
-                                            using SqliteCommand us = new SqliteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c);
+                                            using SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{ns}' WHERE name='{rs}'", c);
                                             us.ExecuteNonQuery();
                                         }
                                         GUIRulesetEditor(player, rs);
@@ -2460,16 +2461,16 @@ namespace Oxide.Plugins
                                 case "schedule":
                                     if (newval == "0")
                                     {
-                                        using SqliteConnection c = new SqliteConnection(connStr);
+                                        using SQLiteConnection c = new SQLiteConnection(connStr);
                                         c.Open();
-                                        using SqliteCommand use = new SqliteCommand($"UPDATE ngpve_rulesets SET schedule='' WHERE name='{rs}'", c);
+                                        using SQLiteCommand use = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='' WHERE name='{rs}'", c);
                                         use.ExecuteNonQuery();
                                     }
                                     else
                                     {
-                                        using SqliteConnection c = new SqliteConnection(connStr);
+                                        using SQLiteConnection c = new SQLiteConnection(connStr);
                                         c.Open();
-                                        using SqliteCommand us = new SqliteCommand($"UPDATE ngpve_rulesets SET schedule='{newval}' WHERE name='{rs}'", c);
+                                        using SQLiteCommand us = new SQLiteCommand($"UPDATE ngpve_rulesets SET schedule='{newval}' WHERE name='{rs}'", c);
                                         us.ExecuteNonQuery();
                                     }
                                     RunSchedule(true);
@@ -2484,21 +2485,21 @@ namespace Oxide.Plugins
                                             //Puts($"SELECT damage, exception FROM ngpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'");
                                             bool isNew = true;
                                             bool damage = false;
-                                            using (SqliteConnection c = new SqliteConnection(connStr))
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using SqliteCommand ce = new SqliteCommand($"SELECT DISTINCT damage FROM ngpve_rulesets WHERE name='{rs}'", c);
-                                                using SqliteDataReader re = ce.ExecuteReader();
+                                                using SQLiteCommand ce = new SQLiteCommand($"SELECT DISTINCT damage FROM ngpve_rulesets WHERE name='{rs}'", c);
+                                                using SQLiteDataReader re = ce.ExecuteReader();
                                                 while (re.Read())
                                                 {
                                                     damage = !re.IsDBNull(0) && re.GetInt32(0) == 1;
                                                 }
                                             }
-                                            using (SqliteConnection c = new SqliteConnection(connStr))
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using SqliteCommand ce = new SqliteCommand($"SELECT exception FROM ngpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", c);
-                                                using SqliteDataReader re = ce.ExecuteReader();
+                                                using SQLiteCommand ce = new SQLiteCommand($"SELECT exception FROM ngpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", c);
+                                                using SQLiteDataReader re = ce.ExecuteReader();
                                                 while (re.Read())
                                                 {
                                                     isNew = false;
@@ -2508,17 +2509,17 @@ namespace Oxide.Plugins
                                             {
                                                 //Puts($"INSERT INTO ngpve_rulesets VALUES('{rs}', 1, 1, 0, '', '{args[3]}', '', '')");
                                                 string dmg = damage ? "1" : "0";
-                                                using SqliteConnection c = new SqliteConnection(connStr);
+                                                using SQLiteConnection c = new SQLiteConnection(connStr);
                                                 c.Open();
-                                                using SqliteCommand ae = new SqliteCommand($"INSERT INTO ngpve_rulesets VALUES('{rs}', {dmg}, 1, 0, '', '{args[3]}', '', '', 0, 0, 0)", c);
+                                                using SQLiteCommand ae = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES('{rs}', {dmg}, 1, 0, '', '{args[3]}', '', '', 0, 0, 0)", c);
                                                 ae.ExecuteNonQuery();
                                             }
                                             break;
                                         case "delete":
-                                            using (SqliteConnection c = new SqliteConnection(connStr))
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using SqliteCommand ad = new SqliteCommand($"DELETE FROM ngpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", c);
+                                                using SQLiteCommand ad = new SQLiteCommand($"DELETE FROM ngpve_rulesets WHERE name='{rs}' AND exception='{args[3]}'", c);
                                                 ad.ExecuteNonQuery();
                                             }
                                             break;
@@ -2532,11 +2533,11 @@ namespace Oxide.Plugins
                                     {
                                         case "add":
                                             string etype = null;
-                                            using (SqliteConnection c = new SqliteConnection(connStr))
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using SqliteCommand aee = new SqliteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{newval}'", c);
-                                                using SqliteDataReader aed = aee.ExecuteReader();
+                                                using SQLiteCommand aee = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{newval}'", c);
+                                                using SQLiteDataReader aed = aee.ExecuteReader();
                                                 while (aed.Read())
                                                 {
                                                     etype = aed.GetString(0) ?? "";
@@ -2547,11 +2548,11 @@ namespace Oxide.Plugins
                                             if (etype != "")
                                             {
                                                 string exception = ""; string oldsrc = "";
-                                                using (SqliteConnection c = new SqliteConnection(connStr))
+                                                using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    using SqliteCommand cex = new SqliteCommand($"SELECT exception, src_exclude FROM ngpve_rulesets WHERE name='{rs}' AND exception LIKE '{etype}_%'", c);
-                                                    SqliteDataReader rex = cex.ExecuteReader();
+                                                    using SQLiteCommand cex = new SQLiteCommand($"SELECT exception, src_exclude FROM ngpve_rulesets WHERE name='{rs}' AND exception LIKE '{etype}_%'", c);
+                                                    SQLiteDataReader rex = cex.ExecuteReader();
                                                     while (rex.Read())
                                                     {
                                                         exception = !rex.IsDBNull(0) ? rex.GetString(0) : "";
@@ -2565,10 +2566,10 @@ namespace Oxide.Plugins
                                                     {
                                                         string newsrc = string.Join(",", oldsrc, newval);
                                                         //Puts($"Adding src_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}, oldsrc = '{oldsrc}'");
-                                                        using SqliteConnection c = new SqliteConnection(connStr);
+                                                        using SQLiteConnection c = new SQLiteConnection(connStr);
                                                         c.Open();
                                                         //Puts($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
-                                                        using SqliteCommand aes = new SqliteCommand($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c);
+                                                        using SQLiteCommand aes = new SQLiteCommand($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c);
                                                         aes.ExecuteNonQuery();
                                                     }
                                                 }
@@ -2577,10 +2578,10 @@ namespace Oxide.Plugins
                                                     if (!oldsrc.Contains(newval))
                                                     {
                                                         //Puts($"Updating src_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}, oldsrc = '{oldsrc}'");
-                                                        using SqliteConnection c = new SqliteConnection(connStr);
+                                                        using SQLiteConnection c = new SQLiteConnection(connStr);
                                                         c.Open();
                                                         //Puts($"UPDATE ngpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'");
-                                                        using SqliteCommand aes = new SqliteCommand($"UPDATE ngpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c);
+                                                        using SQLiteCommand aes = new SQLiteCommand($"UPDATE ngpve_rulesets SET src_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '{etype}_%'", c);
                                                         aes.ExecuteNonQuery();
                                                     }
                                                 }
@@ -2589,11 +2590,11 @@ namespace Oxide.Plugins
                                         case "delete":
                                             bool foundSrc = false;
                                             string src_excl = "";
-                                            using (SqliteConnection c = new SqliteConnection(connStr))
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using SqliteCommand findSrc = new SqliteCommand($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE src_exclude = '{newval}'", c);
-                                                using SqliteDataReader fs = findSrc.ExecuteReader();
+                                                using SQLiteCommand findSrc = new SQLiteCommand($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE src_exclude = '{newval}'", c);
+                                                using SQLiteDataReader fs = findSrc.ExecuteReader();
                                                 while (fs.Read())
                                                 {
                                                     foundSrc = true;
@@ -2607,10 +2608,10 @@ namespace Oxide.Plugins
                                                 string newsrc = src_excl.Replace(newval, "");
                                                 newsrc.Replace(",,", ",");
                                                 if (newsrc.Trim() == "," || newsrc.Trim() == ",,") newsrc = "";
-                                                using SqliteConnection c = new SqliteConnection(connStr);
+                                                using SQLiteConnection c = new SQLiteConnection(connStr);
                                                 c.Open();
                                                 //Puts($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'");
-                                                using SqliteCommand ads = new SqliteCommand($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'", c);
+                                                using SQLiteCommand ads = new SQLiteCommand($"UPDATE ngpve_rulesets SET src_exclude='{newsrc}' WHERE name='{rs}' AND src_exclude='{src_excl}'", c);
                                                 ads.ExecuteNonQuery();
                                             }
                                             break;
@@ -2624,11 +2625,11 @@ namespace Oxide.Plugins
                                     {
                                         case "add":
                                             string etype = null;
-                                            using (SqliteConnection c = new SqliteConnection(connStr))
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using SqliteCommand aee = new SqliteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{newval}'", c);
-                                                using SqliteDataReader aed = aee.ExecuteReader();
+                                                using SQLiteCommand aee = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_entities WHERE type='{newval}'", c);
+                                                using SQLiteDataReader aed = aee.ExecuteReader();
                                                 while (aed.Read())
                                                 {
                                                     etype = aed.GetString(0) ?? "";
@@ -2639,11 +2640,11 @@ namespace Oxide.Plugins
                                             if (etype != "")
                                             {
                                                 string exception = ""; string oldtgt = "";
-                                                using (SqliteConnection c = new SqliteConnection(connStr))
+                                                using (SQLiteConnection c = new SQLiteConnection(connStr))
                                                 {
                                                     c.Open();
-                                                    using SqliteCommand cex = new SqliteCommand($"SELECT exception, tgt_exclude FROM ngpve_rulesets WHERE name='{rs}' AND exception LIKE '%_{etype}'", c);
-                                                    SqliteDataReader rex = cex.ExecuteReader();
+                                                    using SQLiteCommand cex = new SQLiteCommand($"SELECT exception, tgt_exclude FROM ngpve_rulesets WHERE name='{rs}' AND exception LIKE '%_{etype}'", c);
+                                                    SQLiteDataReader rex = cex.ExecuteReader();
                                                     while (rex.Read())
                                                     {
                                                         exception = !rex.IsDBNull(0) ? rex.GetString(0) : "";
@@ -2657,10 +2658,10 @@ namespace Oxide.Plugins
                                                     {
                                                         string newtgt = string.Join(",", oldtgt, newval);
                                                         //Puts($"Adding tgt_exclude of '{newtgt}' to ruleset: '{rs}', type: '{etype}' - Input was {newval}");
-                                                        using SqliteConnection c = new SqliteConnection(connStr);
+                                                        using SQLiteConnection c = new SQLiteConnection(connStr);
                                                         c.Open();
                                                         //Puts($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
-                                                        using SqliteCommand aes = new SqliteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c);
+                                                        using SQLiteCommand aes = new SQLiteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c);
                                                         aes.ExecuteNonQuery();
                                                     }
                                                 }
@@ -2669,10 +2670,10 @@ namespace Oxide.Plugins
                                                     if (!oldtgt.Contains(newval))
                                                     {
                                                         //Puts($"Updating tgt_exclude of '{newval}' to ruleset: '{rs}' type: '{etype}' - Input was {newval}");
-                                                        using SqliteConnection c = new SqliteConnection(connStr);
+                                                        using SQLiteConnection c = new SQLiteConnection(connStr);
                                                         c.Open();
                                                         //Puts($"UPDATE ngpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'");
-                                                        using SqliteCommand aes = new SqliteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c);
+                                                        using SQLiteCommand aes = new SQLiteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newval}' WHERE name='{rs}' AND exception LIKE '%_{etype}'", c);
                                                         aes.ExecuteNonQuery();
                                                     }
                                                 }
@@ -2681,11 +2682,11 @@ namespace Oxide.Plugins
                                         case "delete":
                                             bool foundTgt = false;
                                             string tgt_excl = "";
-                                            using (SqliteConnection c = new SqliteConnection(connStr))
+                                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                                             {
                                                 c.Open();
-                                                using SqliteCommand findTgt = new SqliteCommand($"SELECT DISTINCT tgt_exclude FROM ngpve_rulesets WHERE tgt_exclude = '{newval}'", c);
-                                                using SqliteDataReader ft = findTgt.ExecuteReader();
+                                                using SQLiteCommand findTgt = new SQLiteCommand($"SELECT DISTINCT tgt_exclude FROM ngpve_rulesets WHERE tgt_exclude = '{newval}'", c);
+                                                using SQLiteDataReader ft = findTgt.ExecuteReader();
                                                 while (ft.Read())
                                                 {
                                                     foundTgt = true;
@@ -2699,11 +2700,11 @@ namespace Oxide.Plugins
                                                 string newtgt = tgt_excl.Replace(newval, "");
                                                 newtgt.Replace(",,", ",");
                                                 if (newtgt.Trim() == "," || newtgt.Trim() == ",,") newtgt = "";
-                                                using SqliteConnection c = new SqliteConnection(connStr);
+                                                using SQLiteConnection c = new SQLiteConnection(connStr);
                                                 c.Open();
                                                 CuiHelper.DestroyUi(player, NGPVECUSTOMSELECT);
                                                 //Puts($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'");
-                                                using SqliteCommand ads = new SqliteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'", c);
+                                                using SQLiteCommand ads = new SQLiteCommand($"UPDATE ngpve_rulesets SET tgt_exclude='{newtgt}' WHERE name='{rs}' AND tgt_exclude='{tgt_excl}'", c);
                                                 ads.ExecuteNonQuery();
                                             }
                                             break;
@@ -2725,10 +2726,10 @@ namespace Oxide.Plugins
                             switch (args[2])
                             {
                                 case "delete":
-                                    using (SqliteConnection c = new SqliteConnection(connStr))
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using SqliteCommand drs = new SqliteCommand($"DELETE FROM ngpve_rulesets WHERE name='{args[1]}'", c);
+                                        using SQLiteCommand drs = new SQLiteCommand($"DELETE FROM ngpve_rulesets WHERE name='{args[1]}'", c);
                                         drs.ExecuteNonQuery();
                                     }
                                     CuiHelper.DestroyUi(player, NGPVEEDITRULESET);
@@ -2754,10 +2755,10 @@ namespace Oxide.Plugins
                                     string clone = oldname + "1";
                                     while (true)
                                     {
-                                        using SqliteConnection c = new SqliteConnection(connStr);
+                                        using SQLiteConnection c = new SQLiteConnection(connStr);
                                         c.Open();
-                                        using SqliteCommand checkrs = new SqliteCommand($"SELECT DISTINCT name FROM ngpve_rulesets WHERE name='{clone}'", c);
-                                        using SqliteDataReader crs = checkrs.ExecuteReader();
+                                        using SQLiteCommand checkrs = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_rulesets WHERE name='{clone}'", c);
+                                        using SQLiteDataReader crs = checkrs.ExecuteReader();
                                         while (crs.Read())
                                         {
                                             id++;
@@ -2767,15 +2768,15 @@ namespace Oxide.Plugins
                                         break;
                                     }
                                     //Puts($"Creating clone {clone}");
-                                    using (SqliteConnection c = new SqliteConnection(connStr))
+                                    using (SQLiteConnection c = new SQLiteConnection(connStr))
                                     {
                                         c.Open();
-                                        using (SqliteCommand newrs = new SqliteCommand($"INSERT INTO ngpve_rulesets (name, damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule, invschedule) SELECT '{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule, invschedule FROM ngpve_rulesets WHERE name='{oldname}'", c))
+                                        using (SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets (name, damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule, invschedule) SELECT '{clone}', damage, enabled, automated, zone, exception, src_exclude, tgt_exclude, schedule, invschedule FROM ngpve_rulesets WHERE name='{oldname}'", c))
                                         {
                                             newrs.ExecuteNonQuery();
                                         }
                                         // Disable the clone for now...
-                                        using (SqliteCommand newrs = new SqliteCommand($"UPDATE ngpve_rulesets SET enabled='0' WHERE name = '{clone}'", c))
+                                        using (SQLiteCommand newrs = new SQLiteCommand($"UPDATE ngpve_rulesets SET enabled='0' WHERE name = '{clone}'", c))
                                         {
                                             newrs.ExecuteNonQuery();
                                         }
@@ -2795,10 +2796,10 @@ namespace Oxide.Plugins
                                 newname = "new";
                                 while (true)
                                 {
-                                    using SqliteConnection c = new SqliteConnection(connStr);
+                                    using SQLiteConnection c = new SQLiteConnection(connStr);
                                     c.Open();
-                                    using SqliteCommand addrs = new SqliteCommand($"SELECT DISTINCT name FROM ngpve_rulesets WHERE name='{newname}'", c);
-                                    using SqliteDataReader addcrsd = addrs.ExecuteReader();
+                                    using SQLiteCommand addrs = new SQLiteCommand($"SELECT DISTINCT name FROM ngpve_rulesets WHERE name='{newname}'", c);
+                                    using SQLiteDataReader addcrsd = addrs.ExecuteReader();
                                     while (addcrsd.Read())
                                     {
                                         id++;
@@ -2808,11 +2809,11 @@ namespace Oxide.Plugins
                                     break;
                                 }
                                 //Puts($"Creating new ruleset {newname}");
-                                using (SqliteConnection c = new SqliteConnection(connStr))
+                                using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
                                     // Add this new ruleset as disabled
-                                    using SqliteCommand newrs = new SqliteCommand($"INSERT INTO ngpve_rulesets VALUES ('{newname}', 0, 0, 0, 0, '', '', '', 0, 0, 0)", c);
+                                    using SQLiteCommand newrs = new SQLiteCommand($"INSERT INTO ngpve_rulesets VALUES ('{newname}', 0, 0, 0, 0, '', '', '', 0, 0, 0)", c);
                                     newrs.ExecuteNonQuery();
                                 }
                                 GUIRuleSets(player);
@@ -2914,25 +2915,25 @@ namespace Oxide.Plugins
                                     string mod = args[3];
 
                                     //edit
-                                    using SqliteConnection c = new SqliteConnection(connStr);
+                                    using SQLiteConnection c = new SQLiteConnection(connStr);
                                     c.Open();
-                                    using SqliteCommand cmd = new SqliteCommand($"UPDATE ngpve_rules SET {mode}='{mod}', damage=1 WHERE name='{rn}'", c);
+                                    using SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_rules SET {mode}='{mod}', damage=1 WHERE name='{rn}'", c);
                                     cmd.ExecuteNonQuery();
                                 }
                             }
                             else if (args[0] == "addrule" && rn != null)
                             {
                                 custom = true;
-                                using SqliteConnection c = new SqliteConnection(connStr);
+                                using SQLiteConnection c = new SQLiteConnection(connStr);
                                 c.Open();
-                                using SqliteCommand cmd = new SqliteCommand($"INSERT INTO ngpve_rules VALUES ('{rn}','', 1, 1, null, null)", c);
+                                using SQLiteCommand cmd = new SQLiteCommand($"INSERT INTO ngpve_rules VALUES ('{rn}','', 1, 1, null, null)", c);
                                 cmd.ExecuteNonQuery();
                             }
-                            using (SqliteConnection c = new SqliteConnection(connStr))
+                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                             {
                                 c.Open();
-                                using SqliteCommand cmd = new SqliteCommand($"SELECT custom FROM ngpve_rules WHERE name='{rn}'", c);
-                                using SqliteDataReader rread = cmd.ExecuteReader();
+                                using SQLiteCommand cmd = new SQLiteCommand($"SELECT custom FROM ngpve_rules WHERE name='{rn}'", c);
+                                using SQLiteDataReader rread = cmd.ExecuteReader();
                                 while (rread.Read())
                                 {
                                     custom = GetBoolValue(rread.GetInt32(0).ToString());
@@ -2955,10 +2956,10 @@ namespace Oxide.Plugins
                             catch { }
                             if (args.Length > 1)
                             {
-                                using (SqliteConnection c = new SqliteConnection(connStr))
+                                using (SQLiteConnection c = new SQLiteConnection(connStr))
                                 {
                                     c.Open();
-                                    using SqliteCommand cmd = new SqliteCommand($"DELETE FROM ngpve_rules WHERE name='{rn}' AND custom={custom}", c);
+                                    using SQLiteCommand cmd = new SQLiteCommand($"DELETE FROM ngpve_rules WHERE name='{rn}' AND custom={custom}", c);
                                     cmd.ExecuteNonQuery();
                                 }
                                 CuiHelper.DestroyUi(player, NGPVERULEEDIT);
@@ -2995,15 +2996,15 @@ namespace Oxide.Plugins
                             string newcat = args[2];
                             if (newcat == "DELETE")
                             {
-                                using SqliteConnection c = new SqliteConnection(connStr);
+                                using SQLiteConnection c = new SQLiteConnection(connStr);
                                 c.Open();
-                                using SqliteCommand cmd = new SqliteCommand($"DELETE FROM ngpve_entities WHERE type='{entname}'", c);
+                                using SQLiteCommand cmd = new SQLiteCommand($"DELETE FROM ngpve_entities WHERE type='{entname}'", c);
                                 cmd.ExecuteNonQuery();
                             }
-                            using (SqliteConnection c = new SqliteConnection(connStr))
+                            using (SQLiteConnection c = new SQLiteConnection(connStr))
                             {
                                 c.Open();
-                                using SqliteCommand cmd = new SqliteCommand($"UPDATE ngpve_entities SET name = '{newcat}' WHERE type='{entname}'", c);
+                                using SQLiteCommand cmd = new SQLiteCommand($"UPDATE ngpve_entities SET name = '{newcat}' WHERE type='{entname}'", c);
                                 cmd.ExecuteNonQuery();
                             }
                             CuiHelper.DestroyUi(player, NGPVEENTEDIT);
@@ -3067,44 +3068,44 @@ namespace Oxide.Plugins
 
             if (configData.Version < new VersionNumber(1, 7, 2))
             {
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
 
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='RidableHorse2'", c))
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='RidableHorse2'", c))
                 {
                     ct.ExecuteNonQuery();
                 }
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='FarmableAnimal'", c))
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='FarmableAnimal'", c))
                 {
                     ct.ExecuteNonQuery();
                 }
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='ChickenCoop'", c))
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='ChickenCoop'", c))
                 {
                     ct.ExecuteNonQuery();
                 }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('animal', 'RidableHorse2', 0)", c))
+                using (SQLiteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('animal', 'RidableHorse2', 0)", c))
                 {
                     ct.ExecuteNonQuery();
                 }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('animal', 'FarmableAnimal', 0)", c))
+                using (SQLiteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('animal', 'FarmableAnimal', 0)", c))
                 {
                     ct.ExecuteNonQuery();
                 }
-                using (SqliteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('building', 'ChickenCoop', 0)", c))
+                using (SQLiteCommand ct = new("INSERT OR REPLACE INTO ngpve_entities VALUES('building', 'ChickenCoop', 0)", c))
                 {
                     ct.ExecuteNonQuery();
                 }
             }
             if (configData.Version < new VersionNumber(1, 7, 3))
             {
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
 
-                using (SqliteCommand ct = new("DELETE FROM ngpve_entities WHERE type='Wolf2'", c))
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='Wolf2'", c))
                 {
                     ct.ExecuteNonQuery();
                 }
-                using (SqliteCommand ct = new("INSERT INTO ngpve_entities VALUES('animal', 'Wolf2', 0)", c))
+                using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('animal', 'Wolf2', 0)", c))
                 {
                     ct.ExecuteNonQuery();
                 }
@@ -3341,11 +3342,11 @@ namespace Oxide.Plugins
 
             string rssql = "";
             if (!ZoneManager) rssql = " WHERE name='default'";
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand getrs = new($"SELECT DISTINCT name, automated from ngpve_rulesets{rssql} ORDER BY name", c);
-                using SqliteDataReader rsread = getrs.ExecuteReader();
+                using SQLiteCommand getrs = new($"SELECT DISTINCT name, automated from ngpve_rulesets{rssql} ORDER BY name", c);
+                using SQLiteDataReader rsread = getrs.ExecuteReader();
                 while (rsread.Read())
                 {
                     string rsname = !rsread.IsDBNull(0) ? rsread.GetString(0) : "";
@@ -3610,11 +3611,11 @@ namespace Oxide.Plugins
             bool invert = false;
             int layer = 0;
 
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand getrs = new($"SELECT DISTINCT automated, enabled, damage, schedule, zone, invschedule, active_layer from ngpve_rulesets WHERE name='{rulesetname}'", c);
-                using SqliteDataReader rsread = getrs.ExecuteReader();
+                using SQLiteCommand getrs = new($"SELECT DISTINCT automated, enabled, damage, schedule, zone, invschedule, active_layer from ngpve_rulesets WHERE name='{rulesetname}'", c);
+                using SQLiteDataReader rsread = getrs.ExecuteReader();
                 while (rsread.Read())
                 {
                     if (!rsread.IsDBNull(0) && rsread.GetInt32(0) == 1)
@@ -3797,11 +3798,11 @@ namespace Oxide.Plugins
             int numExceptions = 0;
 
             //Puts($"SELECT DISTINCT exception FROM ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception");
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand getrs = new($"SELECT DISTINCT exception FROM ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c);
-                using SqliteDataReader rsread = getrs.ExecuteReader();
+                using SQLiteCommand getrs = new($"SELECT DISTINCT exception FROM ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c);
+                using SQLiteDataReader rsread = getrs.ExecuteReader();
                 while (rsread.Read())
                 {
                     string except = !rsread.IsDBNull(0) ? rsread.GetString(0) : "";
@@ -3847,10 +3848,10 @@ namespace Oxide.Plugins
             if (numExceptions > 0) // Cannot exclude from exceptions that do not exist
             {
                 //Puts($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'");
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
-                using SqliteCommand getrs = new($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
-                using SqliteDataReader rsread = getrs.ExecuteReader();
+                using SQLiteCommand getrs = new($"SELECT DISTINCT src_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
+                using SQLiteDataReader rsread = getrs.ExecuteReader();
                 while (rsread.Read())
                 {
                     string exclude = !rsread.IsDBNull(0) ? rsread.GetString(0) : "";
@@ -3894,10 +3895,10 @@ namespace Oxide.Plugins
             noExclusions = true;
             if (numExceptions > 0) // Cannot exclude from exceptions that do not exist
             {
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
-                using SqliteCommand getrs = new($"SELECT DISTINCT tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
-                using SqliteDataReader rsread = getrs.ExecuteReader();
+                using SQLiteCommand getrs = new($"SELECT DISTINCT tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
+                using SQLiteDataReader rsread = getrs.ExecuteReader();
                 while (rsread.Read())
                 {
                     string exclude = !rsread.IsDBNull(0) ? rsread.GetString(0) : "";
@@ -4009,22 +4010,22 @@ namespace Oxide.Plugins
             int row = 0; int col = 0;
             string exq = "SELECT DISTINCT name FROM ngpve_targetexclusion";
             List<string> exclusions = new();
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand se = new(exq, c);
-                using SqliteDataReader re = se.ExecuteReader();
+                using SQLiteCommand se = new(exq, c);
+                using SQLiteDataReader re = se.ExecuteReader();
                 while (re.Read())
                 {
                     exclusions.Add(re.GetString(0));
                 }
             }
             string q = "SELECT DISTINCT type from ngpve_entities WHERE name='npc' ORDER BY type";
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand se = new(q, c);
-                using SqliteDataReader re = se.ExecuteReader();
+                using SQLiteCommand se = new(q, c);
+                using SQLiteDataReader re = se.ExecuteReader();
                 float[] pb = GetButtonPositionP(row, col);
                 while (re.Read())
                 {
@@ -4093,11 +4094,11 @@ namespace Oxide.Plugins
 
             if (configData.Options.debug) Puts($"QUERY IS {q}, COLLECTION IS {cat}, SEARCH IS {search}");
 
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand se = new(q, c);
-                using SqliteDataReader re = se.ExecuteReader();
+                using SQLiteCommand se = new(q, c);
+                using SQLiteDataReader re = se.ExecuteReader();
                 float[] pb = GetButtonPositionP(row, col);
                 while (re.Read())
                 {
@@ -4134,12 +4135,12 @@ namespace Oxide.Plugins
             string name = "";
             float[] pb;
 
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                //using (SqliteCommand se = new SqliteCommand($"SELECT DISTINCT type from ngpve_entities ORDER BY type", c))
-                using SqliteCommand se = new($"SELECT DISTINCT name,type from ngpve_entities WHERE type='{entname}'", c);
-                using SqliteDataReader re = se.ExecuteReader();
+                //using (SQLiteCommand se = new SQLiteCommand($"SELECT DISTINCT type from ngpve_entities ORDER BY type", c))
+                using SQLiteCommand se = new($"SELECT DISTINCT name,type from ngpve_entities WHERE type='{entname}'", c);
+                using SQLiteDataReader re = se.ExecuteReader();
                 pb = GetButtonPositionP(row, col);
                 while (re.Read())
                 {
@@ -4148,11 +4149,11 @@ namespace Oxide.Plugins
                 }
             }
 
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand lt = new("SELECT DISTINCT name from ngpve_entities WHERE name != 'unknown'", c);
-                using SqliteDataReader rt = lt.ExecuteReader();
+                using SQLiteCommand lt = new("SELECT DISTINCT name from ngpve_entities WHERE name != 'unknown'", c);
+                using SQLiteDataReader rt = lt.ExecuteReader();
                 pb = GetButtonPositionP(row, col);
                 while (rt.Read())
                 {
@@ -4206,10 +4207,10 @@ namespace Oxide.Plugins
             List<string> exc = new();
             if (rulesetname != null)
             {
-                using SqliteConnection c = new(connStr);
+                using SQLiteConnection c = new(connStr);
                 c.Open();
-                using SqliteCommand crs = new($"SELECT exception from ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c);
-                using SqliteDataReader crd = crs.ExecuteReader();
+                using SQLiteCommand crs = new($"SELECT exception from ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c);
+                using SQLiteDataReader crd = crs.ExecuteReader();
                 while (crd.Read())
                 {
                     exc.Add(crd.GetString(0));
@@ -4229,11 +4230,11 @@ namespace Oxide.Plugins
                 custsel = "";
             }
 
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand sr = new($"SELECT DISTINCT name, custom from ngpve_rules {custsel}ORDER BY name", c);
-                using SqliteDataReader rr = sr.ExecuteReader();
+                using SQLiteCommand sr = new($"SELECT DISTINCT name, custom from ngpve_rules {custsel}ORDER BY name", c);
+                using SQLiteDataReader rr = sr.ExecuteReader();
                 float[] pb = GetButtonPositionP(row, col);
                 while (rr.Read())
                 {
@@ -4288,11 +4289,11 @@ namespace Oxide.Plugins
 
             // Get ruleset src and tgt exclusions
             //Puts($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}'");
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand rs = new($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' ORDER BY src_exclude,tgt_exclude", c);
-                using SqliteDataReader rsd = rs.ExecuteReader();
+                using SQLiteCommand rs = new($"SELECT src_exclude, tgt_exclude FROM ngpve_rulesets WHERE name='{rulesetname}' ORDER BY src_exclude,tgt_exclude", c);
+                using SQLiteDataReader rsd = rs.ExecuteReader();
                 while (rsd.Read())
                 {
                     string a = !rsd.IsDBNull(0) ? rsd.GetString(0) : "";
@@ -4312,11 +4313,11 @@ namespace Oxide.Plugins
 
             // Get organized entities list
             Dictionary<string, NextGenPVEEntities> ngpveentities = new();
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand ent = new("SELECT name, type, custom FROM ngpve_entities ORDER BY name, type", c);
-                using SqliteDataReader ntd = ent.ExecuteReader();
+                using SQLiteCommand ent = new("SELECT name, type, custom FROM ngpve_entities ORDER BY name, type", c);
+                using SQLiteDataReader ntd = ent.ExecuteReader();
                 while (ntd.Read())
                 {
                     string nm = !ntd.IsDBNull(0) ? ntd.GetString(0) : "";
@@ -4339,11 +4340,11 @@ namespace Oxide.Plugins
             }
 
             // Go through the ruleset looking for exceptions, which we convert into entity types
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand crs = new($"SELECT exception from ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c);
-                using SqliteDataReader crd = crs.ExecuteReader();
+                using SQLiteCommand crs = new($"SELECT exception from ngpve_rulesets WHERE name='{rulesetname}' ORDER BY exception", c);
+                using SQLiteDataReader crd = crs.ExecuteReader();
                 List<string> exc = new();
                 while (crd.Read())
                 {
@@ -4465,11 +4466,11 @@ namespace Oxide.Plugins
                 pb = GetButtonPositionP(row, col);
                 UI.Label(ref container, NGPVERULEEDIT, UI.Color("#ffffff", 1f), Lang("target"), 12, $"{pb[0]} {pb[1]}", $"{pb[0] + ((pb[2] - pb[0]) / 2)} {pb[3]}");
 
-                using (SqliteConnection c = new(connStr))
+                using (SQLiteConnection c = new(connStr))
                 {
                     c.Open();
-                    using SqliteCommand getrs = new($"SELECT DISTINCT * FROM ngpve_rules WHERE name='{rulename}' AND custom={cs}", c);
-                    using SqliteDataReader rd = getrs.ExecuteReader();
+                    using SQLiteCommand getrs = new($"SELECT DISTINCT * FROM ngpve_rules WHERE name='{rulename}' AND custom={cs}", c);
+                    using SQLiteDataReader rd = getrs.ExecuteReader();
                     description = "";
                     source = "";
                     target = "";
@@ -4573,11 +4574,11 @@ namespace Oxide.Plugins
             float[] pb = GetButtonPositionZ(row, col);
             string zone = null;
 
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand rs = new($"SELECT DISTINCT zone FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
-                using SqliteDataReader rsd = rs.ExecuteReader();
+                using SQLiteCommand rs = new($"SELECT DISTINCT zone FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
+                using SQLiteDataReader rsd = rs.ExecuteReader();
                 while (rsd.Read())
                 {
                     zone = rsd.GetString(0);
@@ -4670,11 +4671,11 @@ namespace Oxide.Plugins
             CuiHelper.DestroyUi(player, NGPVESCHEDULEEDIT);
 
             string schedule = null;
-            using (SqliteConnection c = new(connStr))
+            using (SQLiteConnection c = new(connStr))
             {
                 c.Open();
-                using SqliteCommand rs = new($"SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
-                using SqliteDataReader rsd = rs.ExecuteReader();
+                using SQLiteCommand rs = new($"SELECT DISTINCT schedule FROM ngpve_rulesets WHERE name='{rulesetname}'", c);
+                using SQLiteDataReader rsd = rs.ExecuteReader();
                 while (rsd.Read())
                 {
                     schedule = !rsd.IsDBNull(0) ? rsd.GetString(0) : "";
@@ -5491,8 +5492,8 @@ namespace Oxide.Plugins
         private void LoadDefaultEntities()
         {
             Puts("Trying to recreate entities data...");
-            using SqliteCommand ct = new(sqlConnection);
-            using SqliteTransaction tr = sqlConnection.BeginTransaction();
+            using SQLiteCommand ct = new(sqlConnection);
+            using SQLiteTransaction tr = sqlConnection.BeginTransaction();
             ct.CommandText = "DROP TABLE IF EXISTS ngpve_entities;"
                 + "CREATE TABLE ngpve_entities (name varchar(32), type varchar(32), custom INTEGER(1) DEFAULT 0);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'BaseAnimalNPC', 0);"
@@ -5598,8 +5599,8 @@ namespace Oxide.Plugins
         private void LoadDefaultRules()
         {
             Puts("Trying to recreate rules data...");
-            using SqliteCommand ct = new(sqlConnection);
-            using SqliteTransaction tr = sqlConnection.BeginTransaction();
+            using SQLiteCommand ct = new(sqlConnection);
+            using SQLiteTransaction tr = sqlConnection.BeginTransaction();
             ct.CommandText = "DROP TABLE IF EXISTS ngpve_rules;"
                 + "CREATE TABLE ngpve_rules (name varchar(32),description varchar(255),damage INTEGER(1) DEFAULT 1,custom INTEGER(1) DEFAULT 0,source VARCHAR(32),target VARCHAR(32));;"
                 + "INSERT INTO ngpve_rules VALUES('npc_animal', 'NPC can damage Animal', 1, 0, 'npc', 'animal');"
@@ -5670,9 +5671,9 @@ namespace Oxide.Plugins
 
         private void LoadNPCTgtExclDb()
         {
-            SqliteCommand cd = new("DROP TABLE IF EXISTS ngpve_targetexclusion", sqlConnection);
+            SQLiteCommand cd = new("DROP TABLE IF EXISTS ngpve_targetexclusion", sqlConnection);
             cd.ExecuteNonQuery();
-            cd = new SqliteCommand("CREATE TABLE ngpve_targetexclusion (name VARCHAR(255), excluded INT(1) DEFAULT 1);", sqlConnection);
+            cd = new SQLiteCommand("CREATE TABLE ngpve_targetexclusion (name VARCHAR(255), excluded INT(1) DEFAULT 1);", sqlConnection);
             cd.ExecuteNonQuery();
         }
 
@@ -5681,13 +5682,13 @@ namespace Oxide.Plugins
             Puts("Trying to recreate ruleset data...");
             if (drop)
             {
-                SqliteCommand cd = new SqliteCommand("DROP TABLE IF EXISTS ngpve_rulesets", sqlConnection);
+                SQLiteCommand cd = new SQLiteCommand("DROP TABLE IF EXISTS ngpve_rulesets", sqlConnection);
                 cd.ExecuteNonQuery();
-                cd = new SqliteCommand("CREATE TABLE ngpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255), invschedule INT(1) DEFAULT 0, active_layer INT(1) DEFAULT 0)", sqlConnection);
+                cd = new SQLiteCommand("CREATE TABLE ngpve_rulesets (name VARCHAR(255), damage INTEGER(1) DEFAULT 0, enabled INTEGER(1) DEFAULT 1, automated INTEGER(1) DEFAULT 0, zone VARCHAR(255), exception VARCHAR(255), src_exclude VARCHAR(255), tgt_exclude VARCHAR(255), schedule VARCHAR(255), invschedule INT(1) DEFAULT 0, active_layer INT(1) DEFAULT 0)", sqlConnection);
                 cd.ExecuteNonQuery();
             }
-            using SqliteCommand ct = new SqliteCommand(sqlConnection);
-            using SqliteTransaction tr = sqlConnection.BeginTransaction();
+            using SQLiteCommand ct = new SQLiteCommand(sqlConnection);
+            using SQLiteTransaction tr = sqlConnection.BeginTransaction();
             ct.CommandText = "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'animal_player', null, null, null, null, null);"
                 + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'elevator_player', null, null, null, null, null);"
                 + "INSERT INTO ngpve_rulesets VALUES('default', 0, 1, 0, 0, 'player_animal', null, null, null, null, null);"
