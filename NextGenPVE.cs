@@ -37,7 +37,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.7.5")]
+    [Info("NextGen PVE", "RFC1920", "1.7.6")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -3140,6 +3140,20 @@ namespace Oxide.Plugins
                     ct.ExecuteNonQuery();
                 }
             }
+            if (configData.Version < new VersionNumber(1, 7, 6))
+            {
+                using SQLiteConnection c = new(connStr);
+                c.Open();
+
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='SnakeHazard'", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('animal', 'SnakeHazard', 0)", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+            }
 
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
             if (configData.Options.skyStartHeight <= 0) configData.Options.skyStartHeight = 50f;
@@ -5544,6 +5558,7 @@ namespace Oxide.Plugins
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Crocodile', 0);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Panther', 0);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Tiger', 0);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'SnakeHazard', 0);"
                 + "INSERT INTO ngpve_entities VALUES('balloon', 'HotAirBalloon', 0);"
                 + "INSERT INTO ngpve_entities VALUES('building', 'BuildingBlock', 0);"
                 + "INSERT INTO ngpve_entities VALUES('building', 'BuildingPrivlidge', 0);"
