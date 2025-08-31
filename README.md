@@ -197,6 +197,7 @@ If a player is trying to damage a building, "HonorBuildingPrivilege" determines 
 "UnprotectedDamage" determines whether or not an unprotected building (no TC) can be damaged by players other than the builder.
 
 "HonorRelationships" determines whether or not a player can damage their friend's structures or deployables. This should typically be enabled.
+<b>NOTE:</b> if useFriends, useClans, and useTeams are all false, this will be disabled.  While it makes sense in a way, it will cause problems.  It is currently advised to enable one of those configs, e.g. useTeams, to avoid this problem.
 
 "BlockScrapHeliFallDamage" handles the special case where players flying the scrapheli into other players causes fall damage, killing the target player.
 
