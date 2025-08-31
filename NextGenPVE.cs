@@ -19,6 +19,7 @@
 */
 #endregion License (GPL v2)
 // Reference: System.Data.SQLite
+// Reference: System.Net.Http
 using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Configuration;
@@ -31,13 +32,14 @@ using System.Data.SQLite;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.7.6")]
+    [Info("NextGen PVE", "RFC1920", "1.7.7")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -55,6 +57,7 @@ namespace Oxide.Plugins
         private SQLiteConnection sqlConnection;
         private string connStr;
         private bool newsave;
+        public Dictionary<string, List<string>> steamFriends = new();
 
         private List<ulong> isopen = new();
 
@@ -148,6 +151,14 @@ namespace Oxide.Plugins
                 us.ExecuteNonQuery();
             }
 
+            if (configData.Options.useSteam && configData.Options.steamApiKey?.Length > 0)
+            {
+                foreach (BasePlayer player in BasePlayer.activePlayerList)
+                {
+                    GetSteamFriends(player);
+                }
+            }
+
             enabled = true;
             if (configData.Options.useSchedule) RunSchedule(true);
             HeliTimer();
@@ -175,6 +186,12 @@ namespace Oxide.Plugins
         }
 
         private void OnNewSave() => newsave = true;
+
+        private void OnPlayerConnected(BasePlayer player)
+        {
+            if (configData.Options.useSteam && configData.Options.steamApiKey?.Length > 0) GetSteamFriends(player);
+        }
+
         private void OnUserConnected(IPlayer player) => OnUserDisconnected(player);
 
         private void OnUserDisconnected(IPlayer player)
@@ -188,6 +205,7 @@ namespace Oxide.Plugins
             {
                 return;
             }
+
             lastConnected.TryGetValue(player?.Id, out long lc);
             if (lc > 0)
             {
@@ -3155,6 +3173,7 @@ namespace Oxide.Plugins
                 }
             }
 
+            // This line makes sense, but can cause problems when the admin sets useFriends, useClans, and useTeams to false...
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
             if (configData.Options.skyStartHeight <= 0) configData.Options.skyStartHeight = 50f;
             if (configData.Options.tunnelDepth >= 0) configData.Options.tunnelDepth = -70f;
@@ -3231,6 +3250,7 @@ namespace Oxide.Plugins
 
         public class Options
         {
+            public string steamApiKey;
             public bool debug;
             public bool enableDebugOnErrors;
             public float autoDebugTime;
@@ -3250,6 +3270,7 @@ namespace Oxide.Plugins
             public bool useGUIAnnouncements;
             public bool useMessageBroadcast;
             public bool useRealTime;
+            public bool useSteam;
             public bool useFriends;
             public bool useClans;
             public bool useTeams;
@@ -5340,6 +5361,7 @@ namespace Oxide.Plugins
         {
             if (playerid == ownerid) return true;
             if (!configData.Options.HonorRelationships) return null;
+
             if (configData.Options.useFriends && Friends != null)
             {
                 object fr = Friends?.CallHook("AreFriends", playerid, ownerid);
@@ -5371,6 +5393,15 @@ namespace Oxide.Plugins
                 if (playerTeam?.members.Contains(ownerid) == true)
                 {
                     DoLog($"Rust teams reports that {playerid} and {ownerid} are on the same team.");
+                    return true;
+                }
+            }
+
+            if (configData.Options.useSteam && steamFriends.ContainsKey(ownerid.ToString()))
+            {
+                if (steamFriends[ownerid.ToString()].Contains(playerid.ToString()))
+                {
+                    DoLog($"Steam reports that {playerid} and {ownerid} are Steam friends.");
                     return true;
                 }
             }
@@ -5416,6 +5447,74 @@ namespace Oxide.Plugins
         private class NextGenPVEZoneMap
         {
             public List<string> map = new();
+        }
+
+        private async void GetSteamFriends(BasePlayer player)
+        {
+            if (configData.Options.steamApiKey == null) return;
+            DoLog($"Getting Steam friends for {player?.UserIDString}");
+            SteamFriends steamResponse = new();
+            using HttpClient httpClient = new();
+            //string request = $"http://api.steampowered.com/ISteamUser/GetFriendList/v0001/?key={configData.Options.steamApiKey}&steamid={player.UserIDString}&relationship=friend";
+            string request = $"https://api.steampowered.com/ISteamUser/GetFriendList/v0001/?key={configData.Options.steamApiKey}&steamid={player.UserIDString}&relationship=friend";
+            using HttpRequestMessage httpReq = new(HttpMethod.Get, request);
+            using HttpResponseMessage httpResponse = await httpClient.SendAsync(httpReq);
+
+            if (httpResponse?.ReasonPhrase == "Unauthorized")
+            {
+                DoLog("Unauthorized - Configured steamApiKey cannot be used to query the owner of that key.");
+                return;
+            }
+
+            if (httpResponse?.IsSuccessStatusCode == true)
+            {
+                string responseString = await httpResponse.Content.ReadAsStringAsync();
+                {
+                    if (string.IsNullOrWhiteSpace(responseString))
+                    {
+                        return;
+                    }
+                    steamResponse = JsonConvert.DeserializeObject<SteamFriends>(responseString);
+                }
+            }
+
+            List<string> friends = new();
+            foreach (Friend friend in steamResponse?.friendslist)
+            {
+                DoLog($"Adding Steam friend for {player?.UserIDString} {friend.steamid}");
+                friends.Add(friend.steamid);
+            }
+            if (friends.Count > 0)
+            {
+                if (!steamFriends.ContainsKey(player?.UserIDString))
+                {
+                    steamFriends.Add(player?.UserIDString, friends);
+                    return;
+                }
+                steamFriends[player?.UserIDString] = friends;
+            }
+        }
+
+        public class Friend
+        {
+            public string steamid { get; set; }
+            public string relationship { get; set; }
+            public int friend_since { get; set; }
+        }
+
+        public class Friendslist
+        {
+            public List<Friend> friends { get; set; }
+
+            public IEnumerator<Friend> GetEnumerator()
+            {
+                return friends.GetEnumerator();
+            }
+        }
+
+        public class SteamFriends
+        {
+            public Friendslist friendslist { get; set; }
         }
 
         public static class UI

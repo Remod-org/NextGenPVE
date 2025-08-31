@@ -9,6 +9,8 @@ Works with DynamicPVP.
 
 Don't let the documentation trouble you.  In most cases all you should need to do is install the plugin.  The rest is optional.
 
+NEW FOR 1.7.7: We can now use Steam friends lists to determine user relationships if desired.  This requires a steam api key (admin) and also requires that players friends lists are publicly viewable.  In other words, this may have only marginal usefulness.  But, it's an option.
+
 NEW FOR 1.6.9: A new optional helitimer can be used to aid in detecting who is targeting the heli to help prevent damage to other's buildings.  This is enabled by default and can be changed from the GUI.
 
 NEW FOR 1.6.0: Rulesets can now be limited to ground, tunnel, or sky.  The default value for existing and default rulesets is ALL locations.
@@ -141,6 +143,7 @@ The above commands can also be run from console or RCON (without /).
 ```json
 {
   "Options": {
+    "steamApiKey": null,
     "debug": false,
     "useZoneManager": false,
     "protectedDays": 0.0,
@@ -154,6 +157,7 @@ The above commands can also be run from console or RCON (without /).
     "useGUIAnnouncements": false,
     "useMessageBroadcast": false,
     "useRealTime": false,
+    "useSteam": false,
     "useFriends": false,
     "useClans": false,
     "useTeams": false,
@@ -196,8 +200,12 @@ If a player is trying to damage a building, "HonorBuildingPrivilege" determines 
 
 "UnprotectedDamage" determines whether or not an unprotected building (no TC) can be damaged by players other than the builder.
 
+"steamApiKey" is ONLY used in conjunction with useSteam.
+
+"useSteam" will use the configured steamApiKey to obtain a player's friend list.  That player's list must be public or this will not work for them.
+
 "HonorRelationships" determines whether or not a player can damage their friend's structures or deployables. This should typically be enabled.
-<b>NOTE:</b> if useFriends, useClans, and useTeams are all false, this will be disabled.  While it makes sense in a way, it will cause problems.  It is currently advised to enable one of those configs, e.g. useTeams, to avoid this problem.
+<b>NOTE:</b> if useSteam, useFriends, useClans, and useTeams are all false, this will be disabled.  While it makes sense in a way, it will cause problems.  It is currently advised to enable one of those configs, e.g. useTeams, to avoid this problem.
 
 "BlockScrapHeliFallDamage" handles the special case where players flying the scrapheli into other players causes fall damage, killing the target player.
 
@@ -318,11 +326,11 @@ Example 3:
 ### Caveat(s)
 
 1. HonorRelationships logic issue
-	- If useFriends, useClans, and useTeams are all false, this will be disabled.
+	- If useSteam, useFriends, useClans, and useTeams are all false, this will be disabled.
 	- While it makes sense in a way, it will cause problems.
 	- It is currently advised to enable one of those configs, e.g. useTeams, to avoid this problem.
 	- Note that useFriends or any mention of friends or clans does NOT refer to Steam friends.
-	  Friends/Clans/Teams are all plugin or native game references only.
+	  Friends/Clans/Teams are all plugin or native game references only.  Only useSteam is Steam.
 
 2. New entities
 	- When certain new entities are added to the game, some defaults may not work for them.
