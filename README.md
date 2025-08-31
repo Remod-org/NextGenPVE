@@ -321,6 +321,8 @@ Example 3:
 	- If useFriends, useClans, and useTeams are all false, this will be disabled.
 	- While it makes sense in a way, it will cause problems.
 	- It is currently advised to enable one of those configs, e.g. useTeams, to avoid this problem.
+	- Note that useFriends or any mention of friends or clans does NOT refer to Steam friends.
+	  Friends/Clans/Teams are all plugin or native game references only.
 
 2. New entities
 	- When certain new entities are added to the game, some defaults may not work for them.
