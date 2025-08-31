@@ -317,11 +317,18 @@ Example 3:
 
 ### Caveat(s)
 
-	- HonorRelationships logic issue
-	If useFriends, useClans, and useTeams are all false, this will be disabled.
-	While it makes sense in a way, it will cause problems.
-	It is currently advised to enable one of those configs, e.g. useTeams, to avoid this problem.
+1. HonorRelationships logic issue
+	- If useFriends, useClans, and useTeams are all false, this will be disabled.
+	- While it makes sense in a way, it will cause problems.
+	- It is currently advised to enable one of those configs, e.g. useTeams, to avoid this problem.
+
+2. New entities
+	- When certain new entities are added to the game, some defaults may not work for them.
+	- Older entities such as animals can also receive breaking changes.
+	- We try to keep up when this changes, but the rule/ent editor can also be used to DIY.
 
 ### TODO
 1. Performance tweaks as needed.
+
+2. Fix use of relationship logic when all of the useXXX configs are false.
 
