@@ -39,7 +39,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.7.7")]
+    [Info("NextGen PVE", "RFC1920", "1.7.8")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -3168,6 +3168,20 @@ namespace Oxide.Plugins
                     ct.ExecuteNonQuery();
                 }
                 using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('animal', 'SnakeHazard', 0)", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+            }
+            if (configData.Version < new VersionNumber(1, 7, 8))
+            {
+                using SQLiteConnection c = new(connStr);
+                c.Open();
+
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='Mannequin'", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('resource', 'Mannequin', 0)", c))
                 {
                     ct.ExecuteNonQuery();
                 }
