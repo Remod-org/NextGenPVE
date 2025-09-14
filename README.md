@@ -144,6 +144,7 @@ The above commands can also be run from console or RCON (without /).
 {
   "Options": {
     "steamApiKey": null,
+    "sortUnknownEntitiesByTime": false,
     "debug": false,
     "useZoneManager": false,
     "protectedDays": 0.0,
@@ -187,7 +188,7 @@ The above commands can also be run from console or RCON (without /).
   "Version": {
     "Major": 1,
     "Minor": 7,
-    "Patch": 0
+    "Patch": 9
   }
 }
 ```
@@ -199,6 +200,8 @@ A few global flags are currently available to limit NPC AutoTurret and trap dama
 If a player is trying to damage a building, "HonorBuildingPrivilege" determines whether or not they are limited to damaging their own structures or any structures.
 
 "UnprotectedDamage" determines whether or not an unprotected building (no TC) can be damaged by players other than the builder.
+
+"sortUnknownEntitiesByTime" -- If true, unknown entities will be listed in reverse time order, showing the most recently-added items first.  If the false, the old default of sort by type will be used.
 
 "steamApiKey" is ONLY used in conjunction with useSteam.
 

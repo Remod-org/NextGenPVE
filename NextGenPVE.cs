@@ -39,7 +39,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.7.8")]
+    [Info("NextGen PVE", "RFC1920", "1.7.9")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -258,6 +258,9 @@ namespace Oxide.Plugins
                 using SQLiteCommand us = new(query, c);
                 if (us.ExecuteNonQuery() > 0)
                 {
+                    query = $"UPDATE ngpve_entities SET time=CURRENT_TIMESTAMP WHERE name='{category}' AND type='{objname}'";
+                    using SQLiteCommand ct = new(query, c);
+                    ct.ExecuteNonQuery();
                     Puts($"Added {objname} as {category}.");
                 }
             }
@@ -276,6 +279,9 @@ namespace Oxide.Plugins
                 using SQLiteCommand us = new(query, c);
                 if (us.ExecuteNonQuery() > 0)
                 {
+                    query = $"UPDATE ngpve_entities SET time=CURRENT_TIMESTAMP WHERE name={category} AND type='{objname}'";
+                    using SQLiteCommand ct = new(query, c);
+                    ct.ExecuteNonQuery();
                     Puts($"Added {objname} as {category}.");
                 }
             }
@@ -1379,7 +1385,7 @@ namespace Oxide.Plugins
                 NextTick(() =>
                 {
                     Puts($"Adding discovered source type {newtype} as unknown");
-                    using SQLiteCommand ct = new($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0)", sqlConnection);
+                    using SQLiteCommand ct = new($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0, CURRENT_TIMESTAMP)", sqlConnection);
                     ct.ExecuteNonQuery();
                 });
             }
@@ -1404,7 +1410,7 @@ namespace Oxide.Plugins
                 NextTick(() =>
                 {
                     Puts($"Adding discovered target type {newtype} as unknown");
-                    using SQLiteCommand ct = new($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0)", sqlConnection);
+                    using SQLiteCommand ct = new($"INSERT OR REPLACE INTO ngpve_entities VALUES('{category}', '{newtype}', 0, CURRENT_TIMESTAMP)", sqlConnection);
                     ct.ExecuteNonQuery();
                 });
             }
@@ -2074,6 +2080,7 @@ namespace Oxide.Plugins
             LoadDefaultEntities();
             LoadDefaultRules();
             LoadDefaultRuleset();
+            UpdateEnts();
 
             if (args.Length > 0 && args[0] == "gui")
             {
@@ -3186,7 +3193,54 @@ namespace Oxide.Plugins
                     ct.ExecuteNonQuery();
                 }
             }
+            if (configData.Version < new VersionNumber(1, 7, 9))
+            {
+                using SQLiteConnection c = new(connStr);
+                c.Open();
 
+                using (SQLiteCommand ct = new("ALTER TABLE ngpve_entities ADD COLUMN time DATETIME DEFAULT NULL", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("UPDATE ngpve_entities SET timestamp = CURRENT_TIMESTAMP", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+
+                // New entities
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='BeeSwarmAI'", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('animal', 'BeeSwarmAI', 0, CURRENT_TIMESTAMP)", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='NaturalBeehive'", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('resource', 'NaturalBeehive', 0, CURRENT_TIMESTAMP)", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='Beehive'", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('resource', 'Beehive', 0, CURRENT_TIMESTAMP)", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("DELETE FROM ngpve_entities WHERE type='TinCanAlarm'", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('resource', 'TinCanAlarm', 0, CURRENT_TIMESTAMP)", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+            }
             // This line makes sense, but can cause problems when the admin sets useFriends, useClans, and useTeams to false...
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
             if (configData.Options.skyStartHeight <= 0) configData.Options.skyStartHeight = 50f;
@@ -3265,6 +3319,7 @@ namespace Oxide.Plugins
         public class Options
         {
             public string steamApiKey;
+            public bool sortUnknownEntitiesByTime;
             public bool debug;
             public bool enableDebugOnErrors;
             public float autoDebugTime;
@@ -4154,21 +4209,21 @@ namespace Oxide.Plugins
             UI.Button(ref container, NGPVEENTSELECT, UI.Color("#d85540", 1f), Lang("close"), 12, "0.93 0.95", "0.99 0.98", "pverule closeentselect");
 
             int row = 0; int col = 0;
-            //if (cat == null) cat = "unknown";
-            if (cat is null) cat = "unknown";
+            cat ??= "unknown";
 
-            string q = $"SELECT DISTINCT name, type from ngpve_entities WHERE name='{cat}' ORDER BY type";
+            string orderby = configData.Options.sortUnknownEntitiesByTime ? "time DESC" : "type ASC";
+            string q;
             if (search != "")
             {
-                q = $"SELECT name, type from ngpve_entities WHERE type LIKE '%{search}%' ORDER BY type";
+                q = $"SELECT name, type from ngpve_entities WHERE type LIKE '%{search}%' ORDER BY {orderby}";
             }
             else if (cat == "all")
             {
-                q = "SELECT DISTINCT name, type from ngpve_entities ORDER BY type";
+                q = $"SELECT DISTINCT name, type from ngpve_entities ORDER BY {orderby}";
             }
             else
             {
-                q = $"SELECT DISTINCT name, type FROM ngpve_entities WHERE name LIKE '%{cat}%' ORDER BY type";
+                q = $"SELECT DISTINCT name, type FROM ngpve_entities WHERE name LIKE '%{cat}%' ORDER BY {orderby}";
             }
 
             if (configData.Options.debug) Puts($"QUERY IS {q}, COLLECTION IS {cat}, SEARCH IS {search}");
@@ -5652,106 +5707,110 @@ namespace Oxide.Plugins
             using SQLiteCommand ct = new(sqlConnection);
             using SQLiteTransaction tr = sqlConnection.BeginTransaction();
             ct.CommandText = "DROP TABLE IF EXISTS ngpve_entities;"
-                + "CREATE TABLE ngpve_entities (name varchar(32), type varchar(32), custom INTEGER(1) DEFAULT 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'BaseAnimalNPC', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'BaseAnimalRagdoll', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'BaseFishNPC', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Boar', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Bear', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Chicken', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'FarmableAnimal', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Horse', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Polarbear', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'RidableHorse', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'RidableHorse2', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'SimpleShark', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Stag', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Wolf', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Wolf2', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Crocodile', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Panther', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'Tiger', 0);"
-                + "INSERT INTO ngpve_entities VALUES('animal', 'SnakeHazard', 0);"
-                + "INSERT INTO ngpve_entities VALUES('balloon', 'HotAirBalloon', 0);"
-                + "INSERT INTO ngpve_entities VALUES('building', 'BuildingBlock', 0);"
-                + "INSERT INTO ngpve_entities VALUES('building', 'BuildingPrivlidge', 0);"
-                + "INSERT INTO ngpve_entities VALUES('building', 'ChickenCoop', 0);"
-                + "INSERT INTO ngpve_entities VALUES('building', 'LegacyShelter', 0);"
-                + "INSERT INTO ngpve_entities VALUES('building', 'LegacyShelterDoor', 0);"
-                + "INSERT INTO ngpve_entities VALUES('building', 'Door', 0);"
-                + "INSERT INTO ngpve_entities VALUES('fire', 'BaseOven', 0);"
-                + "INSERT INTO ngpve_entities VALUES('fire', 'FireBall', 0);"
-                + "INSERT INTO ngpve_entities VALUES('grenade', 'GrenadeWeapon', 0);"
-                + "INSERT INTO ngpve_entities VALUES('grenade', 'MolotovCocktail', 0);"
-                + "INSERT INTO ngpve_entities VALUES('helicopter', 'BaseHelicopter', 0);"
-                + "INSERT INTO ngpve_entities VALUES('helicopter', 'HelicopterDebris', 0);"
-                + "INSERT INTO ngpve_entities VALUES('helicopter', 'CH47HelicopterAIController', 0);"
-                + "INSERT INTO ngpve_entities VALUES('helicopter', 'PatrolHelicopter', 0);"
-                + "INSERT INTO ngpve_entities VALUES('highwall', 'SimpleBuildingBlock', 0);"
-                + "INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.stone', 0);"
-                + "INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.wood', 0);"
-                + "INSERT INTO ngpve_entities VALUES('minicopter', 'Minicopter', 0);"
-                + "INSERT INTO ngpve_entities VALUES('minicopter', 'AttackHelicopter', 0);"
-                + "INSERT INTO ngpve_entities VALUES('mlrs', 'MLRS', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'BradleyAPC', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'Humanoid', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'HumanNPC', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'TunnelDweller', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'UnderwaterDweller', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'BaseNpc', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'GingerbreadNPC', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'HTNPlayer', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'Murderer', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'NPCMurderer', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'NpcRaider', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'ScarecrowNPC', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'Scientist', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'ScientistNPC', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'Zombie', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npc', 'ZombieNPC', 0);"
-                + "INSERT INTO ngpve_entities VALUES('npcturret', 'NPCAutoTurret', 0);"
-                + "INSERT INTO ngpve_entities VALUES('plant', 'GrowableEntity', 0);"
-                + "INSERT INTO ngpve_entities VALUES('player', 'BasePlayer', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'AdventCalendar', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'BaseCorpse', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'IndustrialStorageAdaptor', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'NPCPlayerCorpse', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'PlayerCorpse', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'DroppedItem', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'DroppedItemContainer', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'HorseCorpse', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'LockedByEntCrate', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'LootContainer', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'ResourceEntity', 0);"
-                + "INSERT INTO ngpve_entities VALUES('resource', 'StorageContainer', 0);"
-                + "INSERT INTO ngpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'AutoTurret', 0);" // AutoTurret when attacked
-                + "INSERT INTO ngpve_entities VALUES('trap', 'BaseProjectile', 0);" // AutoTurret weapon
-                + "INSERT INTO ngpve_entities VALUES('trap', 'Barricade', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'TrainBarricade', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'BearTrap', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'Bullet', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'FlameTurret', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'Landmine', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'GunTrap', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'ReactiveTarget', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'SamSite', 0);"
-                + "INSERT INTO ngpve_entities VALUES('trap', 'TeslaCoil', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'Sedan', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'ModularVehicle', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'BaseCar', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'Bike', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'TrainEngine', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleEngine', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleStorage', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleSeating', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'ModularCar', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'ModularCarGarage', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'BaseSubmarine', 0);"
-                + "INSERT INTO ngpve_entities VALUES('vehicle', 'SubmarineDuo', 0);"
-                + "INSERT INTO ngpve_entities VALUES('elevator', 'ElevatorLift', 0);";
+                + "CREATE TABLE ngpve_entities (name varchar(32), type varchar(32), custom INTEGER(1) DEFAULT 0, time DATETIME DEFAULT NULL);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'BaseAnimalNPC', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'BaseAnimalRagdoll', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'BaseFishNPC', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'BeeSwarmAI', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Bear', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Boar', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Chicken', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Crocodile', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'FarmableAnimal', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Horse', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Panther', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Polarbear', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'RidableHorse', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'RidableHorse2', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'SimpleShark', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Stag', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Wolf', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Wolf2', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Tiger', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'SnakeHazard', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('balloon', 'HotAirBalloon', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('building', 'BuildingBlock', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('building', 'BuildingPrivlidge', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('building', 'ChickenCoop', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('building', 'LegacyShelter', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('building', 'LegacyShelterDoor', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('building', 'Door', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('elevator', 'ElevatorLift', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('fire', 'BaseOven', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('fire', 'FireBall', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('grenade', 'GrenadeWeapon', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('grenade', 'MolotovCocktail', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('helicopter', 'BaseHelicopter', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('helicopter', 'HelicopterDebris', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('helicopter', 'CH47HelicopterAIController', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('helicopter', 'PatrolHelicopter', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('highwall', 'SimpleBuildingBlock', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.stone', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('highwall', 'wall.external.high.wood', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('minicopter', 'Minicopter', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('minicopter', 'AttackHelicopter', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('mlrs', 'MLRS', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'BradleyAPC', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'Humanoid', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'HumanNPC', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'TunnelDweller', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'UnderwaterDweller', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'BaseNpc', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'GingerbreadNPC', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'HTNPlayer', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'Murderer', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'NPCMurderer', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'NPCPlayer', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'NpcRaider', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'ScarecrowNPC', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'Scientist', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'ScientistNPC', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'Zombie', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npc', 'ZombieNPC', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('npcturret', 'NPCAutoTurret', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('plant', 'GrowableEntity', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('player', 'BasePlayer', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'AdventCalendar', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'BaseCorpse', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'Beehive', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'DroppedItem', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'DroppedItemContainer', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'HorseCorpse', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'IndustrialStorageAdaptor', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'LockedByEntCrate', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'LootContainer', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'NaturalBeehive', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'NPCPlayerCorpse', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'PlayerCorpse', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'ResourceEntity', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'StorageContainer', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('resource', 'TinCanAlarm', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('scrapcopter', 'ScrapTransportHelicopter', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'AutoTurret', 0, CURRENT_TIMESTAMP);" // AutoTurret when attacked
+                + "INSERT INTO ngpve_entities VALUES('trap', 'Barricade', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'BaseProjectile', 0, CURRENT_TIMESTAMP);" // AutoTurret weapon
+                + "INSERT INTO ngpve_entities VALUES('trap', 'BearTrap', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'Bullet', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'FlameTurret', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'GunTrap', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'Landmine', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'ReactiveTarget', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'SamSite', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'TeslaCoil', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('trap', 'TrainBarricade', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'BaseCar', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'BaseSubmarine', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'Bike', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'ModularCar', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'ModularCarGarage', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'ModularVehicle', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'Sedan', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'SubmarineDuo', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'TrainEngine', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleEngine', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleStorage', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('vehicle', 'VehicleModuleSeating', 0, CURRENT_TIMESTAMP);";
             ct.ExecuteNonQuery();
             tr.Commit();
         }
