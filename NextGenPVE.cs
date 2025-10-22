@@ -5822,7 +5822,7 @@ namespace Oxide.Plugins
             using SQLiteCommand ct = new(sqlConnection);
             using SQLiteTransaction tr = sqlConnection.BeginTransaction();
             ct.CommandText = "DROP TABLE IF EXISTS ngpve_rules;"
-                + "CREATE TABLE ngpve_rules (name varchar(32),description varchar(255),damage INTEGER(1) DEFAULT 1,custom INTEGER(1) DEFAULT 0,source VARCHAR(32),target VARCHAR(32));;"
+                + "CREATE TABLE ngpve_rules (name varchar(32),description varchar(255),damage INTEGER(1) DEFAULT 1,custom INTEGER(1) DEFAULT 0,source VARCHAR(32),target VARCHAR(32));"
                 + "INSERT INTO ngpve_rules VALUES('npc_animal', 'NPC can damage Animal', 1, 0, 'npc', 'animal');"
                 + "INSERT INTO ngpve_rules VALUES('npc_npc', 'NPC can damage NPC', 1, 0, 'npc', 'npc');"
                 + "INSERT INTO ngpve_rules VALUES('npc_resource', 'NPC can damage Resource', 1, 0, 'npc', 'npc');"
