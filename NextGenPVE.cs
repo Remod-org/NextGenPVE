@@ -39,7 +39,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.7.9")]
+    [Info("NextGen PVE", "RFC1920", "1.8.0")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -5209,7 +5209,7 @@ namespace Oxide.Plugins
                     }
                 }
 
-                foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
+                foreach (ulong auth in privs.authorizedPlayers)
                 {
                     if (ownerid == userid)
                     {
@@ -5297,7 +5297,7 @@ namespace Oxide.Plugins
                     {
                         return configData.Options.UnprotectedBuildingDamage;
                     }
-                    foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
+                    foreach (ulong auth in privs.authorizedPlayers)
                     {
                         if (ownerid == userid)
                         {
@@ -5328,7 +5328,7 @@ namespace Oxide.Plugins
                 bool hasbp = !configData.Options.HonorBuildingPrivilege; // if honorbp is true, start false and check bp here
                 if (privs != null && !hasbp)
                 {
-                    foreach (ulong auth in privs.authorizedPlayers.Select(x => x.userid).ToArray())
+                    foreach (ulong auth in privs.authorizedPlayers)
                     {
                         if (userid == auth)
                         {
