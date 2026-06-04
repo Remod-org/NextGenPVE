@@ -1,7 +1,7 @@
 #region License (GPL v2)
 /*
     NextGenPVE - Prevent damage to players and objects in a Rust PVE environment
-    Copyright (c) 2020-2025 RFC1920 <desolationoutpostpve@gmail.com>
+    Copyright (c) 2020 RFC1920 <desolationoutpostpve@gmail.com>
 
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License v2.0.
@@ -20,6 +20,7 @@
 #endregion License (GPL v2)
 // Reference: System.Data.SQLite
 // Reference: System.Net.Http
+using Facepunch;
 using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Configuration;
@@ -39,7 +40,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.8.0")]
+    [Info("NextGen PVE", "RFC1920", "1.8.1")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -218,10 +219,11 @@ namespace Oxide.Plugins
             SaveData();
         }
 
-        private object OnServerCommand(ConsoleSystem.Arg arg)
-        {
-            return OnPlayerCommand(arg.Player(), arg.cmd.FullName, arg.Args);
-        }
+        // FIXME
+        //private object OnServerCommand(ConsoleSystem.Arg arg)
+        //{
+        //    return OnPlayerCommand(arg.Player(), arg.cmd.FullName, arg.Args);
+        //}
 
         private object OnPlayerCommand(BasePlayer player, string command, string[] args)
         {
@@ -241,7 +243,7 @@ namespace Oxide.Plugins
             // Populate the entities table with any new entities (Typically only at wipe but can be run manually via pveupdate.)
             // All new ents are added as unknown for manual recategorization (except those containing 'npc').
             Puts("Finding new entity types...");
-            List<string> names = new();
+            List<string> names = Pool.Get<List<string>>();
             foreach (UnityEngine.Object obj in Resources.FindObjectsOfTypeAll(new BaseCombatEntity().GetType()))
             {
                 string objname = obj?.GetType().ToString();
@@ -285,6 +287,7 @@ namespace Oxide.Plugins
                     Puts($"Added {objname} as {category}.");
                 }
             }
+            Pool.FreeUnmanaged(ref names);
             Puts("Done!");
             CleanupEnts();
         }
@@ -295,8 +298,8 @@ namespace Oxide.Plugins
             // name is category, type is ObjectName
             using SQLiteConnection c = new(connStr);
             c.Open();
-            List<string> types = new();
-            List<string> toremove = new();
+            List<string> types = Pool.Get<List<string>>();
+            List<string> toremove = Pool.Get<List<string>>();
             using (SQLiteCommand us = new("SELECT name, type FROM ngpve_entities ORDER BY name", c))
             using (SQLiteDataReader rentry = us.ExecuteReader())
             {
@@ -322,6 +325,8 @@ namespace Oxide.Plugins
                 }
                 Puts("Done!");
             }
+            Pool.FreeUnmanaged(ref types);
+            Pool.FreeUnmanaged(ref toremove);
         }
 
         protected override void LoadDefaultMessages()
@@ -807,16 +812,18 @@ namespace Oxide.Plugins
         private bool BlockFallDamage(BaseCombatEntity entity)
         {
             // Special case where attack by scrapheli initiates fall damage on a player.  This was often used to kill players and bypass the rules.
-            List<BaseEntity> ents = new();
+            List<BaseEntity> ents = Pool.Get<List<BaseEntity>>();
             Vis.Entities(entity.transform.position, 5, ents);
             foreach (BaseEntity ent in ents)
             {
                 if (ent.ShortPrefabName == "scraptransporthelicopter" && configData.Options.BlockScrapHeliFallDamage)
                 {
                     DoLog("Fall caused by scrapheli.  Blocking...");
+                    Pool.FreeUnmanaged(ref ents);
                     return true;
                 }
             }
+            Pool.FreeUnmanaged(ref ents);
             return false;
         }
         #endregion
@@ -2165,8 +2172,8 @@ namespace Oxide.Plugins
                             string output = "";
                             string zone = "";
                             string rules = "";
-                            List<string> src = new List<string>();
-                            List<string> tgt = new List<string>();
+                            List<string> src = new();
+                            List<string> tgt = new();
                             using (SQLiteConnection c = new SQLiteConnection(connStr))
                             {
                                 c.Open();
