@@ -21,6 +21,7 @@
 // Reference: System.Data.SQLite
 // Reference: System.Net.Http
 using Facepunch;
+using HarmonyLib;
 using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Configuration;
@@ -40,7 +41,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.8.1")]
+    [Info("NextGen PVE", "RFC1920", "1.8.2")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -219,11 +220,24 @@ namespace Oxide.Plugins
             SaveData();
         }
 
-        // FIXME
-        //private object OnServerCommand(ConsoleSystem.Arg arg)
-        //{
-        //    return OnPlayerCommand(arg.Player(), arg.cmd.FullName, arg.Args);
-        //}
+        private object OnServerCommand(ConsoleSystem.Arg arg)
+        {
+            if (arg != null)
+            {
+                try
+                {
+                    string[] newargs = new string[arg.Args.Length];
+                    foreach (StringView x in arg.Args)
+                    {
+                        _ = newargs.AddToArray(x.ToString());
+                    }
+
+                    return OnPlayerCommand(arg?.Player(), arg.cmd.FullName, newargs);
+                }
+                catch { }
+            }
+            return null;
+        }
 
         private object OnPlayerCommand(BasePlayer player, string command, string[] args)
         {
