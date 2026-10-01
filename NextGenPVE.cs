@@ -41,7 +41,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NextGen PVE", "RFC1920", "1.8.2")]
+    [Info("NextGen PVE", "RFC1920", "1.8.3")]
     [Description("Prevent damage to players and objects in a PVE environment")]
     internal class NextGenPVE : RustPlugin
     {
@@ -3262,6 +3262,21 @@ namespace Oxide.Plugins
                     ct.ExecuteNonQuery();
                 }
             }
+            if (configData.Version < new VersionNumber(1, 8, 3))
+            {
+                using SQLiteConnection c = new(connStr);
+                c.Open();
+
+                using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('animal', 'Cow', 0, CURRENT_TIMESTAMP)", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+                using (SQLiteCommand ct = new("INSERT INTO ngpve_entities VALUES('animal', 'Sheep', 0, CURRENT_TIMESTAMP)", c))
+                {
+                    ct.ExecuteNonQuery();
+                }
+            }
+
             // This line makes sense, but can cause problems when the admin sets useFriends, useClans, and useTeams to false...
             if (!CheckRelEnables()) configData.Options.HonorRelationships = false;
             if (configData.Options.skyStartHeight <= 0) configData.Options.skyStartHeight = 50f;
@@ -5738,6 +5753,8 @@ namespace Oxide.Plugins
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Chicken', 0, CURRENT_TIMESTAMP);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Crocodile', 0, CURRENT_TIMESTAMP);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'FarmableAnimal', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Cow', 0, CURRENT_TIMESTAMP);"
+                + "INSERT INTO ngpve_entities VALUES('animal', 'Sheep', 0, CURRENT_TIMESTAMP);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Horse', 0, CURRENT_TIMESTAMP);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Panther', 0, CURRENT_TIMESTAMP);"
                 + "INSERT INTO ngpve_entities VALUES('animal', 'Polarbear', 0, CURRENT_TIMESTAMP);"
